@@ -1,0 +1,127 @@
+name:                blaze-ui-server
+version:             0.1.0.0
+github:              "blaze-ui-server"
+license:             BSD3
+author:              ""
+maintainer:          ""
+copyright:           "2020 Kudu Dynamics"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the readme
+
+dependencies:
+  - aeson
+  - async
+  - base >= 4.7 && < 5
+  - binary-analysis
+  - binja
+  - blaze
+  - bytestring
+  - containers
+  - envy
+  - extra
+  - hashable
+  #  - ghc-typelits-natnormalise
+  - lens
+  - mtl
+  - pretty-simple
+  - protolude
+  - random
+  - stm
+  - streamly
+  - string-conversions
+  - template-haskell
+  - text
+  - transformers
+  - unordered-containers
+  - uuid
+  - websockets
+
+default-extensions:
+  - BangPatterns
+  - DeriveAnyClass
+  - DeriveDataTypeable
+  - DeriveFoldable
+  - DeriveFunctor
+  - DeriveGeneric
+  - DeriveTraversable
+  - DerivingStrategies
+  - DuplicateRecordFields
+  - FlexibleContexts
+  - FlexibleInstances
+  - FunctionalDependencies
+  - GADTs
+  - GeneralizedNewtypeDeriving
+  - LambdaCase
+  - MultiParamTypeClasses
+  - NoImplicitPrelude
+  - OverloadedStrings
+  - ScopedTypeVariables
+  - StandaloneDeriving
+#  - StrictData
+  - TupleSections
+  - TypeFamilies
+
+
+library:
+  ghc-options:
+  - -Wall
+  - -Wcompat
+  - -Wincomplete-record-updates
+  - -Wincomplete-uni-patterns
+  - -Wredundant-constraints
+  - -j
+  - -O2
+  source-dirs:
+  - src
+  exposed-modules:
+  - Blaze.UI.Prelude
+  - Blaze.UI.Server
+
+include-dirs:
+  - "src"
+  - "../../haskell-binja/res"
+
+executables:
+  blaze_ui_server:
+    main: Main.hs
+    source-dirs:  app
+    ghc-options:
+    - -O2
+    - -Wall
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - blaze-ui-server
+    - containers
+    - hspec
+    - text
+    
+
+tests:
+  blaze-ui-server-test:
+    main: Spec.hs
+    source-dirs:
+    - test
+    ghc-options:
+    - -Wall
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - containers
+    - blaze-ui-server
+    - hspec
+    - text
