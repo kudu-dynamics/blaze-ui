@@ -1,0 +1,20 @@
+{
+    "plugin": {
+        "name": "Blaze"
+        "type": ["core", "ui", "architecture", "binaryview"],
+        "api": "python3",
+        "description": "Blaze",
+        "longdescription": "find paths",
+        "license": {
+        },
+        "dependencies": {
+        },
+        "version": "0.1",
+        "author": "Kudu",
+        "minimumBinaryNinjaVersion": {
+            "dev": "1.1.1403-dev",
+            "release": "9999"
+        }
+    }
+}
+        

@@ -9,8 +9,9 @@ import qualified System.Envy as Envy
 import System.Envy (fromEnv, FromEnv)
 import qualified Data.ByteString.Lazy as LBS
 
-data BlazeMessage = TextMessage Text
+data BlazeMessage = TextMessage { message :: Text }
                   | Noop
+                  | BadMoney { name :: Text, age :: Int}
                   deriving (Eq, Ord, Read, Show, Generic)
 
 instance ToJSON BlazeMessage
