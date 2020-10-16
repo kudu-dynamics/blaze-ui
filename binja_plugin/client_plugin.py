@@ -13,7 +13,7 @@ import os.path
 import asyncio
 import websockets
 import json
-
+import queue
 
 IP_ADDR = "127.0.0.1"
 TCP_PORT = 31337
@@ -23,28 +23,22 @@ class BlazeIO():
         self.thread = None
         self.loop = event_loop
         self.bv_mapping = {} # {bvFilePath -> bv}
-        self.out_queue = asyncio.Queue()
+        self.out_queue = queue.Queue()
         
     def __init_thread(self):
         if not self.thread:
-            log_info("CREATED NEW THREAD")
             t = MainWebsocketThread(self.bv_mapping, self.loop, self.out_queue)
             t.start()
             self.thread = t
 
     def send(self, bv, msg):
         self.__init_thread()
+        log_info("adding outbound msg to queue")
         new_msg = {"_bvFilePath" : bv.file.filename, "_action" : msg}
-        log_info("ADDING NEW MESSAGE to outbox")
-        x = self.loop.create_task(self.out_queue.put(new_msg))
-        log_info(f"added task to queue {x}")
+        self.out_queue.put(new_msg)
+        # asyncio.ensure_future(self.out_queue.put(new_msg))
+        # x = self.loop.create_task(self.out_queue.put(new_msg))
         
-    # def send_hello(self):
-    #     self.__init_thread()
-    #     self.out_queue.put({'tag': 'TextMessage', 'message': 'this is Bilbo'})
-
-
-
 
 def hello2():
     uri = "ws://127.0.0.1:31337"
@@ -72,35 +66,33 @@ async def hello():
 
 async def recv_loop(websocket):
     while True:
-        log_info("Waiting to recv")
         msg = json.loads(await websocket.recv())
         log_info(f"got {msg}")
 
-async def send_loop(websocket, out_queue):
+async def send_loop(loop, websocket, out_queue):
     while True:
-        # log_info("Waiting for message to send.")
-        # msg = await out_queue.get()
-        # log_info("got new message from queue")      
-        # await websocket.send(json.dumps(msg))
-        # out_queue.task_done()
-        # # await asyncio.sleep(4)
-        # log_info(f"sent {msg}")
-
-        log_info("Waiting for message to send.")
-        msg = await out_queue.get()
-        log_info("got new message from queue")      
+        msg = await loop.run_in_executor(None, out_queue.get)
         await websocket.send(json.dumps(msg))
         out_queue.task_done()
-        # await asyncio.sleep(4)
         log_info(f"sent {msg}")
-
         
-async def main_websocket_loop(out_queue):
+async def main_websocket_loop(loop, out_queue):
     uri = "ws://127.0.0.1:31337"
 
     async with websockets.connect(uri) as websocket:
-        log_info("connected to websocket")
-        asyncio.gather(send_loop(websocket, out_queue), recv_loop(websocket))
+        consumer_task = asyncio.ensure_future(
+            recv_loop(websocket))
+        producer_task = asyncio.ensure_future(
+            send_loop(loop, websocket, out_queue))
+        done, pending = await asyncio.wait(
+            [consumer_task, producer_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+        
+        # log_info("connected to websocket")
+        # asyncio.gather(recv_loop(websocket), send_loop(websocket, out_queue))
 
 
 class MainWebsocketThread(BackgroundTaskThread):
@@ -110,7 +102,7 @@ class MainWebsocketThread(BackgroundTaskThread):
         self.out_queue = out_queue
         
     def run(self):
-        self.loop.create_task(main_websocket_loop(self.out_queue))
+        self.loop.create_task(main_websocket_loop(self.loop, self.out_queue))
         self.loop.run_forever()
 
 blaze = BlazeIO(asyncio.get_event_loop())

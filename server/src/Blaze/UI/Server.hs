@@ -68,8 +68,8 @@ app pconn = WS.acceptRequest pconn >>= loop
           putText $ "Error parsing JSON: " <> show err
         Right x -> do
           putText $ "Got message: " <> show x
-          putText $ "Sleeping 2s before sending reply"
-          threadDelay 2000000
+          -- putText $ "Sleeping 2s before sending reply"
+          -- threadDelay 2000000
           let outMsg =  Message (_bvFilePath x) $
                 SBTextMessage "I got your message, loser."
           sendJSON conn outMsg
