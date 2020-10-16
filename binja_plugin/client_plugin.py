@@ -1,4 +1,4 @@
-from binaryninja import PluginCommand, HighlightStandardColor, log_info, log_error, BinaryView
+from binaryninja import PluginCommand, HighlightStandardColor, log_info, log_error, log_warn, BinaryView
 import socket
 import struct
 from binaryninjaui import UIAction
@@ -33,55 +33,44 @@ class BlazeIO():
 
     def send(self, bv, msg):
         self.__init_thread()
-        log_info("adding outbound msg to queue")
+        self.bv_mapping[bv.file.filename] = bv
         new_msg = {"_bvFilePath" : bv.file.filename, "_action" : msg}
         self.out_queue.put(new_msg)
-        # asyncio.ensure_future(self.out_queue.put(new_msg))
-        # x = self.loop.create_task(self.out_queue.put(new_msg))
         
 
-def hello2():
-    uri = "ws://127.0.0.1:31337"
+def message_handler(bv, msg):
+    tag = msg['tag']
+    if tag == 'SBTextMessage':
+        log_info(f"got text message")
+    elif tag == 'SBNoop':
+        log_info(f"got Noop")
+    else:
+        log_info(f"unknown message type")    
+    return
 
-    websocket = websockets.connect(uri)
-    log_info("Connected to web socket")
-    msg = json.dumps({'tag': 'TextMessage', 'message': 'this is Bilbo'})
-    websocket.send(msg)
-    log_info(f"> {msg}")
-    greeting = json.loads(websocket.recv())
-    bilbo = greeting['message']
-    log_info(f"< {bilbo}")
-        
-async def hello():
-    uri = "ws://127.0.0.1:31337"
-
-    async with websockets.connect(uri) as websocket:
-        msg = json.dumps({'tag': 'TextMessage', 'message': 'this is Bilbo'})
-        await websocket.send(msg)
-        log_info(f"> {msg}")
-
-        greeting = json.loads(await websocket.recv())
-        bilbo = greeting['message']
-        log_info(f"< {bilbo}")
-
-async def recv_loop(websocket):
+async def recv_loop(websocket, bv_mapping):
     while True:
         msg = json.loads(await websocket.recv())
-        log_info(f"got {msg}")
-
+        try:
+            bv = bv_mapping[msg['_bvFilePath']]
+            message_handler(bv, msg['_action'])
+        except:
+            log_warn(f"recv_loop: couldn't find bv in mapping for {msg}")
+                     
+            
 async def send_loop(loop, websocket, out_queue):
     while True:
         msg = await loop.run_in_executor(None, out_queue.get)
         await websocket.send(json.dumps(msg))
         out_queue.task_done()
-        log_info(f"sent {msg}")
-        
-async def main_websocket_loop(loop, out_queue):
+        # log_info(f"sent {msg}")
+
+async def main_websocket_loop(loop, out_queue, bv_mapping):
     uri = "ws://127.0.0.1:31337"
 
     async with websockets.connect(uri) as websocket:
         consumer_task = asyncio.ensure_future(
-            recv_loop(websocket))
+            recv_loop(websocket, bv_mapping))
         producer_task = asyncio.ensure_future(
             send_loop(loop, websocket, out_queue))
         done, pending = await asyncio.wait(
@@ -91,18 +80,16 @@ async def main_websocket_loop(loop, out_queue):
         for task in pending:
             task.cancel()
         
-        # log_info("connected to websocket")
-        # asyncio.gather(recv_loop(websocket), send_loop(websocket, out_queue))
-
 
 class MainWebsocketThread(BackgroundTaskThread):
     def __init__(self, bv_mapping, event_loop, out_queue):
         BackgroundTaskThread.__init__(self, "", False)
         self.loop = event_loop
         self.out_queue = out_queue
-        
+        self.bv_mapping = bv_mapping
+
     def run(self):
-        self.loop.create_task(main_websocket_loop(self.loop, self.out_queue))
+        self.loop.create_task(main_websocket_loop(self.loop, self.out_queue, self.bv_mapping))
         self.loop.run_forever()
 
 blaze = BlazeIO(asyncio.get_event_loop())
