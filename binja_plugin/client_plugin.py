@@ -15,8 +15,8 @@ import websockets
 import json
 import queue
 
-IP_ADDR = "127.0.0.1"
-TCP_PORT = 31337
+BLAZE_UI_HOST = os.environ.get('BLAZE_UI_HOST', 'localhost')
+BLAZE_UI_PORT = os.environ.get('BLAZE_UI_PORT', '31337')
 
 class BlazeIO():
     def __init__(self, event_loop):
@@ -51,6 +51,7 @@ def message_handler(bv, msg):
 async def recv_loop(websocket, bv_mapping):
     while True:
         msg = json.loads(await websocket.recv())
+        log_info(f"recv {msg}")
         try:
             bv = bv_mapping[msg['_bvFilePath']]
             message_handler(bv, msg['_action'])
@@ -63,10 +64,10 @@ async def send_loop(loop, websocket, out_queue):
         msg = await loop.run_in_executor(None, out_queue.get)
         await websocket.send(json.dumps(msg))
         out_queue.task_done()
-        # log_info(f"sent {msg}")
+        log_info(f"sent {msg}")
 
 async def main_websocket_loop(loop, out_queue, bv_mapping):
-    uri = "ws://127.0.0.1:31337"
+    uri = "ws://" + BLAZE_UI_HOST + ":" + BLAZE_UI_PORT
 
     async with websockets.connect(uri) as websocket:
         consumer_task = asyncio.ensure_future(
@@ -97,10 +98,6 @@ blaze = BlazeIO(asyncio.get_event_loop())
 def say_hello(bv):
     global blaze
     blaze.send(bv, {'tag': 'BSTextMessage', 'message': 'this is Bilbo'})
-    # loop = asyncio.get_event_loop()
-    # t = MainWebsocketThread(bv, loop, None)
-    # t.start()
-
 
 
 def listen_start(bv):

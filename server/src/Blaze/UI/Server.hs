@@ -46,8 +46,8 @@ data ServerConfig = ServerConfig
 
 instance FromEnv ServerConfig where
   fromEnv _ = ServerConfig
-    <$> Envy.env "BLAZE_UI_SERVER_HOST"
-    <*> Envy.env "BLAZE_UI_SERVER_PORT"
+    <$> Envy.env "BLAZE_UI_HOST"
+    <*> Envy.env "BLAZE_UI_PORT"
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
