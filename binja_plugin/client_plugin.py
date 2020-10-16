@@ -1,4 +1,4 @@
-from binaryninja import PluginCommand, HighlightStandardColor, log_info, log_error
+from binaryninja import PluginCommand, HighlightStandardColor, log_info, log_error, BinaryView
 import socket
 import struct
 from binaryninjaui import UIAction
@@ -6,6 +6,7 @@ from binaryninja.function import DisassemblyTextRenderer, InstructionTextToken
 from binaryninja.flowgraph import FlowGraph, FlowGraphNode
 from binaryninja.enums import InstructionTextTokenType
 from binaryninjaui import FlowGraphWidget, ViewType
+from binaryninja.plugin import BackgroundTaskThread
 import sys
 import os
 import os.path
@@ -17,108 +18,124 @@ import json
 IP_ADDR = "127.0.0.1"
 TCP_PORT = 31337
 
-def fwd_path_start(bv, instruction):
-        global pathStart
-        if pathStart is not None:
-                bv.get_functions_at(pathStart.function_start)[0].set_auto_instr_highlight(pathStart.inst_addr, HighlightStandardColor.NoHighlightColor)
-        pathStart = PathInfo(instruction)
-        instruction.function.source_function.set_auto_instr_highlight(instruction.address, HighlightStandardColor.GreenHighlightColor)
-
-
-def fwd_path_end(bv, instruction):
-        global pathEnd
-        if pathEnd is not None:
-                bv.get_functions_at(pathEnd.function_start)[0].set_auto_instr_highlight(pathEnd.inst_addr, HighlightStandardColor.NoHighlightColor)
-        pathEnd = PathInfo(instruction)
-        instruction.function.source_function.set_auto_instr_highlight(instruction.address, HighlightStandardColor.BlueHighlightColor)
-
-taggedBlocks = []
-
-def find_path(bv):
-        global taggedBlocks
-        log_info("Path Start: %x %x" % (pathStart.index, pathStart.function_start))
-        log_info("Path End: %x %x" % (pathEnd.index, pathEnd.function_start))
-        msg = path_pb2.PathRequest()
-        msg.start_func_addr= pathStart.function_start
-        msg.start_mlil_ssa_index = pathStart.index
-        msg.end_func_addr = pathEnd.function_start
-        msg.end_mlil_ssa_index = pathEnd.index
-        serialized_msg = msg.SerializeToString()
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        sock.connect((IP_ADDR, TCP_PORT))
-        sock.send(struct.pack(">L", len(serialized_msg)))
-        sock.send(serialized_msg)
-
-        log_info("waiting for response")
-        size = struct.unpack(">L", sock.recv(4))[0]
-        data = b''
+class BlazeIO():
+    def __init__(self, event_loop):
+        self.thread = None
+        self.loop = event_loop
+        self.bv_mapping = {} # {bvFilePath -> bv}
+        self.out_queue = asyncio.Queue()
         
-        #TODO: do this in a blocking thread so it doesn't hang binja
-        while len(data) < size:
-              data = data + sock.recv(size - len(data))
-        #data = sock.recv(size)
-        sock.close()
-        pathResponse = path_pb2.PathResponse()
-        pathResponse.ParseFromString(data)
-        if not pathResponse.valid:
-                log_error("No result")
-        for bb in pathResponse.basic_blocks:
-                func = bv.get_functions_at(bb.func_addr)
-                for block in func[0].mlil.ssa_form.basic_blocks:
-                        if block.start == bb.mlil_ssa_start_index:
-                                taggedBlocks.append((bb.func_addr, block.start))
-                                block.set_auto_highlight(HighlightStandardColor.RedHighlightColor)
+    def __init_thread(self):
+        if not self.thread:
+            log_info("CREATED NEW THREAD")
+            t = MainWebsocketThread(self.bv_mapping, self.loop, self.out_queue)
+            t.start()
+            self.thread = t
 
-# TODO: doesn't de-highlight blocks on path
-def clear_paths(bv):
-        global pathStart
-        global pathEnd
-        global taggedBlocks
-        if pathStart is not None:
-                for func in bv.get_functions_at(pathStart.function_start):
-                        func.set_auto_instr_highlight(pathStart.inst_addr, HighlightStandardColor.NoHighlightColor)
-                        pathStart = None
-        if pathEnd is not None:
-                for func in bv.get_functions_at(pathEnd.function_start):
-                        func.set_auto_instr_highlight(pathEnd.inst_addr, HighlightStandardColor.NoHighlightColor)
-                        pathEnd = None
-        for tblock in taggedBlocks:
-                func = bv.get_functions_at(tblock[0])
-                for block in func[0].mlil.ssa_form.basic_blocks:
-                        if block.start == tblock[1]:
-                                block.set_auto_highlight(HighlightStandardColor.NoHighlightColor)
-        taggedBlocks = []
+    def send(self, bv, msg):
+        self.__init_thread()
+        new_msg = {"_bvFilePath" : bv.file.filename, "_action" : msg}
+        log_info("ADDING NEW MESSAGE to outbox")
+        x = self.loop.create_task(self.out_queue.put(new_msg))
+        log_info(f"added task to queue {x}")
+        
+    # def send_hello(self):
+    #     self.__init_thread()
+    #     self.out_queue.put({'tag': 'TextMessage', 'message': 'this is Bilbo'})
 
+
+
+
+def hello2():
+    uri = "ws://127.0.0.1:31337"
+
+    websocket = websockets.connect(uri)
+    log_info("Connected to web socket")
+    msg = json.dumps({'tag': 'TextMessage', 'message': 'this is Bilbo'})
+    websocket.send(msg)
+    log_info(f"> {msg}")
+    greeting = json.loads(websocket.recv())
+    bilbo = greeting['message']
+    log_info(f"< {bilbo}")
+        
 async def hello():
     uri = "ws://127.0.0.1:31337"
+
     async with websockets.connect(uri) as websocket:
         msg = json.dumps({'tag': 'TextMessage', 'message': 'this is Bilbo'})
         await websocket.send(msg)
-        print(f"> {msg}")
+        log_info(f"> {msg}")
 
         greeting = json.loads(await websocket.recv())
         bilbo = greeting['message']
-        print(f"< {bilbo}")
+        log_info(f"< {bilbo}")
+
+async def recv_loop(websocket):
+    while True:
+        log_info("Waiting to recv")
+        msg = json.loads(await websocket.recv())
+        log_info(f"got {msg}")
+
+async def send_loop(websocket, out_queue):
+    while True:
+        # log_info("Waiting for message to send.")
+        # msg = await out_queue.get()
+        # log_info("got new message from queue")      
+        # await websocket.send(json.dumps(msg))
+        # out_queue.task_done()
+        # # await asyncio.sleep(4)
+        # log_info(f"sent {msg}")
+
+        log_info("Waiting for message to send.")
+        msg = await out_queue.get()
+        log_info("got new message from queue")      
+        await websocket.send(json.dumps(msg))
+        out_queue.task_done()
+        # await asyncio.sleep(4)
+        log_info(f"sent {msg}")
+
+        
+async def main_websocket_loop(out_queue):
+    uri = "ws://127.0.0.1:31337"
+
+    async with websockets.connect(uri) as websocket:
+        log_info("connected to websocket")
+        asyncio.gather(send_loop(websocket, out_queue), recv_loop(websocket))
 
 
+class MainWebsocketThread(BackgroundTaskThread):
+    def __init__(self, bv_mapping, event_loop, out_queue):
+        BackgroundTaskThread.__init__(self, "", False)
+        self.loop = event_loop
+        self.out_queue = out_queue
+        
+    def run(self):
+        self.loop.create_task(main_websocket_loop(self.out_queue))
+        self.loop.run_forever()
+
+blaze = BlazeIO(asyncio.get_event_loop())
 
 def say_hello(bv):
-        
-        return pathStart is not None and pathEnd is not None
+    global blaze
+    blaze.send(bv, {'tag': 'BSTextMessage', 'message': 'this is Bilbo'})
+    # loop = asyncio.get_event_loop()
+    # t = MainWebsocketThread(bv, loop, None)
+    # t.start()
+
+
 
 def listen_start(bv):
-        pass
+    pass
 
 def listen_stop(bv):
-        pass
+    pass
 
 actionSayHello = "Blaze\\Say Hello"
 actionSendInstruction = "Blaze\\Send Instruction"
 
 PluginCommand.register(actionSayHello, "Say Hello", say_hello)
-PluginCommand.register_for_medium_level_il_instruction(actionSendInstruction, "Send Instruction", send_instruction)
+# PluginCommand.register_for_medium_level_il_instruction(actionSendInstruction, "Send Instruction", send_instruction)
 
-# UIAction.registerAction(setStartAction, "CTRL+1")
+# UIAction.registerAction(actionSayHello, "CTRL+1")
 # UIAction.registerAction(sendEndAction, "CTRL+2")
 # UIAction.registerAction(findPathAction, "CTRL+3")

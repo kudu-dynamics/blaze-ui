@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Blaze.UI.Server where
 
 import Blaze.UI.Prelude
@@ -8,14 +9,34 @@ import qualified Network.WebSockets as WS
 import qualified System.Envy as Envy
 import System.Envy (fromEnv, FromEnv)
 import qualified Data.ByteString.Lazy as LBS
+-- import Control.Concurrent (threadDelay)
 
-data BlazeMessage = TextMessage { message :: Text }
-                  | Noop
-                  | BadMoney { name :: Text, age :: Int}
-                  deriving (Eq, Ord, Read, Show, Generic)
+data Message a = Message
+  { _bvFilePath :: Text
+  , _action :: a
+  } deriving (Eq, Ord, Read, Show, Generic)
+$(makeFieldsNoPrefix ''Message)
 
-instance ToJSON BlazeMessage
-instance FromJSON BlazeMessage
+instance ToJSON a => ToJSON (Message a)
+instance FromJSON a => FromJSON (Message a)
+
+
+data ServerToBinja = SBTextMessage { message :: Text }
+                   | SBNoop
+                   | SBBadMoney { name :: Text, age :: Int}
+                   deriving (Eq, Ord, Read, Show, Generic)
+
+instance ToJSON ServerToBinja
+instance FromJSON ServerToBinja
+
+
+data BinjaToServer = BSTextMessage { message :: Text }
+                   | BSNoop
+                   | BSBadMoney { name :: Text, age :: Int}
+                   deriving (Eq, Ord, Read, Show, Generic)
+
+instance ToJSON BinjaToServer
+instance FromJSON BinjaToServer
 
 
 data ServerConfig = ServerConfig
@@ -41,13 +62,18 @@ app :: WS.PendingConnection -> IO ()
 app pconn = WS.acceptRequest pconn >>= loop
   where
     loop conn = do
-      er <- receiveJSON conn :: IO (Either Text BlazeMessage)
+      er <- receiveJSON conn :: IO (Either Text (Message BinjaToServer))
       case er of
         Left err -> do
           putText $ "Error parsing JSON: " <> show err
         Right x -> do
           putText $ "Got message: " <> show x
-          sendJSON conn . TextMessage $ "I got your message, loser."
+          putText $ "Sleeping 2s before sending reply"
+          threadDelay 2000000
+          let outMsg =  Message (_bvFilePath x) $
+                SBTextMessage "I got your message, loser."
+          sendJSON conn outMsg
+          putText $ "Sent reply: " <> show outMsg
       loop conn
 
 run :: ServerConfig -> IO ()
@@ -62,7 +88,7 @@ main = (Envy.decodeEnv :: IO (Either String ServerConfig))
   
 
 
-testClient :: BlazeMessage -> WS.Connection -> IO BlazeMessage
+testClient :: Message BinjaToServer -> WS.Connection -> IO (Message ServerToBinja)
 testClient msg conn = do
   sendJSON conn msg
   (Right r) <- receiveJSON conn
