@@ -31,6 +31,7 @@ dependencies:
   - envy
   - extra
   - hashable
+  - hashids
   #  - ghc-typelits-natnormalise
   - lens
   - mtl
