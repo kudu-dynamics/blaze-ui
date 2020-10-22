@@ -40,10 +40,22 @@ class BlazeIO():
 
 def message_handler(bv, msg):
     tag = msg['tag']
-    if tag == 'SBTextMessage':
-        log_info(f"got text message")
+
+    if tag == 'SBLogInfo':
+        log_info(f"Blaze: {msg['message']}")
+        # log_info(msg['message'])
+        
+    elif tag == 'SBLogWarn':
+        log_warn(f"Blaze: {msg['message']}")
+        # log_warn(msg['message'])
+
+    elif tag == 'SBLogError':
+        log_error(f"Blaze: {msg['message']}")
+        # log_error(msg['message'])
+        
     elif tag == 'SBNoop':
         log_info(f"got Noop")
+
     else:
         log_info(f"unknown message type")    
     return
@@ -51,7 +63,7 @@ def message_handler(bv, msg):
 async def recv_loop(websocket, bv_mapping):
     while True:
         msg = json.loads(await websocket.recv())
-        log_info(f"recv {msg}")
+        # log_info(f"recv {msg}")
         try:
             bv = bv_mapping[msg['_bvFilePath']]
             message_handler(bv, msg['_action'])
@@ -98,7 +110,6 @@ blaze = BlazeIO(asyncio.get_event_loop())
 def say_hello(bv):
     global blaze
     blaze.send(bv, {'tag': 'BSTextMessage', 'message': 'this is Bilbo'})
-
 
 def listen_start(bv):
     pass

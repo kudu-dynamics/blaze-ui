@@ -64,7 +64,7 @@ createOutbox conn ss fp = do
 binjaApp :: HashMap SessionId ThreadId -> AppState -> WS.Connection -> IO ()
 binjaApp localOutboxThreads st conn = do
   er <- receiveJSON conn :: IO (Either Text (BinjaMessage BinjaToServer))
-  putText $ "got binja message: " <> show er
+  -- putText $ "got binja message: " <> show er
   case er of
     Left err -> do
       putText $ "Error parsing JSON: " <> show err
@@ -72,6 +72,9 @@ binjaApp localOutboxThreads st conn = do
       let fp = x ^. bvFilePath
           sid = binaryPathToSessionId fp
           reply = sendJSON conn . BinjaMessage fp
+          logInfo txt = do
+            reply . SBLogInfo $ txt
+            putText txt
       (justCreated, ss) <- getSessionState sid st      
       let pushEvent = atomically . writeTQueue (ss ^. eventInbox)
                       . BinjaEvent $ x ^. action
@@ -82,11 +85,13 @@ binjaApp localOutboxThreads st conn = do
             False -> do
               outboxThread <- createOutbox conn ss fp
               pushEvent
+              logInfo $ "Blaze Connected. Attached to existing session for binary: " <> fp
               binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
-            True -> pushEvent >> binjaApp localOutboxThreads st conn
+            True -> do
+              pushEvent >> binjaApp localOutboxThreads st conn
+
         True -> do
-          putText $ "New Binja Connection for bin: " <> fp
-          reply . SBLogInfo $ "Blaze Connected. Loading binary: " <> fp
+          logInfo $ "Connected. Loading binary: " <> fp
           ebv <- BN.getBinaryView . cs $ fp
           case ebv of
             Left err -> do
@@ -97,7 +102,7 @@ binjaApp localOutboxThreads st conn = do
               return ()
             Right bv -> do
               BN.updateAnalysisAndWait bv
-              putText "Opened binary."
+              logInfo $ "Loaded binary: " <> fp
               atomically $ putTMVar (ss ^. binaryView) bv
               spawnEventHandler ss
               outboxThread <- createOutbox conn ss fp
@@ -192,6 +197,19 @@ runClient cfg = WS.runClient (cs $ serverHost cfg) (serverPort cfg) ""
 
 
 mainEventLoop :: BNBinaryView -> Event -> EventLoop ()
-mainEventLoop bv msg = debug $ "mainEventLoop: " <> show msg
+mainEventLoop bv (WebEvent msg) = debug $ "web event: " <> show msg
+mainEventLoop bv (BinjaEvent msg) = handleBinjaEvent bv msg
+mainEventLoop bv (BlazeEvent msg) = handleBlazeEvent bv msg
 
+handleBinjaEvent :: BNBinaryView -> BinjaToServer -> EventLoop ()
+handleBinjaEvent bv = \case
+  BSConnect -> debug $ "Binja explicitly connected"
+  BSTextMessage t -> do
+    debug $ "Message from binja: " <> t
+    sendToBinja $ SBLogInfo "It's ok if you say hello"
+  BSNoop -> debug $ "Binja noop"
+
+handleBlazeEvent :: BNBinaryView -> BlazeToServer -> EventLoop ()
+handleBlazeEvent bv = \case
+  BZNoop -> debug $ "Blaze noop"
 

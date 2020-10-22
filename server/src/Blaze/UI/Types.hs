@@ -21,12 +21,10 @@ $(makeFieldsNoPrefix ''BinjaMessage)
 instance ToJSON a => ToJSON (BinjaMessage a)
 instance FromJSON a => FromJSON (BinjaMessage a)
 
-data ServerToBinja = SBTextMessage { message :: Text }
-                   | SBLogInfo { message :: Text }
+data ServerToBinja = SBLogInfo { message :: Text }
                    | SBLogWarn { message :: Text }
                    | SBLogError { message :: Text }
                    | SBNoop
-                   | SBBadMoney { name :: Text, age :: Int}
                    deriving (Eq, Ord, Read, Show, Generic)
 
 instance ToJSON ServerToBinja
@@ -36,7 +34,6 @@ instance FromJSON ServerToBinja
 data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
                    | BSNoop
-                   | BSBadMoney { name :: Text, age :: Int}
                    deriving (Eq, Ord, Read, Show, Generic)
 
 instance ToJSON BinjaToServer
@@ -78,7 +75,7 @@ binaryPathToSessionId = SessionId . Hashids.encode ctx . hash
     ctx = Hashids.hashidsMinimum "Make sure your salt is fortified with iodine" 8
 
 
-data BlazeToServer = BzSNoop
+data BlazeToServer = BZNoop
                    deriving (Eq, Ord, Read, Show, Generic)
 
 data Event = WebEvent WebToServer
