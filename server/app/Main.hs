@@ -3,7 +3,7 @@ module Main where
 import Blaze.UI.Prelude
 import qualified Prelude as P
 import qualified Blaze.UI.Server as Server
-import Blaze.UI.Server (ServerConfig(ServerConfig))
+import Blaze.UI.Types (ServerConfig(ServerConfig))
 
 main :: IO ()
 main = getArgs >>= \case

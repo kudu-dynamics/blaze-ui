@@ -43,16 +43,28 @@ getSessionState sid st = do
         modifyTVar (st ^. binarySessions) $ HashMap.insert sid ss
         return (True, ss)
 
-createOutbox :: SessionState -> IO
+createOutbox :: WS.Connection
+             -> SessionState
+             -> Text
+             -> IO ThreadId
+createOutbox conn ss fp = do
+  q <- newTQueueIO
+  t <- forkIO . forever $ do
+    msg <- atomically . readTQueue $ q
+    sendJSON conn . BinjaMessage fp $ msg
+  atomically . modifyTVar (ss ^. binjaOutboxes)
+    $ HashMap.insert t q
+  return t
 
 -- | Websocket message handler for binja.
 -- This handles messages for multiple binaries to/from single binja.
--- connOutboxThreads is needed to store if an outbox thread has already been
+-- localOutboxThreads is needed to store if an outbox thread has already been
 -- started for this particular binja conn, since there might already be an outbox
 -- to a different binja.
 binjaApp :: HashMap SessionId ThreadId -> AppState -> WS.Connection -> IO ()
-binjaApp connOutboxThreads st conn = do
+binjaApp localOutboxThreads st conn = do
   er <- receiveJSON conn :: IO (Either Text (BinjaMessage BinjaToServer))
+  putText $ "got binja message: " <> show er
   case er of
     Left err -> do
       putText $ "Error parsing JSON: " <> show err
@@ -60,18 +72,18 @@ binjaApp connOutboxThreads st conn = do
       let fp = x ^. bvFilePath
           sid = binaryPathToSessionId fp
           reply = sendJSON conn . BinjaMessage fp
-          storeEvent = atomically . writeTQueue (ss ^. eventInbox)
-                       . BinjaEvent $ x ^. action
-      (justCreated, ss) <- getSessionState sid st
+      (justCreated, ss) <- getSessionState sid st      
+      let pushEvent = atomically . writeTQueue (ss ^. eventInbox)
+                      . BinjaEvent $ x ^. action
       case justCreated of
         False -> do
           -- check to see if this conn has registered outbox thread
-          case HashMap.member sid connOutboxThreads of
+          case HashMap.member sid localOutboxThreads of
             False -> do
-              (outboxThread, outboxQueue) <- createOutbox ss sid fp
-              storeEvent
-              binjaApp (HashMap.insert outboxThread outboxQueue connOutboxThreads) st conn
-            True -> storeEvent >> binjaApp connOutboxThreads st conn
+              outboxThread <- createOutbox conn ss fp
+              pushEvent
+              binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
+            True -> pushEvent >> binjaApp localOutboxThreads st conn
         True -> do
           putText $ "New Binja Connection for bin: " <> fp
           reply . SBLogInfo $ "Blaze Connected. Loading binary: " <> fp
@@ -79,19 +91,49 @@ binjaApp connOutboxThreads st conn = do
           case ebv of
             Left err -> do
               reply . SBLogError $ "Blaze cannot open binary: " <> err
+              putText $ "Cannot open binary: " <> err
               atomically . modifyTVar (st ^. binarySessions) $ HashMap.delete sid
+              -- TODO: maybe send explicit disconnect?
               return ()
             Right bv -> do
+              BN.updateAnalysisAndWait bv
+              putText "Opened binary."
               atomically $ putTMVar (ss ^. binaryView) bv
-              outbox <- newTQueueIO
-              outboxThread <- forkIO . forever $ do
-                outMsg <- atomically . readTQueue $ outbox
-                reply outMsg
-              atomically . modifyTVar (ss ^. binjaOutboxes)
-                $ HashMap.insert outboxThread outbox
-              undefined          
-            
-  binjaApp st conn
+              spawnEventHandler ss
+              outboxThread <- createOutbox conn ss fp
+              pushEvent
+              binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
+
+spawnEventHandler :: SessionState -> IO ()
+spawnEventHandler ss = do
+  b <- atomically $ do
+    b1 <- isEmptyTMVar $ ss ^. eventHandlerThread
+    b2 <- isEmptyTMVar $ ss ^. blazeActionHandlerThread
+    return $ b1 || b2
+  case b of
+    False -> putText "Warning: spawnEventHandler -- event handler already spawned"
+    True -> do
+      eventTid <- forkIO . forever $ do
+        bv <- atomically . readTMVar $ ss ^. binaryView
+        msg <- atomically . readTQueue $ ss ^. eventInbox
+        (_, s) <- runEventLoop (mainEventLoop bv msg) $ EventLoopState [] [] []
+        atomically $ do
+          binjas <- fmap HashMap.elems . readTVar $ ss ^. binjaOutboxes
+          webs <- fmap HashMap.elems . readTVar $ ss ^. webOutboxes
+          mapM_ (flip writeManyTQueue $ s ^. binjaOutput) binjas
+          mapM_ (flip writeManyTQueue $ s ^. webOutput) webs
+          writeManyTQueue (ss ^. blazeActions) $ s ^. blazeActions
+      
+      blazeActionTid <- forkIO . forever $ do
+        ioAction <- atomically . readTQueue $ ss ^. blazeActions
+        void . forkIO $ do
+          r <- ioAction
+          atomically . writeTQueue (ss ^. eventInbox) $ BlazeEvent r
+
+      atomically $ putTMVar (ss ^. eventHandlerThread) eventTid
+      atomically $ putTMVar (ss ^. blazeActionHandlerThread) blazeActionTid
+      putText "Spawned event handlers"
+  
 
 webApp :: WS.Connection -> IO ()
 webApp conn = do
@@ -113,9 +155,11 @@ webApp conn = do
 
 app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case WS.requestPath $ WS.pendingRequest pconn of
-  "binja" -> WS.acceptRequest pconn >>= binjaApp st
-  "web" -> WS.acceptRequest pconn >>= webApp
-  path -> WS.rejectRequest pconn $ "Invalid path: " <> path
+  "/binja" -> WS.acceptRequest pconn >>= binjaApp HashMap.empty st
+  "/web" -> WS.acceptRequest pconn >>= webApp
+  path -> do
+    putText $ "Rejected request to invalid path: " <> cs path
+    WS.rejectRequest pconn $ "Invalid path: " <> path
 
 -- data AppState = AppState
 --   { _binarySessions :: HashMap SessionId SessionState }
@@ -123,6 +167,10 @@ app st pconn = case WS.requestPath $ WS.pendingRequest pconn of
 run :: ServerConfig -> IO ()
 run cfg = do
   st <- emptyAppState
+  putText $ "Starting Blaze UI Server at "
+    <> serverHost cfg
+    <> ":"
+    <> show (serverPort cfg)
   WS.runServer (cs $ serverHost cfg) (serverPort cfg) (app st)
 
 
@@ -143,7 +191,7 @@ runClient :: ServerConfig -> (WS.Connection -> IO a) -> IO a
 runClient cfg = WS.runClient (cs $ serverHost cfg) (serverPort cfg) ""
 
 
-mainEventLoop :: Event -> EventLoop ()
-mainEventLoop = undefined
+mainEventLoop :: BNBinaryView -> Event -> EventLoop ()
+mainEventLoop bv msg = debug $ "mainEventLoop: " <> show msg
 
 

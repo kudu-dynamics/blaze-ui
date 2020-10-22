@@ -67,7 +67,7 @@ async def send_loop(loop, websocket, out_queue):
         log_info(f"sent {msg}")
 
 async def main_websocket_loop(loop, out_queue, bv_mapping):
-    uri = "ws://" + BLAZE_UI_HOST + ":" + BLAZE_UI_PORT
+    uri = "ws://" + BLAZE_UI_HOST + ":" + BLAZE_UI_PORT + "/binja"
 
     async with websockets.connect(uri) as websocket:
         consumer_task = asyncio.ensure_future(

@@ -88,6 +88,7 @@ library:
   exposed-modules:
   - Blaze.UI.Prelude
   - Blaze.UI.Server
+  - Blaze.UI.Types
 
 include-dirs:
   - "src"

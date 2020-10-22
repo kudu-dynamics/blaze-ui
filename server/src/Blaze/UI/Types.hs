@@ -90,12 +90,18 @@ data EventLoopState = EventLoopState
   { _binjaOutput :: [ServerToBinja]
   , _webOutput :: [ServerToWeb]
   , _blazeActions :: [IO BlazeToServer]
-  , _binaryView :: BNBinaryView
   }
 $(makeFieldsNoPrefix ''EventLoopState)
 
+-- IO is in EventLoop only for debugging.
 newtype EventLoop a = EventLoop { _runEventLoop :: StateT EventLoopState IO a }
   deriving newtype ( Functor, Applicative, Monad, MonadState EventLoopState )
+
+runEventLoop :: EventLoop a -> EventLoopState -> IO (a, EventLoopState)
+runEventLoop m s = flip runStateT s $ _runEventLoop m
+
+debug :: Text -> EventLoop ()
+debug = EventLoop . putText
 
 sendToBinja :: ServerToBinja -> EventLoop ()
 sendToBinja ax = binjaOutput %= (ax:)
@@ -114,6 +120,7 @@ data SessionState = SessionState
   , _eventHandlerThread :: TMVar ThreadId
   , _eventInbox :: TQueue Event
   , _blazeActions :: TQueue (IO BlazeToServer)
+  , _blazeActionHandlerThread :: TMVar ThreadId
   }
 $(makeFieldsNoPrefix ''SessionState)
 
@@ -124,6 +131,7 @@ emptySessionState = SessionState <$> newEmptyTMVar
                                  <*> newEmptyTMVar
                                  <*> newTQueue
                                  <*> newTQueue
+                                 <*> newEmptyTMVar
 
 -- all the changeable fields should be STM vars
 -- so this can be updated across threads
