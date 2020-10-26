@@ -16,7 +16,7 @@ import json
 import queue
 
 BLAZE_UI_HOST = os.environ.get('BLAZE_UI_HOST', 'localhost')
-BLAZE_UI_PORT = os.environ.get('BLAZE_UI_PORT', '31337')
+BLAZE_UI_WS_PORT = os.environ.get('BLAZE_UI_WS_PORT', '31337')
 
 class BlazeIO():
     def __init__(self, event_loop):
@@ -76,10 +76,10 @@ async def send_loop(loop, websocket, out_queue):
         msg = await loop.run_in_executor(None, out_queue.get)
         await websocket.send(json.dumps(msg))
         out_queue.task_done()
-        log_info(f"sent {msg}")
+        # log_info(f"sent {msg}")
 
 async def main_websocket_loop(loop, out_queue, bv_mapping):
-    uri = "ws://" + BLAZE_UI_HOST + ":" + BLAZE_UI_PORT + "/binja"
+    uri = "ws://" + BLAZE_UI_HOST + ":" + BLAZE_UI_WS_PORT + "/binja"
 
     async with websockets.connect(uri) as websocket:
         consumer_task = asyncio.ensure_future(

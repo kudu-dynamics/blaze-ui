@@ -8,9 +8,9 @@ import Blaze.UI.Types (ServerConfig(ServerConfig))
 main :: IO ()
 main = getArgs >>= \case
   [] -> Server.main
-  [host, port] -> Server.run $ ServerConfig (cs host) (P.read port)
+  [host, wsPort, httpPort ] -> Server.run $ ServerConfig (cs host) (P.read wsPort) (P.read httpPort)
   _ -> do
     putText "BLAZE_UI_HOST='localhost' BLAZE_UI_PORT='1234' blaze_ui_server"
     putText "or"
-    putText "blaze_ui_server [host] [port]"
+    putText "blaze_ui_server [host] [websockets port] [http port]"
 

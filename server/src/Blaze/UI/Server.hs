@@ -9,6 +9,8 @@ import qualified Network.WebSockets as WS
 import qualified System.Envy as Envy
 import System.Envy (fromEnv, FromEnv)
 import qualified Data.ByteString.Lazy as LBS
+import qualified Data.ByteString.Char8 as BSC
+import qualified Data.Text as Text
 -- import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM.TQueue (newTQueueIO, TQueue, readTQueue, newTQueue, writeTQueue)
 import Control.Concurrent.STM.TVar (newTVarIO, TVar, readTVar, modifyTVar)
@@ -19,6 +21,7 @@ import qualified Web.Hashids as Hashids
 import Blaze.UI.Types
 import Control.Concurrent.Async (wait, async)
 import qualified Data.HashMap.Strict as HashMap
+
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -32,27 +35,39 @@ sendJSON conn x =
 
 -- | returns session state or creates it.
 -- bool indicates whether or not it was just now created
-getSessionState :: SessionId -> AppState ->  IO (Bool, SessionState)
-getSessionState sid st = do
+getSessionState :: Maybe Text -> SessionId -> AppState ->  IO (Bool, SessionState)
+getSessionState binPath sid st = do
   atomically $ do
     m <- readTVar $ st ^. binarySessions
     case HashMap.lookup sid m of
       Just ss -> return (False, ss)
       Nothing -> do
-        ss <- emptySessionState
+        ss <- emptySessionState binPath
         modifyTVar (st ^. binarySessions) $ HashMap.insert sid ss
         return (True, ss)
 
-createOutbox :: WS.Connection
+createBinjaOutbox :: WS.Connection
              -> SessionState
              -> Text
              -> IO ThreadId
-createOutbox conn ss fp = do
+createBinjaOutbox conn ss fp = do
   q <- newTQueueIO
   t <- forkIO . forever $ do
     msg <- atomically . readTQueue $ q
     sendJSON conn . BinjaMessage fp $ msg
   atomically . modifyTVar (ss ^. binjaOutboxes)
+    $ HashMap.insert t q
+  return t
+
+createWebOutbox :: WS.Connection
+                -> SessionState
+                -> IO ThreadId
+createWebOutbox conn ss = do
+  q <- newTQueueIO
+  t <- forkIO . forever $ do
+    msg <- atomically . readTQueue $ q
+    sendJSON conn msg
+  atomically . modifyTVar (ss ^. webOutboxes)
     $ HashMap.insert t q
   return t
 
@@ -75,7 +90,7 @@ binjaApp localOutboxThreads st conn = do
           logInfo txt = do
             reply . SBLogInfo $ txt
             putText txt
-      (justCreated, ss) <- getSessionState sid st      
+      (justCreated, ss) <- getSessionState (Just fp) sid st
       let pushEvent = atomically . writeTQueue (ss ^. eventInbox)
                       . BinjaEvent $ x ^. action
       case justCreated of
@@ -83,9 +98,10 @@ binjaApp localOutboxThreads st conn = do
           -- check to see if this conn has registered outbox thread
           case HashMap.member sid localOutboxThreads of
             False -> do
-              outboxThread <- createOutbox conn ss fp
+              outboxThread <- createBinjaOutbox conn ss fp
               pushEvent
               logInfo $ "Blaze Connected. Attached to existing session for binary: " <> fp
+              logInfo $ "For web plugin, go here: " <> webUri (st ^. serverConfig) sid
               binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
             True -> do
               pushEvent >> binjaApp localOutboxThreads st conn
@@ -103,9 +119,10 @@ binjaApp localOutboxThreads st conn = do
             Right bv -> do
               BN.updateAnalysisAndWait bv
               logInfo $ "Loaded binary: " <> fp
+              logInfo $ "For web plugin, go here: " <> webUri (st ^. serverConfig) sid
               atomically $ putTMVar (ss ^. binaryView) bv
               spawnEventHandler ss
-              outboxThread <- createOutbox conn ss fp
+              outboxThread <- createBinjaOutbox conn ss fp
               pushEvent
               binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
 
@@ -125,9 +142,11 @@ spawnEventHandler ss = do
         atomically $ do
           binjas <- fmap HashMap.elems . readTVar $ ss ^. binjaOutboxes
           webs <- fmap HashMap.elems . readTVar $ ss ^. webOutboxes
-          mapM_ (flip writeManyTQueue $ s ^. binjaOutput) binjas
-          mapM_ (flip writeManyTQueue $ s ^. webOutput) webs
-          writeManyTQueue (ss ^. blazeActions) $ s ^. blazeActions
+
+          -- TODO: change these to Seq so we don't have to do reverse
+          mapM_ (flip writeManyTQueue . reverse $ s ^. binjaOutput) binjas
+          mapM_ (flip writeManyTQueue . reverse $ s ^. webOutput) webs
+          writeManyTQueue (ss ^. blazeActions) . reverse $ s ^. blazeActions
       
       blazeActionTid <- forkIO . forever $ do
         ioAction <- atomically . readTQueue $ ss ^. blazeActions
@@ -138,45 +157,51 @@ spawnEventHandler ss = do
       atomically $ putTMVar (ss ^. eventHandlerThread) eventTid
       atomically $ putTMVar (ss ^. blazeActionHandlerThread) blazeActionTid
       putText "Spawned event handlers"
-  
 
-webApp :: WS.Connection -> IO ()
-webApp conn = do
-  er <- receiveJSON conn :: IO (Either Text (BinjaMessage WebToServer))
-  case er of
-    Left err -> do
-      putText $ "Error parsing JSON: " <> show err
-    Right x -> do
-      putText $ "Got message: " <> show x
-      -- putText $ "Sleeping 2s before sending reply"
-      -- threadDelay 2000000
-      let outMsg =  BinjaMessage (_bvFilePath x) $
-            WSTextMessage "I got your message, web loser."
-      sendJSON conn outMsg
-      putText $ "Sent reply: " <> show outMsg
-  webApp conn
+webUri :: ServerConfig -> SessionId -> Text
+webUri cfg (SessionId sid) = "http://"
+  <> serverHost cfg
+  <> ":" <> show (serverHttpPort cfg)
+  <> "/" <> cs sid
+
+webApp :: AppState -> SessionId -> WS.Connection -> IO ()
+webApp st sid conn = do
+  (justCreated, ss) <- getSessionState Nothing sid st
+
+  -- TODO: pass outboxThread in with event
+  _outboxThread <- createWebOutbox conn ss
+
+  when justCreated $ spawnEventHandler ss
+  forever $ do
+    er <- receiveJSON conn :: IO (Either Text WebToServer)
+    case er of
+      Left err -> do
+        putText $ "Error parsing JSON: " <> show err
+      Right x -> do
+        putText $ "Got message from web: " <> show x
+        atomically . writeTQueue (ss ^. eventInbox) . WebEvent $ x
 
   
 
 app :: AppState -> WS.PendingConnection -> IO ()
-app st pconn = case WS.requestPath $ WS.pendingRequest pconn of
-  "/binja" -> WS.acceptRequest pconn >>= binjaApp HashMap.empty st
-  "/web" -> WS.acceptRequest pconn >>= webApp
-  path -> do
+app st pconn = case splitPath of
+  ["binja"] -> WS.acceptRequest pconn >>= binjaApp HashMap.empty st
+  ["web", sid] -> WS.acceptRequest pconn >>= webApp st (SessionId sid)
+  _ -> do
     putText $ "Rejected request to invalid path: " <> cs path
     WS.rejectRequest pconn $ "Invalid path: " <> path
-
--- data AppState = AppState
---   { _binarySessions :: HashMap SessionId SessionState }
+  where
+    path = WS.requestPath $ WS.pendingRequest pconn
+    splitPath = drop 1 . BSC.splitWith (== '/') $ path
 
 run :: ServerConfig -> IO ()
 run cfg = do
-  st <- emptyAppState
+  st <- emptyAppState cfg
   putText $ "Starting Blaze UI Server at "
     <> serverHost cfg
     <> ":"
-    <> show (serverPort cfg)
-  WS.runServer (cs $ serverHost cfg) (serverPort cfg) (app st)
+    <> show (serverWsPort cfg)
+  WS.runServer (cs $ serverHost cfg) (serverWsPort cfg) (app st)
 
 
 
@@ -193,23 +218,33 @@ testClient msg conn = do
   return r
 
 runClient :: ServerConfig -> (WS.Connection -> IO a) -> IO a
-runClient cfg = WS.runClient (cs $ serverHost cfg) (serverPort cfg) ""
+runClient cfg = WS.runClient (cs $ serverHost cfg) (serverWsPort cfg) ""
+
+
+------------------------------------------
 
 
 mainEventLoop :: BNBinaryView -> Event -> EventLoop ()
-mainEventLoop bv (WebEvent msg) = debug $ "web event: " <> show msg
+mainEventLoop _bv (WebEvent msg) = debug $ "web event: " <> show msg
 mainEventLoop bv (BinjaEvent msg) = handleBinjaEvent bv msg
 mainEventLoop bv (BlazeEvent msg) = handleBlazeEvent bv msg
 
 handleBinjaEvent :: BNBinaryView -> BinjaToServer -> EventLoop ()
-handleBinjaEvent bv = \case
+handleBinjaEvent _bv = \case
   BSConnect -> debug $ "Binja explicitly connected"
   BSTextMessage t -> do
     debug $ "Message from binja: " <> t
-    sendToBinja $ SBLogInfo "It's ok if you say hello"
+    sendToBinja $ SBLogInfo "Got hello. Thanks."
+    sendToBinja $ SBLogInfo "Working on finding an important integer..."
+    doAction . fmap BZImportantInteger
+      $ threadDelay 5000000 >> putText "calculating integer" >> randomIO
+    doAction $ threadDelay 10000000 >> putText "Delayed noop event (10s)" >> return BZNoop
+    
   BSNoop -> debug $ "Binja noop"
 
 handleBlazeEvent :: BNBinaryView -> BlazeToServer -> EventLoop ()
-handleBlazeEvent bv = \case
+handleBlazeEvent _bv = \case
   BZNoop -> debug $ "Blaze noop"
+  BZImportantInteger n -> sendToBinja . SBLogInfo
+    $ "Here is your important integer: " <> show n
 

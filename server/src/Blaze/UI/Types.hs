@@ -56,14 +56,15 @@ instance FromJSON ServerToWeb
 
 data ServerConfig = ServerConfig
   { serverHost :: Text
-  , serverPort :: Int
+  , serverWsPort :: Int
+  , serverHttpPort :: Int
   } deriving (Eq, Ord, Read, Show)
 
 instance FromEnv ServerConfig where
   fromEnv _ = ServerConfig
     <$> Envy.env "BLAZE_UI_HOST"
-    <*> Envy.env "BLAZE_UI_PORT"
-
+    <*> Envy.env "BLAZE_UI_WS_PORT"
+    <*> Envy.env "BLAZE_UI_HTTP_PORT"
 newtype SessionId = SessionId ByteString
   deriving (Eq, Ord, Read, Show, Generic)
 
@@ -74,8 +75,8 @@ binaryPathToSessionId = SessionId . Hashids.encode ctx . hash
   where
     ctx = Hashids.hashidsMinimum "Make sure your salt is fortified with iodine" 8
 
-
 data BlazeToServer = BZNoop
+                   | BZImportantInteger Int
                    deriving (Eq, Ord, Read, Show, Generic)
 
 data Event = WebEvent WebToServer
@@ -111,7 +112,8 @@ doAction ax = blazeActions %= (ax:)
 
 -- there are multiple outboxes in case there are multiple conns to same binary
 data SessionState = SessionState
-  { _binaryView :: TMVar BNBinaryView
+  { _binaryPath :: Maybe Text
+  , _binaryView :: TMVar BNBinaryView
   , _binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , _webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
   , _eventHandlerThread :: TMVar ThreadId
@@ -121,23 +123,27 @@ data SessionState = SessionState
   }
 $(makeFieldsNoPrefix ''SessionState)
 
-emptySessionState :: STM SessionState
-emptySessionState = SessionState <$> newEmptyTMVar
-                                 <*> newTVar HashMap.empty
-                                 <*> newTVar HashMap.empty
-                                 <*> newEmptyTMVar
-                                 <*> newTQueue
-                                 <*> newTQueue
-                                 <*> newEmptyTMVar
+emptySessionState :: Maybe Text -> STM SessionState
+emptySessionState binPath
+  = SessionState binPath
+    <$> newEmptyTMVar
+    <*> newTVar HashMap.empty
+    <*> newTVar HashMap.empty
+    <*> newEmptyTMVar
+    <*> newTQueue
+    <*> newTQueue
+    <*> newEmptyTMVar
 
 -- all the changeable fields should be STM vars
 -- so this can be updated across threads
 data AppState = AppState
-  { _binarySessions :: TVar (HashMap SessionId SessionState) }
+  { _serverConfig :: ServerConfig
+  , _binarySessions :: TVar (HashMap SessionId SessionState) }
 $(makeFieldsNoPrefix ''AppState)
 
-emptyAppState :: IO AppState
-emptyAppState = AppState <$> newTVarIO HashMap.empty
+-- not really empty...
+emptyAppState :: ServerConfig -> IO AppState
+emptyAppState cfg = AppState cfg <$> newTVarIO HashMap.empty
 
 lookupSessionState :: SessionId -> AppState -> STM (Maybe SessionState)
 lookupSessionState sid st = do
