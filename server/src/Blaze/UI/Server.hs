@@ -22,7 +22,6 @@ import Blaze.UI.Types
 import Control.Concurrent.Async (wait, async)
 import qualified Data.HashMap.Strict as HashMap
 
-
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
   x <- WS.receiveData conn :: IO LBS.ByteString
@@ -45,6 +44,10 @@ getSessionState binPath sid st = do
         ss <- emptySessionState binPath
         modifyTVar (st ^. binarySessions) $ HashMap.insert sid ss
         return (True, ss)
+
+removeSessionState :: SessionId -> AppState -> IO ()
+removeSessionState sid st = atomically
+  . modifyTVar (st ^. binarySessions) $ HashMap.delete sid
 
 createBinjaOutbox :: WS.Connection
              -> SessionState
@@ -101,7 +104,8 @@ binjaApp localOutboxThreads st conn = do
               outboxThread <- createBinjaOutbox conn ss fp
               pushEvent
               logInfo $ "Blaze Connected. Attached to existing session for binary: " <> fp
-              logInfo $ "For web plugin, go here: " <> webUri (st ^. serverConfig) sid
+              logInfo $ "For web plugin, go here:"
+              logInfo $ webUri (st ^. serverConfig) sid
               binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
             True -> do
               pushEvent >> binjaApp localOutboxThreads st conn
@@ -111,7 +115,7 @@ binjaApp localOutboxThreads st conn = do
           ebv <- BN.getBinaryView . cs $ fp
           case ebv of
             Left err -> do
-              reply . SBLogError $ "Blaze cannot open binary: " <> err
+              reply . SBLogError $ "Blaze cannot open binary: " <> err -- 
               putText $ "Cannot open binary: " <> err
               atomically . modifyTVar (st ^. binarySessions) $ HashMap.delete sid
               -- TODO: maybe send explicit disconnect?
@@ -119,7 +123,8 @@ binjaApp localOutboxThreads st conn = do
             Right bv -> do
               BN.updateAnalysisAndWait bv
               logInfo $ "Loaded binary: " <> fp
-              logInfo $ "For web plugin, go here: " <> webUri (st ^. serverConfig) sid
+              logInfo $ "For web plugin, go here:"
+              logInfo $ webUri (st ^. serverConfig) sid
               atomically $ putTMVar (ss ^. binaryView) bv
               spawnEventHandler ss
               outboxThread <- createBinjaOutbox conn ss fp
@@ -166,19 +171,38 @@ webUri cfg (SessionId sid) = "http://"
 
 webApp :: AppState -> SessionId -> WS.Connection -> IO ()
 webApp st sid conn = do
+  let fatalError t = do
+        sendJSON conn . SWLogError $ t
+        removeSessionState sid st
+        WS.sendClose conn t
+      logInfo = sendJSON conn . SWLogInfo
   (justCreated, ss) <- getSessionState Nothing sid st
-
+  case justCreated of
+    True -> do
+      let efp = sessionIdToBinaryPath sid
+      case efp of
+        Left err -> fatalError err
+        Right fp -> do
+          logInfo $ "Fresh Web client connected sans binja. Loading binary: " <> fp
+          ebv <- BN.getBinaryView . cs $ fp
+          case ebv of
+            Left err -> fatalError err
+            Right bv -> do
+              BN.updateAnalysisAndWait bv
+              logInfo $ "Loaded binary: " <> fp
+              atomically $ putTMVar (ss ^. binaryView) bv
+              spawnEventHandler ss
+    False -> return ()
+      
   -- TODO: pass outboxThread in with event
   _outboxThread <- createWebOutbox conn ss
 
-  when justCreated $ spawnEventHandler ss
   forever $ do
     er <- receiveJSON conn :: IO (Either Text WebToServer)
     case er of
       Left err -> do
         putText $ "Error parsing JSON: " <> show err
       Right x -> do
-        putText $ "Got message from web: " <> show x
         atomically . writeTQueue (ss ^. eventInbox) . WebEvent $ x
 
   
@@ -186,7 +210,7 @@ webApp st sid conn = do
 app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case splitPath of
   ["binja"] -> WS.acceptRequest pconn >>= binjaApp HashMap.empty st
-  ["web", sid] -> WS.acceptRequest pconn >>= webApp st (SessionId sid)
+  ["web", sid] -> WS.acceptRequest pconn >>= webApp st (SessionId $ cs sid)
   _ -> do
     putText $ "Rejected request to invalid path: " <> cs path
     WS.rejectRequest pconn $ "Invalid path: " <> path
@@ -204,13 +228,6 @@ run cfg = do
   WS.runServer (cs $ serverHost cfg) (serverWsPort cfg) (app st)
 
 
-
-main :: IO ()
-main = (Envy.decodeEnv :: IO (Either String ServerConfig))
-  >>= either P.error run
-  
-
-
 testClient :: BinjaMessage BinjaToServer -> WS.Connection -> IO (BinjaMessage ServerToBinja)
 testClient msg conn = do
   sendJSON conn msg
@@ -222,12 +239,20 @@ runClient cfg = WS.runClient (cs $ serverHost cfg) (serverWsPort cfg) ""
 
 
 ------------------------------------------
-
+--- main event handler
 
 mainEventLoop :: BNBinaryView -> Event -> EventLoop ()
-mainEventLoop _bv (WebEvent msg) = debug $ "web event: " <> show msg
+mainEventLoop bv (WebEvent msg) = handleWebEvent bv msg
 mainEventLoop bv (BinjaEvent msg) = handleBinjaEvent bv msg
 mainEventLoop bv (BlazeEvent msg) = handleBlazeEvent bv msg
+
+handleWebEvent :: BNBinaryView -> WebToServer -> EventLoop ()
+handleWebEvent _bv = \case
+  WSNoop -> debug $ "web noop"
+  WSTextMessage t -> do
+    debug $ "Text Message from Web: " <> t
+    sendToWeb $ SWTextMessage "I got your message and am flying with it!"
+    sendToBinja . SBLogInfo $ "From the Web UI: " <> t
 
 handleBinjaEvent :: BNBinaryView -> BinjaToServer -> EventLoop ()
 handleBinjaEvent _bv = \case
@@ -247,4 +272,5 @@ handleBlazeEvent _bv = \case
   BZNoop -> debug $ "Blaze noop"
   BZImportantInteger n -> sendToBinja . SBLogInfo
     $ "Here is your important integer: " <> show n
+
 

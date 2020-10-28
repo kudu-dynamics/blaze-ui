@@ -23,6 +23,7 @@ dependencies:
   - aeson
   - async
   - base >= 4.7 && < 5
+  - base64
   - binary-analysis
   - binja
   - blaze
@@ -38,6 +39,7 @@ dependencies:
   - pretty-simple
   - protolude
   - random
+  - scotty
   - stm
   - streamly
   - string-conversions
@@ -89,6 +91,7 @@ library:
   - Blaze.UI.Prelude
   - Blaze.UI.Server
   - Blaze.UI.Types
+  - Blaze.UI.Web.Server
 
 include-dirs:
   - "src"

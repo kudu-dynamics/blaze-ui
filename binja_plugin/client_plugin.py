@@ -42,16 +42,16 @@ def message_handler(bv, msg):
     tag = msg['tag']
 
     if tag == 'SBLogInfo':
-        log_info(f"Blaze: {msg['message']}")
-        # log_info(msg['message'])
+        # log_info(f"Blaze: {msg['message']}")
+        log_info(msg['message'])
         
     elif tag == 'SBLogWarn':
-        log_warn(f"Blaze: {msg['message']}")
-        # log_warn(msg['message'])
+        # log_warn(f"Blaze: {msg['message']}")
+        log_warn(msg['message'])
 
     elif tag == 'SBLogError':
-        log_error(f"Blaze: {msg['message']}")
-        # log_error(msg['message'])
+        # log_error(f"Blaze: {msg['message']}")
+        log_error(msg['message'])
         
     elif tag == 'SBNoop':
         log_info(f"got Noop")

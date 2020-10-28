@@ -2,6 +2,7 @@
 module Blaze.UI.Types where
 
 import Blaze.UI.Prelude
+import qualified Prelude as P
 import Data.Aeson (FromJSON, ToJSON)
 import qualified System.Envy as Envy
 import System.Envy (fromEnv, FromEnv)
@@ -11,6 +12,8 @@ import Control.Concurrent.STM.TMVar (TMVar, readTMVar, newEmptyTMVar)
 import Binja.Core (BNBinaryView)
 import qualified Web.Hashids as Hashids
 import qualified Data.HashMap.Strict as HashMap
+import Web.Scotty (Parsable(parseParam))
+import Data.Text.Encoding.Base64.URL (encodeBase64, decodeBase64)
 
 data BinjaMessage a = BinjaMessage
   { _bvFilePath :: Text
@@ -47,6 +50,9 @@ instance ToJSON WebToServer
 instance FromJSON WebToServer
 
 data ServerToWeb = SWTextMessage { message :: Text }
+                 | SWLogInfo { message :: Text }
+                 | SWLogWarn { message :: Text }
+                 | SWLogError { message :: Text }
                  | SWNoop
                  deriving (Eq, Ord, Read, Show, Generic)
 
@@ -65,15 +71,19 @@ instance FromEnv ServerConfig where
     <$> Envy.env "BLAZE_UI_HOST"
     <*> Envy.env "BLAZE_UI_WS_PORT"
     <*> Envy.env "BLAZE_UI_HTTP_PORT"
-newtype SessionId = SessionId ByteString
+
+newtype SessionId = SessionId Text
   deriving (Eq, Ord, Read, Show, Generic)
 
 instance Hashable SessionId
+instance Parsable SessionId where
+  parseParam = Right . SessionId . cs
 
 binaryPathToSessionId :: Text -> SessionId
-binaryPathToSessionId = SessionId . Hashids.encode ctx . hash
-  where
-    ctx = Hashids.hashidsMinimum "Make sure your salt is fortified with iodine" 8
+binaryPathToSessionId = SessionId . encodeBase64
+
+sessionIdToBinaryPath :: SessionId -> Either Text Text
+sessionIdToBinaryPath (SessionId x) = decodeBase64 x
 
 data BlazeToServer = BZNoop
                    | BZImportantInteger Int
