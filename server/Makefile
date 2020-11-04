@@ -12,4 +12,4 @@ build:
 	stack build
 
 hlint:
-	hlint src test demo
+	hlint src test

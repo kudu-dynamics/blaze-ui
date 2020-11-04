@@ -1,4 +1,5 @@
-{-# LANGUAGE TemplateHaskell #-}
+{- HLINT ignore "Use if" -}
+
 module Blaze.UI.Server where
 
 import Blaze.UI.Prelude
@@ -95,7 +96,7 @@ binjaApp localOutboxThreads st conn = do
               outboxThread <- createBinjaOutbox conn ss fp
               pushEvent
               logInfo $ "Blaze Connected. Attached to existing session for binary: " <> fp
-              logInfo $ "For web plugin, go here:"
+              logInfo "For web plugin, go here:"
               logInfo $ webUri (st ^. serverConfig) sid
               binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
             True -> do
@@ -114,7 +115,7 @@ binjaApp localOutboxThreads st conn = do
             Right bv -> do
               BN.updateAnalysisAndWait bv
               logInfo $ "Loaded binary: " <> fp
-              logInfo $ "For web plugin, go here:"
+              logInfo "For web plugin, go here:"
               logInfo $ webUri (st ^. serverConfig) sid
               atomically $ putTMVar (ss ^. binaryView) bv
               spawnEventHandler ss
@@ -239,7 +240,7 @@ mainEventLoop bv (BlazeEvent msg) = handleBlazeEvent bv msg
 
 handleWebEvent :: BNBinaryView -> WebToServer -> EventLoop ()
 handleWebEvent _bv = \case
-  WSNoop -> debug $ "web noop"
+  WSNoop -> debug "web noop"
   WSTextMessage t -> do
     debug $ "Text Message from Web: " <> t
     sendToWeb $ SWTextMessage "I got your message and am flying with it!"
@@ -247,7 +248,7 @@ handleWebEvent _bv = \case
 
 handleBinjaEvent :: BNBinaryView -> BinjaToServer -> EventLoop ()
 handleBinjaEvent _bv = \case
-  BSConnect -> debug $ "Binja explicitly connected"
+  BSConnect -> debug "Binja explicitly connected"
   BSTextMessage t -> do
     debug $ "Message from binja: " <> t
     sendToBinja $ SBLogInfo "Got hello. Thanks."
@@ -256,11 +257,11 @@ handleBinjaEvent _bv = \case
       $ threadDelay 5000000 >> putText "calculating integer" >> randomIO
     doAction $ threadDelay 10000000 >> putText "Delayed noop event (10s)" >> return BZNoop
     
-  BSNoop -> debug $ "Binja noop"
+  BSNoop -> debug "Binja noop"
 
 handleBlazeEvent :: BNBinaryView -> BlazeToServer -> EventLoop ()
 handleBlazeEvent _bv = \case
-  BZNoop -> debug $ "Blaze noop"
+  BZNoop -> debug "Blaze noop"
   BZImportantInteger n -> sendToBinja . SBLogInfo
     $ "Here is your important integer: " <> show n
 
