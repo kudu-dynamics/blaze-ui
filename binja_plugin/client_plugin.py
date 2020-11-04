@@ -23,10 +23,14 @@ class BlazeIO():
         self.thread = None
         self.loop = event_loop
         self.bv_mapping = {} # {bvFilePath -> bv}
-        self.out_queue = queue.Queue()
+
+    def reset(self):
+        self.thread = None
+        log_info("reset BlazeIO")
         
     def __init_thread(self):
         if not self.thread:
+            self.out_queue = queue.Queue()
             t = MainWebsocketThread(self.bv_mapping, self.loop, self.out_queue)
             t.start()
             self.thread = t
@@ -62,7 +66,12 @@ def message_handler(bv, msg):
 
 async def recv_loop(websocket, bv_mapping):
     while True:
-        msg = json.loads(await websocket.recv())
+        try:
+            msg = json.loads(await websocket.recv())
+        except:
+            log_error(f'recv_loop: probably disconnected')
+            return
+
         # log_info(f"recv {msg}")
         try:
             bv = bv_mapping[msg['_bvFilePath']]
@@ -74,7 +83,10 @@ async def recv_loop(websocket, bv_mapping):
 async def send_loop(loop, websocket, out_queue):
     while True:
         msg = await loop.run_in_executor(None, out_queue.get)
-        await websocket.send(json.dumps(msg))
+        try:
+            await websocket.send(json.dumps(msg))
+        except:
+            return
         out_queue.task_done()
         # log_info(f"sent {msg}")
 
@@ -92,6 +104,9 @@ async def main_websocket_loop(loop, out_queue, bv_mapping):
         )
         for task in pending:
             task.cancel()
+        log_info('stopped loops!')
+        blaze.reset()
+        loop.stop()
         
 
 class MainWebsocketThread(BackgroundTaskThread):
@@ -105,6 +120,7 @@ class MainWebsocketThread(BackgroundTaskThread):
         self.loop.create_task(main_websocket_loop(self.loop, self.out_queue, self.bv_mapping))
         self.loop.run_forever()
 
+        
 blaze = BlazeIO(asyncio.get_event_loop())
 
 def say_hello(bv):
