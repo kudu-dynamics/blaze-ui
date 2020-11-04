@@ -1,15 +1,17 @@
 module Blaze.UI.Web.Server where
 
 import Blaze.UI.Prelude hiding (get)
-import qualified Prelude as P
 
 import Blaze.UI.Types
-import qualified Web.Scotty as Scotty
-import Web.Scotty ( ScottyM, get, file, setHeader, html, ActionM
+import Web.Scotty ( ScottyM
+                  , ActionM
+                  , get
+                  , file
+                  , setHeader
+                  , html
                   , scotty
                   , capture
                   , param
-                  , raw
                   )
 import qualified Data.Text.IO as TIO
 

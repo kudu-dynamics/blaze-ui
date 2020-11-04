@@ -2,15 +2,10 @@
 module Blaze.UI.Types where
 
 import Blaze.UI.Prelude
-import qualified Prelude as P
 import Data.Aeson (FromJSON, ToJSON)
 import qualified System.Envy as Envy
 import System.Envy (fromEnv, FromEnv)
-import Control.Concurrent.STM.TQueue (newTQueueIO, TQueue, readTQueue, newTQueue)
-import Control.Concurrent.STM.TVar (newTVarIO, TVar, readTVar, newTVar)
-import Control.Concurrent.STM.TMVar (TMVar, readTMVar, newEmptyTMVar)
 import Binja.Core (BNBinaryView)
-import qualified Web.Hashids as Hashids
 import qualified Data.HashMap.Strict as HashMap
 import Web.Scotty (Parsable(parseParam))
 import Data.Text.Encoding.Base64.URL (encodeBase64, decodeBase64)
