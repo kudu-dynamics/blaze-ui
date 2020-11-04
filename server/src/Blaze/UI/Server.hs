@@ -2,24 +2,15 @@
 module Blaze.UI.Server where
 
 import Blaze.UI.Prelude
-import qualified Prelude as P
 import Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Network.WebSockets as WS
-import qualified System.Envy as Envy
-import System.Envy (fromEnv, FromEnv)
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Char8 as BSC
-import qualified Data.Text as Text
 -- import Control.Concurrent (threadDelay)
-import Control.Concurrent.STM.TQueue (newTQueueIO, TQueue, readTQueue, newTQueue, writeTQueue)
-import Control.Concurrent.STM.TVar (newTVarIO, TVar, readTVar, modifyTVar)
-import Control.Concurrent.STM.TMVar (TMVar, readTMVar, newEmptyTMVar, putTMVar)
 import Binja.Core (BNBinaryView)
 import qualified Binja.Core as BN
-import qualified Web.Hashids as Hashids
 import Blaze.UI.Types
-import Control.Concurrent.Async (wait, async)
 import qualified Data.HashMap.Strict as HashMap
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)

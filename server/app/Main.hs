@@ -6,7 +6,7 @@ import qualified Blaze.UI.Server as Server
 import Blaze.UI.Types (ServerConfig(ServerConfig))
 import Blaze.UI.Web.Server as WebServer
 import qualified System.Envy as Envy
-import System.Envy (fromEnv, FromEnv)
+
 
 main :: IO ()
 main = do
