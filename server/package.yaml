@@ -23,6 +23,7 @@ dependencies:
   - aeson
   - async
   - base >= 4.7 && < 5
+  - base64
   - binary-analysis
   - binja
   - blaze
@@ -31,12 +32,14 @@ dependencies:
   - envy
   - extra
   - hashable
+  - hashids
   #  - ghc-typelits-natnormalise
   - lens
   - mtl
   - pretty-simple
   - protolude
   - random
+  - scotty
   - stm
   - streamly
   - string-conversions
@@ -87,6 +90,8 @@ library:
   exposed-modules:
   - Blaze.UI.Prelude
   - Blaze.UI.Server
+  - Blaze.UI.Types
+  - Blaze.UI.Web.Server
 
 include-dirs:
   - "src"

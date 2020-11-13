@@ -2,6 +2,33 @@
 
 This project provides a UI for using Blaze to assist in reverse engineering and vulnerability research tasks.
 
+It consists of three components:
+
+* *Binja Plugin* - sends binja UI events to server, recvs messages to change UI
+* *Web UI* - javascript front-end where we display blaze-specific info
+* *Blaze Server* - middleman between plugin and web, workhorse for Blaze services
+
+## Installation
+
+Set two env vars:
+
+```
+export BLAZE_UI_HOST="localhost"
+export BLAZE_UI_PORT="31337"
+```
+
+Symbolically link binja plugin, `~/.binaryninja/plugins/blaze` to the `blaze-ui/binja_plugin` folder.
+
+Run server:
+
+```
+cd server
+stack run
+```
+
+
+# React/Typescript stuff
+
 Bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
 ## Available Scripts

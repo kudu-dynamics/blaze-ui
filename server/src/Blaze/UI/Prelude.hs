@@ -23,6 +23,7 @@ module Blaze.UI.Prelude
   , hdebug
   , twaddleUUID
   , unfoldWhileJustM
+  , writeManyTQueue
   ) where
 
 --import qualified Prelude as P
@@ -100,6 +101,9 @@ import Prelude as Exports
     error,
   )
 import qualified GHC.Show
+import Control.Concurrent.STM.TQueue as Exports
+import Control.Concurrent.STM.TVar as Exports
+import Control.Concurrent.STM.TMVar as Exports
 
 type Streaming t m = (Monad m, Monad (t m), MonadTrans t, IsStream t)
 
@@ -176,3 +180,6 @@ newtype PPrint a = PPrint a
 
 instance Show a => Show (PPrint a) where
   show (PPrint x) = cs $ pshow x
+
+writeManyTQueue :: TQueue a -> [a] -> STM ()
+writeManyTQueue q = mapM_ $ writeTQueue q
