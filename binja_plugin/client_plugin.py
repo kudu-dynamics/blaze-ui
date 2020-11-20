@@ -127,6 +127,11 @@ def say_hello(bv):
     global blaze
     blaze.send(bv, {'tag': 'BSTextMessage', 'message': 'this is Bilbo'})
 
+def type_check_function(bv, func):
+    global blaze
+    blaze.send(bv, {'tag': 'BSTypeCheckFunction', 'address': func.start})
+
+    
 def listen_start(bv):
     pass
 
@@ -135,8 +140,11 @@ def listen_stop(bv):
 
 actionSayHello = "Blaze\\Say Hello"
 actionSendInstruction = "Blaze\\Send Instruction"
+actionTypeCheckFunction = "Blaze\\Type Check Function"
 
 PluginCommand.register(actionSayHello, "Say Hello", say_hello)
+PluginCommand.register_for_function(actionTypeCheckFunction, "Type Check Function", type_check_function)
+
 # PluginCommand.register_for_medium_level_il_instruction(actionSendInstruction, "Send Instruction", send_instruction)
 
 # UIAction.registerAction(actionSayHello, "CTRL+1")

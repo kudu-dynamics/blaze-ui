@@ -11,8 +11,13 @@ import qualified Data.ByteString.Char8 as BSC
 -- import Control.Concurrent (threadDelay)
 import Binja.Core (BNBinaryView)
 import qualified Binja.Core as BN
+import qualified Binja.Function as BNFunc
 import Blaze.UI.Types
 import qualified Data.HashMap.Strict as HashMap
+import Blaze.Pretty (prettyIndexedStmts)
+import qualified Blaze.Types.Pil.Checker as Ch
+import qualified Blaze.Pil.Checker as Ch
+
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -246,9 +251,10 @@ handleWebEvent _bv = \case
     sendToWeb $ SWTextMessage "I got your message and am flying with it!"
     sendToBinja . SBLogInfo $ "From the Web UI: " <> t
 
+
 handleBinjaEvent :: BNBinaryView -> BinjaToServer -> EventLoop ()
-handleBinjaEvent _bv = \case
-  BSConnect -> debug "Binja explicitly connected"
+handleBinjaEvent bv = \case
+  BSConnect -> debug "Binja explicitly connected"  
   BSTextMessage t -> do
     debug $ "Message from binja: " <> t
     sendToBinja $ SBLogInfo "Got hello. Thanks."
@@ -256,12 +262,33 @@ handleBinjaEvent _bv = \case
     doAction . fmap BZImportantInteger
       $ threadDelay 5000000 >> putText "calculating integer" >> randomIO
     doAction $ threadDelay 10000000 >> putText "Delayed noop event (10s)" >> return BZNoop
-    
+  BSTypeCheckFunction addr -> do
+    doAction $ do
+      mFunc <- BNFunc.getFunctionStartingAt bv Nothing (fromIntegral addr)
+      case mFunc of
+        Nothing -> return BZNoop
+        Just func -> do
+          er <- Ch.checkFunction func
+          case er of
+            Left err -> pprint err >> return BZNoop
+            Right tr -> return $ BZTypeCheckFunctionReport func tr
   BSNoop -> debug "Binja noop"
+
 
 handleBlazeEvent :: BNBinaryView -> BlazeToServer -> EventLoop ()
 handleBlazeEvent _bv = \case
   BZNoop -> debug "Blaze noop"
+  BZTypeCheckFunctionReport fn r -> do
+    nonAsyncIO $ do
+      putText "\n------------------------Type Checking Function-------------------------"
+      pprint fn
+      putText ""
+      pprint ("errors" :: Text, r ^. Ch.errors)
+      putText ""
+      prettyIndexedStmts $ r ^. Ch.symTypeStmts
+      putText "-----------------------------------------------------------------------"
+    sendToBinja . SBLogInfo $ "Completed checking " <> fn ^. BNFunc.name
+    sendToBinja . SBLogInfo $ "See server log for results."
   BZImportantInteger n -> sendToBinja . SBLogInfo
     $ "Here is your important integer: " <> show n
 

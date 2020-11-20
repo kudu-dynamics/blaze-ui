@@ -9,6 +9,10 @@ import Binja.Core (BNBinaryView)
 import qualified Data.HashMap.Strict as HashMap
 import Web.Scotty (Parsable(parseParam))
 import Data.Text.Encoding.Base64.URL (encodeBase64, decodeBase64)
+import qualified Blaze.Types.Pil.Checker as Ch
+import Binja.Function (Function)
+
+
 
 data BinjaMessage a = BinjaMessage
   { _bvFilePath :: Text
@@ -31,6 +35,7 @@ instance FromJSON ServerToBinja
 
 data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
+                   | BSTypeCheckFunction { address :: Word64 }
                    | BSNoop
                    deriving (Eq, Ord, Read, Show, Generic)
 
@@ -43,6 +48,14 @@ data WebToServer = WSTextMessage { message :: Text }
 
 instance ToJSON WebToServer
 instance FromJSON WebToServer
+
+data FunctionDescriptor = FunctionDescriptor
+  { name :: Text
+  , address :: Int
+  } deriving (Eq, Ord, Read, Show, Generic)
+
+instance ToJSON FunctionDescriptor
+instance FromJSON FunctionDescriptor
 
 data ServerToWeb = SWTextMessage { message :: Text }
                  | SWLogInfo { message :: Text }
@@ -82,12 +95,13 @@ sessionIdToBinaryPath (SessionId x) = decodeBase64 x
 
 data BlazeToServer = BZNoop
                    | BZImportantInteger Int
-                   deriving (Eq, Ord, Read, Show, Generic)
+                   | BZTypeCheckFunctionReport Function Ch.TypeReport
+                   deriving (Eq, Ord, Show, Generic)
 
 data Event = WebEvent WebToServer
            | BinjaEvent BinjaToServer
            | BlazeEvent BlazeToServer
-           deriving (Eq, Ord, Read, Show, Generic)
+           deriving (Eq, Ord, Show, Generic)
 
 data EventLoopState = EventLoopState
   { _binjaOutput :: [ServerToBinja]
@@ -105,6 +119,9 @@ runEventLoop m s = flip runStateT s $ _runEventLoop m
 
 debug :: Text -> EventLoop ()
 debug = EventLoop . putText
+
+nonAsyncIO :: IO a -> EventLoop a
+nonAsyncIO = EventLoop . liftIO
 
 sendToBinja :: ServerToBinja -> EventLoop ()
 sendToBinja ax = binjaOutput %= (ax:)
