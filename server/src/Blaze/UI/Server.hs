@@ -259,6 +259,7 @@ handleBinjaEvent bv = \case
     debug $ "Message from binja: " <> t
     sendToBinja $ SBLogInfo "Got hello. Thanks."
     sendToBinja $ SBLogInfo "Working on finding an important integer..."
+    sendToWeb $ SWTextMessage "Binja says hello"
     doAction . fmap BZImportantInteger
       $ threadDelay 5000000 >> putText "calculating integer" >> randomIO
     doAction $ threadDelay 10000000 >> putText "Delayed noop event (10s)" >> return BZNoop

@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Blaze.UI.Types where
 
@@ -11,6 +12,10 @@ import Web.Scotty (Parsable(parseParam))
 import Data.Text.Encoding.Base64.URL (encodeBase64, decodeBase64)
 import qualified Blaze.Types.Pil.Checker as Ch
 import Binja.Function (Function)
+import qualified Data.Aeson.Types as Aeson
+import Language.PureScript.Bridge (writePSTypes, defaultBridge)
+import qualified Language.PureScript.Bridge as PB
+
 
 
 
@@ -57,16 +62,42 @@ data FunctionDescriptor = FunctionDescriptor
 instance ToJSON FunctionDescriptor
 instance FromJSON FunctionDescriptor
 
+data JimDog = FairyChild
+            | PlasterNose
+            deriving (Eq, Ord, Read, Show, Generic)
+
+instance ToJSON JimDog
+instance FromJSON JimDog
+
 data ServerToWeb = SWTextMessage { message :: Text }
                  | SWLogInfo { message :: Text }
                  | SWLogWarn { message :: Text }
-                 | SWLogError { message :: Text }
+                 | SWLogError { message :: Text, jimDog :: JimDog }
                  | SWNoop
                  deriving (Eq, Ord, Read, Show, Generic)
+
+-- webOptions :: Aeson.Options
+-- webOptions = Aeson.defaultOptions
+--              { Aeson.unwrapUnaryRecords = True
+--              , Aeson.tagSingleConstructors = True
+--              }
+
+-- instance ToJSON ServerToWeb where
+--     toEncoding = Aeson.genericToEncoding webOptions
 
 instance ToJSON ServerToWeb
 instance FromJSON ServerToWeb
 
+myTypes :: [PB.SumType 'PB.Haskell]
+myTypes =
+  [ let p = (Proxy :: Proxy ServerToWeb) in
+      PB.order p (PB.mkSumType p)  -- Produce both `Eq` and `Ord`.
+  , let p = (Proxy :: Proxy JimDog) in
+      PB.order p (PB.mkSumType p)  -- Produce both `Eq` and `Ord`.
+  ]
+
+tryPB :: IO ()
+tryPB = PB.writePSTypes "/tmp/jobo" (PB.buildBridge PB.defaultBridge) myTypes
 
 data ServerConfig = ServerConfig
   { serverHost :: Text
