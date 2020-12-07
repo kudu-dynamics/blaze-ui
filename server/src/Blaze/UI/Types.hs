@@ -15,6 +15,7 @@ import qualified Data.Aeson.Types as Aeson
 import qualified Language.PureScript.Bridge as PB
 import qualified Blaze.Types.CallGraph as CG
 import qualified Language.PureScript.Bridge.CodeGenSwitches as S
+import System.Directory (removeDirectoryRecursive)
 
 data BinjaMessage a = BinjaMessage
   { _bvFilePath :: Text
@@ -90,17 +91,19 @@ myTypes :: [PB.SumType 'PB.Haskell]
 myTypes =
   [ let p = (Proxy :: Proxy ServerToWeb) in
       PB.order p (PB.mkSumType p)
-  , let p = (Proxy :: Proxy SWLogErrorArgs) in
-      PB.order p (PB.mkSumType p)
-  , let p = (Proxy :: Proxy CG.Function) in
-      PB.order p (PB.mkSumType p)
+  -- , let p = (Proxy :: Proxy SWLogErrorArgs) in
+  --     PB.order p (PB.mkSumType p)
+  -- , let p = (Proxy :: Proxy CG.Function) in
+  --     PB.order p (PB.mkSumType p)
   ]
 
 
 tryPB :: IO ()
 tryPB = do
+  let dir = "../web/gen"
+  removeDirectoryRecursive dir
   let s = S.useGenRep <> S.genForeign (S.ForeignOptions True) <> S.genLenses
-  PB.writePSTypesWith s "/tmp/jobo" (PB.buildBridge PB.defaultBridge) myTypes
+  PB.writePSTypesWith s dir (PB.buildBridge PB.defaultBridge) myTypes
 
 data ServerConfig = ServerConfig
   { serverHost :: Text
