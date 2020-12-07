@@ -13,7 +13,10 @@ import qualified Binja.Core as BN
 import qualified Binja.Function as BNFunc
 import Blaze.UI.Types
 import qualified Data.HashMap.Strict as HashMap
+import qualified Blaze.Pil as Pil
 import Blaze.Pretty (prettyIndexedStmts)
+import qualified Blaze.Types.Path.AlgaPath as AP
+import qualified Blaze.Types.Pil as Pil
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 
@@ -268,7 +271,11 @@ handleBinjaEvent bv = \case
       case mFunc of
         Nothing -> return BZNoop
         Just func -> do
-          er <- Ch.checkFunction func
+          addrWidth <- BN.getViewAddressSize bv
+          indexedStmts <- Pil.convert
+            (Pil.mkConverterState Pil.knownFuncDefs addrWidth func AP.empty)
+            (Pil.convertFunction func)
+          let er = Ch.checkFunction indexedStmts
           case er of
             Left err -> pprint err >> return BZNoop
             Right tr -> return $ BZTypeCheckFunctionReport func tr
