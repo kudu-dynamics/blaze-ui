@@ -3,7 +3,6 @@
 module Blaze.UI.Server where
 
 import Blaze.UI.Prelude
-import Data.Aeson (FromJSON, ToJSON)
 import qualified Data.Aeson as Aeson
 import qualified Network.WebSockets as WS
 import qualified Data.ByteString.Lazy as LBS
