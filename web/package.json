@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "devDependencies": {
+    "parcel": "^1.12.4",
+    "purescript": "^0.13.8",
+    "spago": "0.17.0"
+  },
+  "scripts": {
+    "build": "spago build",
+    "serve": "parcel web/index.html --open",
+    "build-prod": "mkdir -p prod && cp dev/index.html prod/ && rm -rf dist && spago bundle-app --to prod/index.js && parcel build prod/index.html"
+  },
+  "dependencies": {
+    "react": "^17.0.1",
+    "react-dom": "^17.0.1"
+  }
+}

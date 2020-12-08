@@ -3,6 +3,8 @@
 module Blaze.UI.Server where
 
 import Blaze.UI.Prelude
+import Blaze.Import.Source.BinaryNinja (BNImporter(BNImporter))
+import qualified Blaze.Import.CallGraph
 import qualified Data.Aeson as Aeson
 import qualified Network.WebSockets as WS
 import qualified Data.ByteString.Lazy as LBS
@@ -246,13 +248,19 @@ mainEventLoop bv (BinjaEvent msg) = handleBinjaEvent bv msg
 mainEventLoop bv (BlazeEvent msg) = handleBlazeEvent bv msg
 
 handleWebEvent :: BNBinaryView -> WebToServer -> EventLoop ()
-handleWebEvent _bv = \case
+handleWebEvent bv = \case
   WSNoop -> debug "web noop"
+
+  WSGetFunctionsList -> doAction $
+    BZFunctionList <$> Blaze.Import.CallGraph.getFunctions bvi
+    
   WSTextMessage t -> do
     debug $ "Text Message from Web: " <> t
     sendToWeb $ SWTextMessage "I got your message and am flying with it!"
     sendToBinja . SBLogInfo $ "From the Web UI: " <> t
 
+  where
+    bvi = BNImporter bv
 
 handleBinjaEvent :: BNBinaryView -> BinjaToServer -> EventLoop ()
 handleBinjaEvent bv = \case
@@ -299,4 +307,4 @@ handleBlazeEvent _bv = \case
   BZImportantInteger n -> sendToBinja . SBLogInfo
     $ "Here is your important integer: " <> show n
 
-
+  BZFunctionList xs -> sendToWeb $ SWFunctionsList xs
