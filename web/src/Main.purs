@@ -2,8 +2,11 @@ module Main where
 
 import Prelude
 
-import Blaze.UI.Components.Counter (mkCounter)
+import Blaze.Socket (Conn(..))
+import Blaze.Socket as Socket
 import Blaze.UI.App (mkApp)
+import Blaze.UI.Components.Counter (mkCounter)
+import Blaze.UI.Types.WebMessages (ServerToWeb, WebToServer)
 import Concur.Core (Widget)
 import Concur.React (HTML)
 import Concur.React.DOM as D
@@ -23,7 +26,7 @@ import Data.Tuple.Nested ((/\))
 import Effect (Effect)
 import Effect.AVar (AVar)
 import Effect.AVar as EAVar
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, launchAff_)
 import Effect.Aff.AVar as AVar
 import Effect.Aff.Class (liftAff)
 import Effect.Class (class MonadEffect, liftEffect)
@@ -68,8 +71,7 @@ main = do
   mroot <- querySelector (QuerySelector "#root") (toParentNode doc)
   let wsUri = "ws://" <> blazeServerHost <> ":" <> blazeServerWsPort
               <> "/web/" <> sessionId
-  conn <- WS.create wsUri []
-
+  -- conn <- WS.create wsUri []
   case mroot of
     Nothing ->
       log "couldn't find root node"
@@ -79,8 +81,11 @@ main = do
       -- t <- textContent rootNode
       -- log t
       -- setTextContent "Billy bob" rootNode
-      bilbo <- mkApp conn
-      render (bilbo {}) root
+      launchAff_ $ do
+        conn <- Socket.create wsUri [] :: Aff (Conn ServerToWeb WebToServer)
+        liftEffect $ do
+          app <- mkApp conn
+          render (app {}) root
 
       -- counter <- mkCounter
       -- render (counter { label : "Bilbo" }) root
