@@ -2,13 +2,14 @@ module Blaze.UI.App where
 
 import Prelude
 
-import Blaze.Socket (Conn(..))
+import Control.Alternative as Alt
+
+import Blaze.Socket (Conn)
 import Blaze.Socket as Socket
 import Blaze.Types.CallGraph (functionName)
 import Blaze.Types.CallGraph as CG
 import Blaze.UI.Types (Nav(..))
 import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..))
-import Control.Alternative as Alt
 import Control.Monad.Except (runExcept)
 import Data.Array as Array
 import Data.Either (Either(..), either)
@@ -90,8 +91,7 @@ mkFunctionsList conn = do
     -- funcs /\ setFuncs <- useState' []
 
     mmesg <- useAff unit $ do
-      delay (Milliseconds 3000.0)
-      liftEffect $ sendMessage conn WSGetFunctionsList
+      liftEffect $ Socket.sendMessage conn WSGetFunctionsList
       waitForFuncListMessage
 
     pure $ div_
@@ -102,26 +102,27 @@ mkFunctionsList conn = do
       ]
   where
     waitForFuncListMessage = do
-      msg <- getMessage conn
+      msg <- Socket.getMessage conn
       case msg of
         SWFunctionsList funcs -> pure funcs.functions
         _ -> waitForFuncListMessage
 
 
-getMessage :: WebSocket -> Aff ServerToWeb
-getMessage conn = makeAff \yieldResult -> do
-  listener <- eventListener $ \ev -> do
-    for_ (ME.fromEvent ev) \msgEvent -> do
-      for_ (readHelper readString (ME.data_ msgEvent)) \msgStr -> do
-        case runExcept (decodeJSON msgStr) of
-          Left errs -> do
-            log $ "Failed to decode: " <> msgStr
-            log $ show errs
-            yieldResult <<< Left <<< Aff.error $ show errs
-          Right msg -> yieldResult <<< Right $ msg
-  addEventListener WSET.onMessage listener false (WS.toEventTarget conn)
-  pure <<< effectCanceler $ do
-    removeEventListener WSET.onMessage listener false (WS.toEventTarget conn)
+
+-- getMessage :: WebSocket -> Aff ServerToWeb
+-- getMessage conn = makeAff \yieldResult -> do
+--   listener <- eventListener $ \ev -> do
+--     for_ (ME.fromEvent ev) \msgEvent -> do
+--       for_ (readHelper readString (ME.data_ msgEvent)) \msgStr -> do
+--         case runExcept (decodeJSON msgStr) of
+--           Left errs -> do
+--             log $ "Failed to decode: " <> msgStr
+--             log $ show errs
+--             yieldResult <<< Left <<< Aff.error $ show errs
+--           Right msg -> yieldResult <<< Right $ msg
+--   addEventListener WSET.onMessage listener false (WS.toEventTarget conn)
+--   pure <<< effectCanceler $ do
+--     removeEventListener WSET.onMessage listener false (WS.toEventTarget conn)
 
 
 mkApp :: Conn ServerToWeb WebToServer -> Component {}
@@ -132,7 +133,7 @@ mkApp conn = do
     socketMsg /\ setSocketMsg <- useState' SWNoop
 
     -- set up websocket listener
-    useEffectOnce <<< void $ Socket.subscribe conn setSocketMsg
+    useEffectOnce $ Socket.subscribe conn setSocketMsg
 
     msgToServer /\ setMsgToServer <- useState' ""
 
@@ -146,14 +147,14 @@ mkApp conn = do
                       setMsgToServer <<< fromMaybe "" $ mval
                     }          
           , D.button { onClick: handler_ $ do
-                          sendMessage conn $ WSTextMessage { message: msgToServer }
+                          Socket.sendMessage conn $ WSTextMessage { message: msgToServer }
                           log $ "Sent: " <> msgToServer
                      , children: [ D.text "Send" ]
                      }
 
           , D.div_
             [ D.button { onClick: handler_ $ do
-                            sendMessage conn $ WSGetFunctionsList
+                            Socket.sendMessage conn $ WSGetFunctionsList
                             log $ "Requested function list"
                        , children: [ D.text "Get Functions List" ]
                        }

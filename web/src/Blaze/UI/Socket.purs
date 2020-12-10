@@ -55,7 +55,12 @@ subscribe (Conn {webSocket}) f = do
   pure $ removeEventListener WSET.onMessage listener false (WS.toEventTarget webSocket)
 
 
-
+getMessage :: forall inMsg outMsg. Decode inMsg
+              => Conn inMsg outMsg
+              -> Aff inMsg
+getMessage conn = makeAff $ \yield -> do
+  canceler <- subscribe conn $ yield <<< Right
+  pure $ effectCanceler canceler
 
 
 -- | this will modify the AVar when it gets a chance
@@ -66,8 +71,8 @@ modifyAVar av f = do
     Right x -> void $ AVar.put (f x) av (const $ pure unit)
 
 -- | adds message to outbox
-send :: forall inMsg outMsg. Conn inMsg outMsg -> outMsg -> Effect Unit
-send (Conn {outbox}) msg = void $ AVar.put msg outbox $ \_ -> pure unit
+sendMessage :: forall inMsg outMsg. Conn inMsg outMsg -> outMsg -> Effect Unit
+sendMessage (Conn {outbox}) msg = void $ AVar.put msg outbox $ \_ -> pure unit
 
 -- | this only fires at the first connection, so if you miss it, oh well..
 -- | todo: make an aff that checks the ReadyState
@@ -105,7 +110,6 @@ create uri protocols = do
       liftEffect $ WS.sendString webSocket (encodeJSON msg)
       outboxHandler webSocket outbox -- apparently Aff is stack safe
         
---         liftEffect WS.sendString
   
   
 -- addListener :: WebSocket -> (ServerToWeb -> Effect Unit) -> Effect Unit
