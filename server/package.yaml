@@ -39,6 +39,7 @@ dependencies:
   - pretty-simple
   - protolude
   - random
+  - resource-pool
   - scotty
   - stm
   - streamly

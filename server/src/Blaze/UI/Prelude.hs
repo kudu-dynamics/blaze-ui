@@ -148,7 +148,7 @@ ppOptions = PP.defaultOutputOptionsNoColor {PP.outputOptionsIndentAmount = 2}
 pshow :: Show a => a -> L.Text
 pshow = PP.pShowOpt ppOptions
 
-pprint :: Show a => a -> IO ()
+pprint :: (MonadIO m, Show a) => a -> m ()
 pprint = PP.pPrintOpt PP.NoCheckColorTty ppOptions
 
 pairs :: [a] -> [(a, a)]
