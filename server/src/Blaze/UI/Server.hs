@@ -75,6 +75,20 @@ createWebOutbox conn ss = do
     $ HashMap.insert t q
   return t
 
+sendToBinja :: ServerToBinja -> EventLoop ()
+sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
+  qs <- fmap HashMap.elems . readTVar $ ctx ^. binjaOutboxes
+  mapM_ (flip writeTQueue msg) qs
+
+sendToWeb :: ServerToWeb -> EventLoop ()
+sendToWeb msg = ask >>= \ctx -> liftIO . atomically $ do
+  qs <- fmap HashMap.elems . readTVar $ ctx ^. webOutboxes
+  mapM_ (flip writeTQueue msg) qs
+
+-- TODO: log warning to binja, web, and console
+-- logWarn :: Text -> EventLoop ()
+-- logWarn = 
+
 -- | Websocket message handler for binja.
 -- This handles messages for multiple binaries to/from single binja.
 -- localOutboxThreads is needed to store if an outbox thread has already been
@@ -134,34 +148,21 @@ binjaApp localOutboxThreads st conn = do
 
 spawnEventHandler :: SessionState -> IO ()
 spawnEventHandler ss = do
-  b <- atomically $ do
-    b1 <- isEmptyTMVar $ ss ^. eventHandlerThread
-    b2 <- isEmptyTMVar $ ss ^. blazeActionHandlerThread
-    return $ b1 || b2
+  b <- atomically . isEmptyTMVar $ ss ^. eventHandlerThread
   case b of
     False -> putText "Warning: spawnEventHandler -- event handler already spawned"
     True -> do
+
+      -- spawns event handler workers for new messages
       eventTid <- forkIO . forever $ do
         bv <- atomically . readTMVar $ ss ^. binaryView
         msg <- atomically . readTQueue $ ss ^. eventInbox
-        (_, s) <- runEventLoop (mainEventLoop bv msg) $ EventLoopState [] [] []
-        atomically $ do
-          binjas <- fmap HashMap.elems . readTVar $ ss ^. binjaOutboxes
-          webs <- fmap HashMap.elems . readTVar $ ss ^. webOutboxes
+        let ctx = EventLoopCtx (ss ^. binjaOutboxes) (ss ^. webOutboxes)
 
-          -- TODO: change these to Seq so we don't have to do reverse
-          mapM_ (flip writeManyTQueue . reverse $ s ^. binjaOutput) binjas
-          mapM_ (flip writeManyTQueue . reverse $ s ^. webOutput) webs
-          writeManyTQueue (ss ^. blazeActions) . reverse $ s ^. blazeActions
+        -- TOOD: maybe should save these threadIds to kill later or limit?
+        void . forkIO $ runEventLoop (mainEventLoop bv msg) ctx
       
-      blazeActionTid <- forkIO . forever $ do
-        ioAction <- atomically . readTQueue $ ss ^. blazeActions
-        void . forkIO $ do
-          r <- ioAction
-          atomically . writeTQueue (ss ^. eventInbox) $ BlazeEvent r
-
       atomically $ putTMVar (ss ^. eventHandlerThread) eventTid
-      atomically $ putTMVar (ss ^. blazeActionHandlerThread) blazeActionTid
       putText "Spawned event handlers"
 
 webUri :: ServerConfig -> SessionId -> Text
@@ -245,14 +246,14 @@ runClient cfg = WS.runClient (cs $ serverHost cfg) (serverWsPort cfg) ""
 mainEventLoop :: BNBinaryView -> Event -> EventLoop ()
 mainEventLoop bv (WebEvent msg) = handleWebEvent bv msg
 mainEventLoop bv (BinjaEvent msg) = handleBinjaEvent bv msg
-mainEventLoop bv (BlazeEvent msg) = handleBlazeEvent bv msg
 
 handleWebEvent :: BNBinaryView -> WebToServer -> EventLoop ()
 handleWebEvent bv = \case
   WSNoop -> debug "web noop"
 
-  WSGetFunctionsList -> doAction $
-    BZFunctionList <$> Blaze.Import.CallGraph.getFunctions bvi
+  WSGetFunctionsList -> do
+    funcs <- liftIO $ Blaze.Import.CallGraph.getFunctions bvi
+    sendToWeb $ SWFunctionsList funcs
     
   WSTextMessage t -> do
     debug $ "Text Message from Web: " <> t
@@ -270,41 +271,52 @@ handleBinjaEvent bv = \case
     sendToBinja $ SBLogInfo "Got hello. Thanks."
     sendToBinja $ SBLogInfo "Working on finding an important integer..."
     sendToWeb $ SWTextMessage "Binja says hello"
-    doAction . fmap BZImportantInteger
-      $ threadDelay 5000000 >> putText "calculating integer" >> randomIO
-    doAction $ threadDelay 10000000 >> putText "Delayed noop event (10s)" >> return BZNoop
+
+    -- demo forking
+    forkEventLoop_ $ do
+      liftIO $ threadDelay 5000000 >> putText "calculating integer"
+      n <- liftIO $ randomIO :: EventLoop Int
+      sendToBinja . SBLogInfo
+        $ "Here is your important integer: " <> show n
+      
   BSTypeCheckFunction addr -> do
-    doAction $ do
-      mFunc <- BNFunc.getFunctionStartingAt bv Nothing (fromIntegral addr)
-      case mFunc of
-        Nothing -> return BZNoop
-        Just func -> do
-          addrWidth <- BN.getViewAddressSize bv
-          indexedStmts <- Pil.convert
-            (Pil.mkConverterState Pil.knownFuncDefs addrWidth func AP.empty)
-            (Pil.convertFunction func)
-          let er = Ch.checkFunction indexedStmts
-          case er of
-            Left err -> pprint err >> return BZNoop
-            Right tr -> return $ BZTypeCheckFunctionReport func tr
+    etr <- getFunctionTypeReport bv (fromIntegral addr)
+    case etr of
+      Left err -> do
+        let msg = "Failed to generate type report: " <> err
+        debug msg
+        sendToBinja . SBLogWarn $ msg
+
+      Right (fn, tr) -> do
+        printTypeReportToConsole fn tr
+        sendToBinja . SBLogInfo $ "Completed checking " <> fn ^. BNFunc.name
+        sendToBinja . SBLogInfo $ "See server log for results."
+
   BSNoop -> debug "Binja noop"
 
+printTypeReportToConsole :: MonadIO m => BNFunc.Function -> Ch.TypeReport -> m ()
+printTypeReportToConsole fn tr = do
+  putText "\n------------------------Type Checking Function-------------------------"
+  pprint fn
+  putText ""
+  pprint ("errors" :: Text, tr ^. Ch.errors)
+  putText ""
+  prettyIndexedStmts $ tr ^. Ch.symTypeStmts
+  putText "-----------------------------------------------------------------------"
 
-handleBlazeEvent :: BNBinaryView -> BlazeToServer -> EventLoop ()
-handleBlazeEvent _bv = \case
-  BZNoop -> debug "Blaze noop"
-  BZTypeCheckFunctionReport fn r -> do
-    nonAsyncIO $ do
-      putText "\n------------------------Type Checking Function-------------------------"
-      pprint fn
-      putText ""
-      pprint ("errors" :: Text, r ^. Ch.errors)
-      putText ""
-      prettyIndexedStmts $ r ^. Ch.symTypeStmts
-      putText "-----------------------------------------------------------------------"
-    sendToBinja . SBLogInfo $ "Completed checking " <> fn ^. BNFunc.name
-    sendToBinja . SBLogInfo $ "See server log for results."
-  BZImportantInteger n -> sendToBinja . SBLogInfo
-    $ "Here is your important integer: " <> show n
+getFunctionTypeReport :: MonadIO m
+                      => BNBinaryView
+                      -> Address
+                      -> m (Either Text (BNFunc.Function, Ch.TypeReport))
+getFunctionTypeReport bv addr = liftIO $ do
+  mFunc <- BNFunc.getFunctionStartingAt bv Nothing (fromIntegral addr)
+  case mFunc of
+    Nothing -> return . Left $ "Couldn't find function at: " <> show addr
+    Just func -> do
+      addrWidth <- BN.getViewAddressSize bv
+      indexedStmts <- Pil.convert
+        (Pil.mkConverterState Pil.knownFuncDefs addrWidth func AP.empty)
+        (Pil.convertFunction func)
+      let er = Ch.checkFunction indexedStmts
+      return $ either (Left . show) (Right . (func,)) er
 
-  BZFunctionList xs -> sendToWeb $ SWFunctionsList xs

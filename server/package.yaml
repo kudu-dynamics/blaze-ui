@@ -41,6 +41,7 @@ dependencies:
   - protolude
   - purescript-bridge # >= 0.14.0.0
   - random
+  - resource-pool
   - scotty
   - stm
   - streamly

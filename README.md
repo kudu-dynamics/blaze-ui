@@ -14,10 +14,13 @@ Set two env vars:
 
 ```
 export BLAZE_UI_HOST="localhost"
-export BLAZE_UI_PORT="31337"
+export BLAZE_UI_WS_PORT="31337"
+export BLAZE_UI_HTTP_PORT="31338"
 ```
 
 Symbolically link binja plugin, `~/.binaryninja/plugins/blaze` to the `blaze-ui/binja_plugin` folder.
+
+Install the `websockets` Python package for the Python installation used by Binary Ninja.
 
 Run server:
 

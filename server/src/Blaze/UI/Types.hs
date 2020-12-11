@@ -100,8 +100,13 @@ data BlazeToServer = BZNoop
 
 data Event = WebEvent WebToServer
            | BinjaEvent BinjaToServer
-           | BlazeEvent BlazeToServer
            deriving (Eq, Ord, Show, Generic)
+
+data EventLoopCtx = EventLoopCtx
+  { _binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
+  , _webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
+  }
+$(makeFieldsNoPrefix ''EventLoopCtx)
 
 data EventLoopState = EventLoopState
   { _binjaOutput :: [ServerToBinja]
@@ -111,26 +116,25 @@ data EventLoopState = EventLoopState
 $(makeFieldsNoPrefix ''EventLoopState)
 
 -- IO is in EventLoop only for debugging.
-newtype EventLoop a = EventLoop { _runEventLoop :: StateT EventLoopState IO a }
-  deriving newtype ( Functor, Applicative, Monad, MonadState EventLoopState )
+newtype EventLoop a = EventLoop { _runEventLoop :: ReaderT EventLoopCtx IO a }
+  deriving newtype ( Functor
+                   , Applicative
+                   , Monad
+                   , MonadReader EventLoopCtx
+                   , MonadIO
+                   )
 
-runEventLoop :: EventLoop a -> EventLoopState -> IO (a, EventLoopState)
-runEventLoop m s = flip runStateT s $ _runEventLoop m
+runEventLoop :: EventLoop a -> EventLoopCtx -> IO a
+runEventLoop m ctx = flip runReaderT ctx $ _runEventLoop m
+
+forkEventLoop :: EventLoop () -> EventLoop ThreadId
+forkEventLoop m = ask >>= \ctx -> liftIO . forkIO $ runEventLoop m ctx
+
+forkEventLoop_ :: EventLoop () -> EventLoop ()
+forkEventLoop_ = void . forkEventLoop
 
 debug :: Text -> EventLoop ()
-debug = EventLoop . putText
-
-nonAsyncIO :: IO a -> EventLoop a
-nonAsyncIO = EventLoop . liftIO
-
-sendToBinja :: ServerToBinja -> EventLoop ()
-sendToBinja ax = binjaOutput %= (ax:)
-
-sendToWeb :: ServerToWeb -> EventLoop ()
-sendToWeb ax = webOutput %= (ax:)
-
-doAction :: IO BlazeToServer -> EventLoop ()
-doAction ax = blazeActions %= (ax:)
+debug =  putText
 
 -- there are multiple outboxes in case there are multiple conns to same binary
 data SessionState = SessionState
@@ -140,8 +144,6 @@ data SessionState = SessionState
   , _webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
   , _eventHandlerThread :: TMVar ThreadId
   , _eventInbox :: TQueue Event
-  , _blazeActions :: TQueue (IO BlazeToServer)
-  , _blazeActionHandlerThread :: TMVar ThreadId
   }
 $(makeFieldsNoPrefix ''SessionState)
 
@@ -153,8 +155,7 @@ emptySessionState binPath
     <*> newTVar HashMap.empty
     <*> newEmptyTMVar
     <*> newTQueue
-    <*> newTQueue
-    <*> newEmptyTMVar
+
 
 -- all the changeable fields should be STM vars
 -- so this can be updated across threads
