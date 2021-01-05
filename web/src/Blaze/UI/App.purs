@@ -2,21 +2,20 @@ module Blaze.UI.App where
 
 import Prelude
 
-import Control.Alternative as Alt
-
 import Blaze.Socket (Conn)
 import Blaze.Socket as Socket
-import Blaze.Types.CallGraph (functionName)
+import Blaze.Types.CallGraph (_Function)
 import Blaze.Types.CallGraph as CG
 import Blaze.UI.Types (Nav(..))
-import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..))
+import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..), _SWFunctionTypeReport)
+import Control.Alternative as Alt
 import Control.Monad.Except (runExcept)
 import Data.Array as Array
 import Data.Either (Either(..), either)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Interpolate (i)
-import Data.Lens ((^.))
+import Data.Lens ((^.), (^?))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (class Newtype)
 import Data.Traversable (for_)
@@ -50,43 +49,28 @@ readHelper :: forall a b. (Foreign -> F a) -> b -> Maybe a
 readHelper read =
   either (const Nothing) Just <<< runExcept <<< read <<< unsafeToForeign
 
-sendMessage :: WebSocket -> WebToServer -> Effect Unit
-sendMessage conn msg = WS.sendString conn (encodeJSON msg)
 
-mkFunctionView :: Component { func :: CG.Function
-                            , setNav :: Nav -> Effect Unit
-                            }
-mkFunctionView = do
+
+mkFunctionView :: Conn ServerToWeb WebToServer
+               -> Component { func :: CG.Function }
+mkFunctionView conn = do
   component "FunctionView" \props -> Hooks.do
-    count /\ setCount <- useState 0
-    useEffectOnce $ do
-      n <- randomInt 0 50
-      setCount (const n)
-      pure (pure unit)
+    mreport <- useAff unit $ do
+      liftEffect <<< Socket.sendMessage conn $ WSGetTypeReport props.func
+      Socket.getMessageWith conn (_ ^? _SWFunctionTypeReport)
+      
     pure do
       div_
-        [ text $ props.func ^. functionName
-        , D.button { onClick: handler_ $ do
-                        log $ "ok"
-                        props.setNav $ NavFunctionView props.func
-                   , children: [ D.text "Type Check" ]
-                   }
-
-        , D.button { onClick: handler_ $ do
-                        log $ "Send a message here..."
-                   , children: [ D.text "Load in Binja" ]
-                   }
-        , D.button { onClick: handler_ $ do
-                        setCount (_ + 1)
-                   , children: [ D.text $ show count ]
-                   }
-          
+        [ text $ (props.func ^. _Function).name
+        , div_ $ case mreport of
+          Nothing -> [ text "loading type report..." ]
+          Just tr -> [ text tr ]
         ]
 
+
 mkFunctionsList :: Conn ServerToWeb WebToServer
-                   -> Component { setNav :: Nav -> Effect Unit }
+                -> Component { setNav :: Nav -> Effect Unit }
 mkFunctionsList conn = do
-  funcView <- mkFunctionView
   component "FunctionsList" \props -> Hooks.do
     -- funcs /\ setFuncs <- useState' []
 
@@ -98,14 +82,31 @@ mkFunctionsList conn = do
       [ div_ [ text "Functions" ]
       , div_ $ case mmesg of
            Nothing -> [ text "loading..." ]
-           Just funcs -> map (\x -> funcView {func: x, setNav: props.setNav}) funcs
+           Just funcs -> map (funcListItem props.setNav) funcs
       ]
   where
     waitForFuncListMessage = do
       msg <- Socket.getMessage conn
       case msg of
-        SWFunctionsList funcs -> pure funcs.functions
+        SWFunctionsList funcs -> pure funcs
         _ -> waitForFuncListMessage
+
+
+    funcListItem setNav func = do
+      div_
+        [ text $ (func ^. _Function).name
+        , D.button { onClick: handler_ $ do
+                        log $ "ok"
+                        setNav $ NavFunctionView func
+                   , children: [ D.text "Type Check" ]
+                   }
+
+        , D.button { onClick: handler_ $ do
+                        log $ "Send a message here..."
+                   , children: [ D.text "Goto in Binja" ]
+                   }
+          
+        ]
 
 
 
@@ -127,7 +128,9 @@ mkFunctionsList conn = do
 
 mkApp :: Conn ServerToWeb WebToServer -> Component {}
 mkApp conn = do
+  functionView <- mkFunctionView conn
   functionsList <- mkFunctionsList conn
+  -- Socket.sendMessage conn $ WSTestEncoding (BadBoy {one: 7, two: "hey"})
   component "App" \_ -> Hooks.do
     nav /\ setNav <- useState' NavBinaryView
     socketMsg /\ setSocketMsg <- useState' SWNoop
@@ -147,7 +150,7 @@ mkApp conn = do
                       setMsgToServer <<< fromMaybe "" $ mval
                     }          
           , D.button { onClick: handler_ $ do
-                          Socket.sendMessage conn $ WSTextMessage { message: msgToServer }
+                          Socket.sendMessage conn $ WSTextMessage msgToServer
                           log $ "Sent: " <> msgToServer
                      , children: [ D.text "Send" ]
                      }
@@ -161,8 +164,6 @@ mkApp conn = do
             ]
           , functionsList {setNav}
           ]
-      NavFunctionView func -> do
-        div_
-          [ text $ "function: " <> show func ]
+      NavFunctionView func -> functionView { func }
 
         

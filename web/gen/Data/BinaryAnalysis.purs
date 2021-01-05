@@ -26,12 +26,10 @@ derive instance eqBytes :: Eq Bytes
 derive instance ordBytes :: Ord Bytes
 instance encodeBytes :: Encode Bytes where
   encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 instance decodeBytes :: Decode Bytes where
   decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 derive instance genericBytes :: Generic Bytes _
@@ -50,12 +48,10 @@ derive instance eqBits :: Eq Bits
 derive instance ordBits :: Ord Bits
 instance encodeBits :: Encode Bits where
   encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 instance decodeBits :: Decode Bits where
   decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 derive instance genericBits :: Generic Bits _
@@ -74,12 +70,10 @@ derive instance eqByteOffset :: Eq ByteOffset
 derive instance ordByteOffset :: Ord ByteOffset
 instance encodeByteOffset :: Encode ByteOffset where
   encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 instance decodeByteOffset :: Decode ByteOffset where
   decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 derive instance genericByteOffset :: Generic ByteOffset _
@@ -98,12 +92,10 @@ derive instance eqBitOffset :: Eq BitOffset
 derive instance ordBitOffset :: Ord BitOffset
 instance encodeBitOffset :: Encode BitOffset where
   encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 instance decodeBitOffset :: Decode BitOffset where
   decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 derive instance genericBitOffset :: Generic BitOffset _
@@ -124,12 +116,10 @@ derive instance eqAddressWidth :: Eq AddressWidth
 derive instance ordAddressWidth :: Ord AddressWidth
 instance encodeAddressWidth :: Encode AddressWidth where
   encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 instance decodeAddressWidth :: Decode AddressWidth where
   decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 derive instance genericAddressWidth :: Generic AddressWidth _
@@ -148,12 +138,10 @@ derive instance eqAddress :: Eq Address
 derive instance ordAddress :: Ord Address
 instance encodeAddress :: Encode Address where
   encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 instance decodeAddress :: Decode Address where
   decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 derive instance genericAddress :: Generic Address _
@@ -175,12 +163,10 @@ derive instance eqSymbol :: Eq Symbol
 derive instance ordSymbol :: Ord Symbol
 instance encodeSymbol :: Encode Symbol where
   encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 instance decodeSymbol :: Decode Symbol where
   decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 derive instance genericSymbol :: Generic Symbol _

@@ -15,13 +15,15 @@ import qualified Binja.Core as BN
 import qualified Binja.Function as BNFunc
 import Blaze.UI.Types
 import qualified Data.HashMap.Strict as HashMap
-import qualified Blaze.Pil as Pil
+import Blaze.Pil as Pil
+import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
+import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
 import Blaze.Pretty (prettyIndexedStmts)
 import qualified Blaze.Types.Path.AlgaPath as AP
 import qualified Blaze.Types.Pil as Pil
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
-
+import qualified Blaze.Types.CallGraph as CG
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -38,17 +40,17 @@ sendJSON conn x =
 getSessionState :: Maybe Text -> SessionId -> AppState ->  IO (Bool, SessionState)
 getSessionState binPath sid st = do
   atomically $ do
-    m <- readTVar $ st ^. binarySessions
+    m <- readTVar $ st ^. #binarySessions
     case HashMap.lookup sid m of
       Just ss -> return (False, ss)
       Nothing -> do
         ss <- emptySessionState binPath
-        modifyTVar (st ^. binarySessions) $ HashMap.insert sid ss
+        modifyTVar (st ^. #binarySessions) $ HashMap.insert sid ss
         return (True, ss)
 
 removeSessionState :: SessionId -> AppState -> IO ()
 removeSessionState sid st = atomically
-  . modifyTVar (st ^. binarySessions) $ HashMap.delete sid
+  . modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
 
 createBinjaOutbox :: WS.Connection
              -> SessionState
@@ -59,7 +61,7 @@ createBinjaOutbox conn ss fp = do
   t <- forkIO . forever $ do
     msg <- atomically . readTQueue $ q
     sendJSON conn . BinjaMessage fp $ msg
-  atomically . modifyTVar (ss ^. binjaOutboxes)
+  atomically . modifyTVar (ss ^. #binjaOutboxes)
     $ HashMap.insert t q
   return t
 
@@ -71,18 +73,18 @@ createWebOutbox conn ss = do
   t <- forkIO . forever $ do
     msg <- atomically . readTQueue $ q
     sendJSON conn msg
-  atomically . modifyTVar (ss ^. webOutboxes)
+  atomically . modifyTVar (ss ^. #webOutboxes)
     $ HashMap.insert t q
   return t
 
 sendToBinja :: ServerToBinja -> EventLoop ()
 sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
-  qs <- fmap HashMap.elems . readTVar $ ctx ^. binjaOutboxes
+  qs <- fmap HashMap.elems . readTVar $ ctx ^. #binjaOutboxes
   mapM_ (flip writeTQueue msg) qs
 
 sendToWeb :: ServerToWeb -> EventLoop ()
 sendToWeb msg = ask >>= \ctx -> liftIO . atomically $ do
-  qs <- fmap HashMap.elems . readTVar $ ctx ^. webOutboxes
+  qs <- fmap HashMap.elems . readTVar $ ctx ^. #webOutboxes
   mapM_ (flip writeTQueue msg) qs
 
 -- TODO: log warning to binja, web, and console
@@ -102,15 +104,15 @@ binjaApp localOutboxThreads st conn = do
     Left err -> do
       putText $ "Error parsing JSON: " <> show err
     Right x -> do
-      let fp = x ^. bvFilePath
+      let fp = x ^. #bvFilePath
           sid = binaryPathToSessionId fp
           reply = sendJSON conn . BinjaMessage fp
           logInfo txt = do
             reply . SBLogInfo $ txt
             putText txt
       (justCreated, ss) <- getSessionState (Just fp) sid st
-      let pushEvent = atomically . writeTQueue (ss ^. eventInbox)
-                      . BinjaEvent $ x ^. action
+      let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
+                      . BinjaEvent $ x ^. #action
       case justCreated of
         False -> do
           -- check to see if this conn has registered outbox thread
@@ -120,7 +122,7 @@ binjaApp localOutboxThreads st conn = do
               pushEvent
               logInfo $ "Blaze Connected. Attached to existing session for binary: " <> fp
               logInfo "For web plugin, go here:"
-              logInfo $ webUri (st ^. serverConfig) sid
+              logInfo $ webUri (st ^. #serverConfig) sid
               binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
             True -> do
               pushEvent >> binjaApp localOutboxThreads st conn
@@ -132,15 +134,15 @@ binjaApp localOutboxThreads st conn = do
             Left err -> do
               reply . SBLogError $ "Blaze cannot open binary: " <> err -- 
               putText $ "Cannot open binary: " <> err
-              atomically . modifyTVar (st ^. binarySessions) $ HashMap.delete sid
+              atomically . modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
               -- TODO: maybe send explicit disconnect?
               return ()
             Right bv -> do
               BN.updateAnalysisAndWait bv
               logInfo $ "Loaded binary: " <> fp
               logInfo "For web plugin, go here:"
-              logInfo $ webUri (st ^. serverConfig) sid
-              atomically $ putTMVar (ss ^. binaryView) bv
+              logInfo $ webUri (st ^. #serverConfig) sid
+              atomically $ putTMVar (ss ^. #binaryView) bv
               spawnEventHandler ss
               outboxThread <- createBinjaOutbox conn ss fp
               pushEvent
@@ -148,21 +150,21 @@ binjaApp localOutboxThreads st conn = do
 
 spawnEventHandler :: SessionState -> IO ()
 spawnEventHandler ss = do
-  b <- atomically . isEmptyTMVar $ ss ^. eventHandlerThread
+  b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
   case b of
     False -> putText "Warning: spawnEventHandler -- event handler already spawned"
     True -> do
 
       -- spawns event handler workers for new messages
       eventTid <- forkIO . forever $ do
-        bv <- atomically . readTMVar $ ss ^. binaryView
-        msg <- atomically . readTQueue $ ss ^. eventInbox
-        let ctx = EventLoopCtx (ss ^. binjaOutboxes) (ss ^. webOutboxes)
+        bv <- atomically . readTMVar $ ss ^. #binaryView
+        msg <- atomically . readTQueue $ ss ^. #eventInbox
+        let ctx = EventLoopCtx (ss ^. #binjaOutboxes) (ss ^. #webOutboxes)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
         void . forkIO $ runEventLoop (mainEventLoop bv msg) ctx
       
-      atomically $ putTMVar (ss ^. eventHandlerThread) eventTid
+      atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
       putText "Spawned event handlers"
 
 webUri :: ServerConfig -> SessionId -> Text
@@ -192,7 +194,7 @@ webApp st sid conn = do
             Right bv -> do
               BN.updateAnalysisAndWait bv
               logInfo $ "Loaded binary: " <> fp
-              atomically $ putTMVar (ss ^. binaryView) bv
+              atomically $ putTMVar (ss ^. #binaryView) bv
               spawnEventHandler ss
     False -> return ()
       
@@ -205,7 +207,7 @@ webApp st sid conn = do
       Left err -> do
         putText $ "Error parsing JSON: " <> show err
       Right x -> do
-        atomically . writeTQueue (ss ^. eventInbox) . WebEvent $ x
+        atomically . writeTQueue (ss ^. #eventInbox) . WebEvent $ x
 
   
 
@@ -260,6 +262,19 @@ handleWebEvent bv = \case
     sendToWeb $ SWTextMessage "I got your message and am flying with it!"
     sendToBinja . SBLogInfo $ "From the Web UI: " <> t
 
+  WSGetTypeReport fn -> do
+    debug $ "Generating type report for " <> show fn
+    etr <- getFunctionTypeReport bv (fn ^. #address)
+    case etr of
+      Left err -> do
+        let msg = "Failed to generate type report: " <> err
+        debug msg
+        sendToWeb . SWLogError $ msg
+
+      Right (func, tr) -> do
+        printTypeReportToConsole func tr
+        sendToWeb . SWFunctionTypeReport .cs $ pshow tr
+
   where
     bvi = BNImporter bv
 
@@ -299,9 +314,9 @@ printTypeReportToConsole fn tr = do
   putText "\n------------------------Type Checking Function-------------------------"
   pprint fn
   putText ""
-  pprint ("errors" :: Text, tr ^. Ch.errors)
+  pprint ("errors" :: Text, tr ^. #errors)
   putText ""
-  prettyIndexedStmts $ tr ^. Ch.symTypeStmts
+  prettyIndexedStmts $ tr ^. #symTypeStmts
   putText "-----------------------------------------------------------------------"
 
 getFunctionTypeReport :: MonadIO m
@@ -313,10 +328,8 @@ getFunctionTypeReport bv addr = liftIO $ do
   case mFunc of
     Nothing -> return . Left $ "Couldn't find function at: " <> show addr
     Just func -> do
-      addrWidth <- BN.getViewAddressSize bv
-      indexedStmts <- Pil.convert
-        (Pil.mkConverterState Pil.knownFuncDefs addrWidth func AP.empty)
-        (Pil.convertFunction func)
+      cgFunc <- CG.convertFunction bv func
+      indexedStmts <- Pil.getFuncStatementsIndexed bv cgFunc
       let er = Ch.checkFunction indexedStmts
       return $ either (Left . show) (Right . (func,)) er
 

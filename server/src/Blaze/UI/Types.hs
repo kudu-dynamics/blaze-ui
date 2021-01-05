@@ -19,10 +19,9 @@ import Blaze.UI.Types.WebMessages as WebMessages
 import qualified Blaze.Types.CallGraph as CG
 
 data BinjaMessage a = BinjaMessage
-  { _bvFilePath :: Text
-  , _action :: a
+  { bvFilePath :: Text
+  , action :: a
   } deriving (Eq, Ord, Show, Generic)
-$(makeFieldsNoPrefix ''BinjaMessage)
 
 instance ToJSON a => ToJSON (BinjaMessage a)
 instance FromJSON a => FromJSON (BinjaMessage a)
@@ -71,7 +70,7 @@ data ServerConfig = ServerConfig
   { serverHost :: Text
   , serverWsPort :: Int
   , serverHttpPort :: Int
-  } deriving (Eq, Ord, Show)
+  } deriving (Eq, Ord, Show, Generic)
 
 instance FromEnv ServerConfig where
   fromEnv _ = ServerConfig
@@ -103,17 +102,15 @@ data Event = WebEvent WebToServer
            deriving (Eq, Ord, Show, Generic)
 
 data EventLoopCtx = EventLoopCtx
-  { _binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
-  , _webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
-  }
-$(makeFieldsNoPrefix ''EventLoopCtx)
+  { binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
+  , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
+  } deriving (Generic)
 
 data EventLoopState = EventLoopState
-  { _binjaOutput :: [ServerToBinja]
-  , _webOutput :: [ServerToWeb]
-  , _blazeActions :: [IO BlazeToServer]
-  }
-$(makeFieldsNoPrefix ''EventLoopState)
+  { binjaOutput :: [ServerToBinja]
+  , webOutput :: [ServerToWeb]
+  , blazeActions :: [IO BlazeToServer]
+  } deriving (Generic)
 
 -- IO is in EventLoop only for debugging.
 newtype EventLoop a = EventLoop { _runEventLoop :: ReaderT EventLoopCtx IO a }
@@ -138,14 +135,13 @@ debug =  putText
 
 -- there are multiple outboxes in case there are multiple conns to same binary
 data SessionState = SessionState
-  { _binaryPath :: Maybe Text
-  , _binaryView :: TMVar BNBinaryView
-  , _binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
-  , _webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
-  , _eventHandlerThread :: TMVar ThreadId
-  , _eventInbox :: TQueue Event
-  }
-$(makeFieldsNoPrefix ''SessionState)
+  { binaryPath :: Maybe Text
+  , binaryView :: TMVar BNBinaryView
+  , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
+  , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
+  , eventHandlerThread :: TMVar ThreadId
+  , eventInbox :: TQueue Event
+  } deriving (Generic)
 
 emptySessionState :: Maybe Text -> STM SessionState
 emptySessionState binPath
@@ -160,9 +156,9 @@ emptySessionState binPath
 -- all the changeable fields should be STM vars
 -- so this can be updated across threads
 data AppState = AppState
-  { _serverConfig :: ServerConfig
-  , _binarySessions :: TVar (HashMap SessionId SessionState) }
-$(makeFieldsNoPrefix ''AppState)
+  { serverConfig :: ServerConfig
+  , binarySessions :: TVar (HashMap SessionId SessionState)
+  } deriving (Generic)
 
 -- not really empty...
 emptyAppState :: ServerConfig -> IO AppState
@@ -170,9 +166,5 @@ emptyAppState cfg = AppState cfg <$> newTVarIO HashMap.empty
 
 lookupSessionState :: SessionId -> AppState -> STM (Maybe SessionState)
 lookupSessionState sid st = do
-  m <- readTVar $ st ^. binarySessions
+  m <- readTVar $ st ^. #binarySessions
   return $ HashMap.lookup sid m
-  
-
-    
-

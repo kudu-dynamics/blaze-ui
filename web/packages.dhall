@@ -6,30 +6,31 @@ let overrides = {=}
 let additions = {=}
 
 in  upstream // overrides // additions
+  with foreign-generic = /tmp/kudu/purescript/purescript-foreign-generic/spago.dhall as Location
 
-  with foreign-generic =
-    { dependencies =
-        [ "assert"
-        , "console"
-        , "effect"
-        , "exceptions"
-        , "foreign"
-        , "foreign-object"
-        , "generics-rep"
-        , "identity"
-        , "rationals"
-        , "quickcheck"
-        , "test-unit"
-        , "ordered-collections"
-        , "proxy"
-        , "psci-support"
-        , "record"
-        ]
-    , repo =
-        "https://github.com/shmish111/purescript-foreign-generic.git"
-    , version =
-        "master"  -- branch, tag, or commit hash
-    }
+  -- with foreign-generic =
+  --   { dependencies =
+  --       [ "assert"
+  --       , "console"
+  --       , "effect"
+  --       , "exceptions"
+  --       , "foreign"
+  --       , "foreign-object"
+  --       , "generics-rep"
+  --       , "identity"
+  --       , "rationals"
+  --       , "quickcheck"
+  --       , "test-unit"
+  --       , "ordered-collections"
+  --       , "proxy"
+  --       , "psci-support"
+  --       , "record"
+  --       ]
+  --   , repo =
+  --       "https://github.com/shmish111/purescript-foreign-generic.git"
+  --   , version =
+  --       "master"  -- branch, tag, or commit hash
+  --   }
 
 
   with argonaut-aeson-generic =
@@ -46,5 +47,5 @@ in  upstream // overrides // additions
     , repo =
         "https://github.com/coot/purescript-argonaut-aeson-generic.git"
     , version =
-        "master"  -- branch, tag, or commit hash
+        "2fbd4c9ad3886dd3b8179765093aaae5773a5098"
     }

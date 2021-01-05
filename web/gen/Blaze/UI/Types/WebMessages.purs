@@ -18,22 +18,13 @@ import Prim (Array, String)
 import Prelude
 
 data ServerToWeb
-  = SWTextMessage
-      { message :: String
-      }
-  | SWLogInfo
-      { message :: String
-      }
-  | SWLogWarn
-      { message :: String
-      }
-  | SWLogError
-      { message :: String
-      }
+  = SWTextMessage String
+  | SWLogInfo String
+  | SWLogWarn String
+  | SWLogError String
   | SWNoop
-  | SWFunctionsList
-      { functions :: Array Function
-      }
+  | SWFunctionsList (Array Function)
+  | SWFunctionTypeReport String
 
 
 instance showServerToWeb :: Show ServerToWeb where
@@ -42,38 +33,36 @@ derive instance eqServerToWeb :: Eq ServerToWeb
 derive instance ordServerToWeb :: Ord ServerToWeb
 instance encodeServerToWeb :: Encode ServerToWeb where
   encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 instance decodeServerToWeb :: Decode ServerToWeb where
   decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 derive instance genericServerToWeb :: Generic ServerToWeb _
 --------------------------------------------------------------------------------
-_SWTextMessage :: Prism' ServerToWeb { message :: String }
+_SWTextMessage :: Prism' ServerToWeb String
 _SWTextMessage = prism' SWTextMessage f
   where
-    f (SWTextMessage r) = Just r
+    f (SWTextMessage a) = Just $ a
     f _ = Nothing
 
-_SWLogInfo :: Prism' ServerToWeb { message :: String }
+_SWLogInfo :: Prism' ServerToWeb String
 _SWLogInfo = prism' SWLogInfo f
   where
-    f (SWLogInfo r) = Just r
+    f (SWLogInfo a) = Just $ a
     f _ = Nothing
 
-_SWLogWarn :: Prism' ServerToWeb { message :: String }
+_SWLogWarn :: Prism' ServerToWeb String
 _SWLogWarn = prism' SWLogWarn f
   where
-    f (SWLogWarn r) = Just r
+    f (SWLogWarn a) = Just $ a
     f _ = Nothing
 
-_SWLogError :: Prism' ServerToWeb { message :: String }
+_SWLogError :: Prism' ServerToWeb String
 _SWLogError = prism' SWLogError f
   where
-    f (SWLogError r) = Just r
+    f (SWLogError a) = Just $ a
     f _ = Nothing
 
 _SWNoop :: Prism' ServerToWeb Unit
@@ -82,17 +71,22 @@ _SWNoop = prism' (\_ -> SWNoop) f
     f SWNoop = Just unit
     f _ = Nothing
 
-_SWFunctionsList :: Prism' ServerToWeb { functions :: Array Function }
+_SWFunctionsList :: Prism' ServerToWeb (Array Function)
 _SWFunctionsList = prism' SWFunctionsList f
   where
-    f (SWFunctionsList r) = Just r
+    f (SWFunctionsList a) = Just $ a
+    f _ = Nothing
+
+_SWFunctionTypeReport :: Prism' ServerToWeb String
+_SWFunctionTypeReport = prism' SWFunctionTypeReport f
+  where
+    f (SWFunctionTypeReport a) = Just $ a
     f _ = Nothing
 --------------------------------------------------------------------------------
 data WebToServer
-  = WSTextMessage
-      { message :: String
-      }
+  = WSTextMessage String
   | WSGetFunctionsList
+  | WSGetTypeReport Function
   | WSNoop
 
 
@@ -102,26 +96,30 @@ derive instance eqWebToServer :: Eq WebToServer
 derive instance ordWebToServer :: Ord WebToServer
 instance encodeWebToServer :: Encode WebToServer where
   encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 instance decodeWebToServer :: Decode WebToServer where
   decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 derive instance genericWebToServer :: Generic WebToServer _
 --------------------------------------------------------------------------------
-_WSTextMessage :: Prism' WebToServer { message :: String }
+_WSTextMessage :: Prism' WebToServer String
 _WSTextMessage = prism' WSTextMessage f
   where
-    f (WSTextMessage r) = Just r
+    f (WSTextMessage a) = Just $ a
     f _ = Nothing
 
 _WSGetFunctionsList :: Prism' WebToServer Unit
 _WSGetFunctionsList = prism' (\_ -> WSGetFunctionsList) f
   where
     f WSGetFunctionsList = Just unit
+    f _ = Nothing
+
+_WSGetTypeReport :: Prism' WebToServer Function
+_WSGetTypeReport = prism' WSGetTypeReport f
+  where
+    f (WSGetTypeReport a) = Just $ a
     f _ = Nothing
 
 _WSNoop :: Prism' WebToServer Unit

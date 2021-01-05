@@ -6,7 +6,7 @@ import Control.Alternative as Alt
 import Control.Monad.Except (runExcept)
 import Data.Array as Array
 import Data.Either (Either(..), either)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.Traversable (for_)
 import Effect (Effect)
 import Effect.AVar (AVar)
@@ -62,6 +62,14 @@ getMessage conn = makeAff $ \yield -> do
   canceler <- subscribe conn $ yield <<< Right
   pure $ effectCanceler canceler
 
+-- | Listens for messages until filter returns `Just a`
+getMessageWith :: forall inMsg outMsg a. Decode inMsg
+                  => Conn inMsg outMsg
+                  -> (inMsg -> Maybe a)
+                  -> Aff a
+getMessageWith conn f = do
+  msg <- getMessage conn
+  maybe (getMessageWith conn f) pure $ f msg
 
 -- | this will modify the AVar when it gets a chance
 modifyAVar :: forall a. AVar a -> (a -> a) -> Effect Unit
@@ -108,6 +116,7 @@ create uri protocols = do
       waitUntilConnected webSocket
       msg <- AVarAff.take outbox
       liftEffect $ WS.sendString webSocket (encodeJSON msg)
+      liftEffect $ log $ "Sent: " <> encodeJSON msg
       outboxHandler webSocket outbox -- apparently Aff is stack safe
         
   

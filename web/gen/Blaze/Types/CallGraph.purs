@@ -19,9 +19,9 @@ import Prelude
 
 newtype Function
   = Function
-      { _functionSymbol :: Maybe Symbol
-      , _functionName :: String
-      , _functionAddress :: Address
+      { symbol :: Maybe Symbol
+      , name :: String
+      , address :: Address
       }
 
 
@@ -31,28 +31,39 @@ derive instance eqFunction :: Eq Function
 derive instance ordFunction :: Ord Function
 instance encodeFunction :: Encode Function where
   encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 instance decodeFunction :: Decode Function where
   decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
-                                               , sumEncoding = aesonSumEncoding
                                                , unwrapSingleArguments = true
                                                }) value
 derive instance genericFunction :: Generic Function _
 derive instance newtypeFunction :: Newtype Function _
 --------------------------------------------------------------------------------
-_Function :: Iso' Function { _functionSymbol :: Maybe Symbol
-                           , _functionName :: String
-                           , _functionAddress :: Address }
+_Function :: Iso' Function { symbol :: Maybe Symbol
+                           , name :: String
+                           , address :: Address }
 _Function = _Newtype
+--------------------------------------------------------------------------------
+newtype CallDest
+  = DestFunc Function
 
-functionSymbol :: Lens' Function (Maybe Symbol)
-functionSymbol = _Newtype <<< prop (SProxy :: SProxy "_functionSymbol")
 
-functionName :: Lens' Function String
-functionName = _Newtype <<< prop (SProxy :: SProxy "_functionName")
-
-functionAddress :: Lens' Function Address
-functionAddress = _Newtype <<< prop (SProxy :: SProxy "_functionAddress")
+instance showCallDest :: Show CallDest where
+  show x = genericShow x
+derive instance eqCallDest :: Eq CallDest
+derive instance ordCallDest :: Ord CallDest
+instance encodeCallDest :: Encode CallDest where
+  encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
+                                               , unwrapSingleArguments = true
+                                               }) value
+instance decodeCallDest :: Decode CallDest where
+  decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
+                                               , unwrapSingleArguments = true
+                                               }) value
+derive instance genericCallDest :: Generic CallDest _
+derive instance newtypeCallDest :: Newtype CallDest _
+--------------------------------------------------------------------------------
+_DestFunc :: Iso' CallDest Function
+_DestFunc = _Newtype
 --------------------------------------------------------------------------------

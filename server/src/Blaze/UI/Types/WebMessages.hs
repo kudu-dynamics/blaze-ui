@@ -8,29 +8,37 @@ import Blaze.Prelude hiding (Symbol)
 import qualified Language.PureScript.Bridge as PB
 import qualified Language.PureScript.Bridge.PSTypes as PB
 import qualified Language.PureScript.Bridge.CodeGenSwitches as S
+import Language.PureScript.Bridge.TypeParameters (A)
 import Language.PureScript.Bridge ((^==))
 import System.Directory (removeDirectoryRecursive)
 import Data.BinaryAnalysis as BA
 import qualified Blaze.Types.CallGraph as CG
-
--- -- Going to try not to use external types, except from BinaryAnalysis
-
--- data Function
---   = Function
---       { _name :: Text
---       , _address :: Address
---       }
---   deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
-
--- instance Hashable Function
-
--- $(makeFields ''Function)
-
+import qualified Blaze.Types.Pil as Pil
 
 -------------------
+-- data BadBoy = BadBoy { one :: Int, two :: Text }
+--   deriving (Eq, Ord, Show, Generic)
 
-data WebToServer = WSTextMessage { message :: Text }
+-- instance ToJSON BadBoy
+-- instance FromJSON BadBoy
+
+-- data MMaybe a = MJust a
+--               | MNothing
+--   deriving (Eq, Ord, Show, Generic)
+
+-- instance ToJSON a => ToJSON (MMaybe a)
+-- instance FromJSON a => FromJSON (MMaybe a)
+
+-- data MOk a = MOk a
+--   deriving (Eq, Ord, Show, Generic)
+
+-- instance ToJSON a => ToJSON (MOk a)
+-- instance FromJSON a => FromJSON (MOk a)
+
+
+data WebToServer = WSTextMessage Text
                  | WSGetFunctionsList
+                 | WSGetTypeReport CG.Function
                  | WSNoop
                  deriving (Eq, Ord, Show, Generic)
 
@@ -38,13 +46,17 @@ instance ToJSON WebToServer
 instance FromJSON WebToServer
 
 
-data ServerToWeb = SWTextMessage { message :: Text }
-                 | SWLogInfo { message :: Text }
-                 | SWLogWarn { message :: Text }
-                 | SWLogError { message :: Text }
+data ServerToWeb = SWTextMessage Text
+                 | SWLogInfo Text
+                 | SWLogWarn Text
+                 | SWLogError Text
                  | SWNoop
-                 | SWFunctionsList { functions :: [CG.Function] }
+                 | SWFunctionsList [CG.Function]
+
+                 -- TODO: make a real type report
+                 | SWFunctionTypeReport Text
                  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
+
 
 
 -------------------------
@@ -56,6 +68,7 @@ myTypes =
   [ mkT (Proxy :: Proxy Bytes)
   , mkT (Proxy :: Proxy Bits)
   , mkT (Proxy :: Proxy ByteOffset)
+
   , mkT (Proxy :: Proxy BitOffset)
   , mkT (Proxy :: Proxy AddressWidth)
   , mkT (Proxy :: Proxy Address)
@@ -63,7 +76,30 @@ myTypes =
 
   -- Types from Blaze.CallGraph
   , mkT (Proxy :: Proxy CG.Function)
+  , mkT (Proxy :: Proxy CG.CallDest)
 
+
+  -- Types from Blaze.Pil
+  , mkT (Proxy :: Proxy (Pil.Statement A))
+  , mkT (Proxy :: Proxy (Pil.DefOp A))
+  , mkT (Proxy :: Proxy (Pil.ConstraintOp A))
+  , mkT (Proxy :: Proxy (Pil.StoreOp A))
+  , mkT (Proxy :: Proxy (Pil.UnimplMemOp A))
+  , mkT (Proxy :: Proxy (Pil.EnterContextOp A))
+  , mkT (Proxy :: Proxy (Pil.ExitContextOp A))
+  , mkT (Proxy :: Proxy (Pil.CallOp A))
+  , mkT (Proxy :: Proxy (Pil.DefPhiOp A))
+
+  , mkT (Proxy :: Proxy (Pil.CallDest A))
+  , mkT (Proxy :: Proxy (Pil.ConstPtrOp A))
+  
+  , mkT (Proxy :: Proxy (Pil.CtxIndex))
+  , mkT (Proxy :: Proxy (Pil.Ctx))
+  , mkT (Proxy :: Proxy (Pil.PilVar))
+
+  -- , mkT (Proxy :: Proxy BadBoy)
+  -- , mkT (Proxy :: Proxy (MMaybe A))
+  -- , mkT (Proxy :: Proxy (MOk A))
 
   -- types from here
   , mkT (Proxy :: Proxy ServerToWeb)
