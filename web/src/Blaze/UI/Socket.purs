@@ -1,4 +1,4 @@
-module Blaze.Socket where
+module Blaze.UI.Socket where
 
 import Prelude
 
@@ -43,6 +43,7 @@ subscribe :: forall inMsg outMsg. Decode inMsg
              -> (inMsg -> Effect Unit)
              -> Effect (Effect Unit)
 subscribe (Conn {webSocket}) f = do
+  log "ADDED SOCKET SUB ++++ "
   listener <- eventListener $ \ev -> do
     for_ (ME.fromEvent ev) \msgEvent -> do
       for_ (readHelper readString (ME.data_ msgEvent)) \msgStr -> do
@@ -52,7 +53,9 @@ subscribe (Conn {webSocket}) f = do
             log $ show errs
           Right msg -> f msg
   addEventListener WSET.onMessage listener false (WS.toEventTarget webSocket)
-  pure $ removeEventListener WSET.onMessage listener false (WS.toEventTarget webSocket)
+  pure $ do
+    log "REMOVING SOCKET SUB"
+    removeEventListener WSET.onMessage listener false (WS.toEventTarget webSocket)
 
 
 getMessage :: forall inMsg outMsg. Decode inMsg

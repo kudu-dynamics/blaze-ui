@@ -14,6 +14,8 @@ import System.Directory (removeDirectoryRecursive)
 import Data.BinaryAnalysis as BA
 import qualified Blaze.Types.CallGraph as CG
 import qualified Blaze.Types.Pil as Pil
+import qualified Blaze.UI.Web.Pil as WebPil
+import qualified Blaze.Types.Pil.Checker as Ch
 
 -------------------
 -- data BadBoy = BadBoy { one :: Int, two :: Text }
@@ -50,6 +52,7 @@ data ServerToWeb = SWTextMessage Text
                  | SWLogInfo Text
                  | SWLogWarn Text
                  | SWLogError Text
+                 | SWPilType (WebPil.PilType Int)
                  | SWNoop
                  | SWFunctionsList [CG.Function]
 
@@ -97,6 +100,23 @@ myTypes =
   , mkT (Proxy :: Proxy (Pil.Ctx))
   , mkT (Proxy :: Proxy (Pil.PilVar))
 
+
+  -- types from Web.Pil
+  , mkT (Proxy :: Proxy (WebPil.PilType A))
+  , mkT (Proxy :: Proxy (WebPil.TIntOp A))
+  , mkT (Proxy :: Proxy (WebPil.TFloatOp A))
+  , mkT (Proxy :: Proxy (WebPil.TBitVectorOp A))
+  , mkT (Proxy :: Proxy (WebPil.TPointerOp A))
+  , mkT (Proxy :: Proxy (WebPil.TArrayOp A))
+  , mkT (Proxy :: Proxy (WebPil.TFunctionOp A))
+
+
+  , mkT (Proxy :: Proxy (WebPil.Sym))
+  , mkT (Proxy :: Proxy (WebPil.TypeError))
+  , mkT (Proxy :: Proxy (WebPil.TypeReport))
+  , mkT (Proxy :: Proxy (WebPil.TypedExpr))
+
+  
   -- , mkT (Proxy :: Proxy BadBoy)
   -- , mkT (Proxy :: Proxy (MMaybe A))
   -- , mkT (Proxy :: Proxy (MOk A))

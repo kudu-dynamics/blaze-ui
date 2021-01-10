@@ -24,6 +24,7 @@ import qualified Blaze.Types.Pil as Pil
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.Types.CallGraph as CG
+import qualified Blaze.UI.Web.Pil as WebPil
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -255,6 +256,7 @@ handleWebEvent bv = \case
 
   WSGetFunctionsList -> do
     funcs <- liftIO $ Blaze.Import.CallGraph.getFunctions bvi
+    -- sendToWeb $ SWPilType (WebPil.TInt $ WebPil.TIntOp 0 7)
     sendToWeb $ SWFunctionsList funcs
     
   WSTextMessage t -> do

@@ -2,8 +2,8 @@ module Blaze.UI.App where
 
 import Prelude
 
-import Blaze.Socket (Conn)
-import Blaze.Socket as Socket
+import Blaze.UI.Socket (Conn)
+import Blaze.UI.Socket as Socket
 import Blaze.Types.CallGraph (_Function)
 import Blaze.Types.CallGraph as CG
 import Blaze.UI.Types (Nav(..))
@@ -44,11 +44,9 @@ import Web.Socket.WebSocket as WS
 import Web.UIEvent.KeyboardEvent as KE
 import Web.UIEvent.KeyboardEvent.EventTypes (keydown)
 
-
 readHelper :: forall a b. (Foreign -> F a) -> b -> Maybe a
 readHelper read =
   either (const Nothing) Just <<< runExcept <<< read <<< unsafeToForeign
-
 
 
 mkFunctionView :: Conn ServerToWeb WebToServer
@@ -79,10 +77,14 @@ mkFunctionsList conn = do
       waitForFuncListMessage
 
     pure $ div_
-      [ div_ [ text "Functions" ]
-      , div_ $ case mmesg of
-           Nothing -> [ text "loading..." ]
-           Just funcs -> map (funcListItem props.setNav) funcs
+      [ D.div_ [ text "Functions" ]
+      , D.div { id: "function-list"
+              , className: ""
+              , children:
+                case mmesg of
+                  Nothing -> [ text "loading..." ]
+                  Just funcs -> map (funcListItem props.setNav) funcs              
+              }
       ]
   where
     waitForFuncListMessage = do
@@ -136,7 +138,9 @@ mkApp conn = do
     socketMsg /\ setSocketMsg <- useState' SWNoop
 
     -- set up websocket listener
-    useEffectOnce $ Socket.subscribe conn setSocketMsg
+    useEffectOnce <<< Socket.subscribe conn $ \msg -> do
+      log <<< show $ msg
+      setSocketMsg msg
 
     msgToServer /\ setMsgToServer <- useState' ""
 

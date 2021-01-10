@@ -2,10 +2,11 @@ module Main where
 
 import Prelude
 
-import Blaze.Socket (Conn(..))
-import Blaze.Socket as Socket
+import Blaze.UI.Socket (Conn(..))
+import Blaze.UI.Socket as Socket
 import Blaze.UI.App (mkApp)
 import Blaze.UI.Components.Counter (mkCounter)
+import Blaze.UI.ConcurApp as ConcurApp
 import Blaze.UI.Types.WebMessages (ServerToWeb, WebToServer)
 import Concur.Core (Widget)
 import Concur.React (HTML)
@@ -83,9 +84,10 @@ main = do
       -- setTextContent "Billy bob" rootNode
       launchAff_ $ do
         conn <- Socket.create wsUri [] :: Aff (Conn ServerToWeb WebToServer)
-        liftEffect $ do
-          app <- mkApp conn
-          render (app {}) root
+        liftEffect $ ConcurApp.main conn
+        -- liftEffect $ do
+        --   app <- mkApp conn
+        --   render (app {}) root
 
       -- counter <- mkCounter
       -- render (counter { label : "Bilbo" }) root
@@ -98,6 +100,7 @@ main' = do
               <> "/web/" <> sessionId
   connection <- WS.create wsUri []
   v <- EAVar.empty
+
   runWidgetInDom "main" $ do
     counterWidget v 5
       <|> bilboWidget v
