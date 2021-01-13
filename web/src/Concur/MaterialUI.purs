@@ -2,13 +2,16 @@ module Concur.MaterialUI where
 
 import Prelude
 
+import Blaze.UI.App (mkHello)
 import Concur.React.DOM (El)
 import Concur.React.DOM as D
 import Effect (Effect)
 import Effect.Aff.Compat (EffectFnAff)
 import React (Children, ReactClass, unsafeCreateElement)
+import React.Basic.Hooks (ReactComponent)
 import React.DOM.Props (unsafeFromPropsArray)
 import React.SyntheticEvent as R
+import Unsafe.Coerce (unsafeCoerce)
 
 foreign import _button :: forall a. ReactClass a
 
@@ -17,8 +20,6 @@ foreign import _buttonGroup :: forall a. ReactClass a
 foreign import _textField :: forall a. ReactClass a
 
 foreign import _grid :: forall a. ReactClass a
-
-foreign import _dataGrid :: forall a. ReactClass a
 
 foreign import classList :: forall a. ReactClass a
 foreign import classListItem :: forall a. ReactClass a
@@ -45,9 +46,6 @@ textField = mkEl _textField
 
 grid :: D.El
 grid = mkEl _grid
-
--- dataGrid :: D.El
--- dataGrid = mkEl _dataGrid
 
 
 list :: El

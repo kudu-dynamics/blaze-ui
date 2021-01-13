@@ -2,13 +2,14 @@
 module Blaze.UI.Web.Pil where
 
 import Blaze.Types.Pil (Statement)
+import Blaze.Types.Pil.Common (PilVar)
 import Data.BinaryAnalysis (BitOffset, Bits)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Lens (Iso', Lens', Prism', lens, prism')
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Lens.Record (prop)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe, Maybe(..))
 import Data.Newtype (class Newtype)
 import Data.Symbol (SProxy(SProxy))
 import Data.Tuple (Tuple)
@@ -327,6 +328,8 @@ newtype TypeReport
   = TypeReport
       { typedStmts :: Array (Tuple Int (Statement TypedExpr))
       , errors :: Array TypeError
+      , varSymTypeMap :: Array (Tuple PilVar DeepSymType)
+      , varSymMap :: Array (Tuple PilVar Sym)
       }
 
 
@@ -346,14 +349,16 @@ derive instance genericTypeReport :: Generic TypeReport _
 derive instance newtypeTypeReport :: Newtype TypeReport _
 --------------------------------------------------------------------------------
 _TypeReport :: Iso' TypeReport { typedStmts :: Array (Tuple Int (Statement TypedExpr))
-                               , errors :: Array TypeError }
+                               , errors :: Array TypeError
+                               , varSymTypeMap :: Array (Tuple PilVar DeepSymType)
+                               , varSymMap :: Array (Tuple PilVar Sym) }
 _TypeReport = _Newtype
 --------------------------------------------------------------------------------
 newtype TypedExpr
   = TypedExpr
       { sym :: Sym
       , op :: String
-      , typeText :: String
+      , pilType :: Maybe DeepSymType
       , args :: Array TypedExpr
       }
 
@@ -375,7 +380,45 @@ derive instance newtypeTypedExpr :: Newtype TypedExpr _
 --------------------------------------------------------------------------------
 _TypedExpr :: Iso' TypedExpr { sym :: Sym
                              , op :: String
-                             , typeText :: String
+                             , pilType :: Maybe DeepSymType
                              , args :: Array TypedExpr }
 _TypedExpr = _Newtype
+--------------------------------------------------------------------------------
+data DeepSymType
+  = DSVar Sym
+  | DSRecursive Sym (PilType DeepSymType)
+  | DSType (PilType DeepSymType)
+
+
+instance showDeepSymType :: Show DeepSymType where
+  show x = genericShow x
+derive instance eqDeepSymType :: Eq DeepSymType
+derive instance ordDeepSymType :: Ord DeepSymType
+instance encodeDeepSymType :: Encode DeepSymType where
+  encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
+                                               , unwrapSingleArguments = true
+                                               }) value
+instance decodeDeepSymType :: Decode DeepSymType where
+  decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
+                                               , unwrapSingleArguments = true
+                                               }) value
+derive instance genericDeepSymType :: Generic DeepSymType _
+--------------------------------------------------------------------------------
+_DSVar :: Prism' DeepSymType Sym
+_DSVar = prism' DSVar f
+  where
+    f (DSVar a) = Just $ a
+    f _ = Nothing
+
+_DSRecursive :: Prism' DeepSymType { a :: Sym, b :: PilType DeepSymType }
+_DSRecursive = prism' (\{ a, b } -> DSRecursive a b) f
+  where
+    f (DSRecursive a b) = Just $ { a: a, b: b }
+    f _ = Nothing
+
+_DSType :: Prism' DeepSymType (PilType DeepSymType)
+_DSType = prism' DSType f
+  where
+    f (DSType a) = Just $ a
+    f _ = Nothing
 --------------------------------------------------------------------------------

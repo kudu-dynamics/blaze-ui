@@ -25,6 +25,8 @@ instance FromJSON TypeError
 data TypeReport = TypeReport
   { typedStmts :: [(Int, Pil.Statement TypedExpr)]
   , errors :: [TypeError]
+  , varSymTypeMap :: [(Pil.PilVar, DeepSymType)]
+  , varSymMap :: [(Pil.PilVar, Sym)]
   } deriving (Show, Eq, Ord, Generic)
 
 instance ToJSON TypeReport
@@ -34,7 +36,7 @@ instance FromJSON TypeReport
 data TypedExpr = TypedExpr
   { sym :: Sym
   , op :: Text
-  , typeText :: Text
+  , pilType :: Maybe DeepSymType
   , args :: [TypedExpr]
   } deriving (Eq, Ord, Show, Generic)
 
@@ -61,7 +63,7 @@ toTypedExpr :: InfoExpression (SymInfo, Maybe Ch.DeepSymType) -> TypedExpr
 toTypedExpr x = TypedExpr
   { sym = let (Ch.Sym s) = x ^. #info . _1 . #sym in Sym s
   , op = showOpName $ x ^. #op
-  , typeText = maybe "Unknown" showType $ x ^. #info . _2
+  , pilType = convertDeepSymType <$> x ^. #info . _2
   , args = fmap toTypedExpr . foldr (:) [] $ x ^. #op
   }
 
@@ -70,6 +72,8 @@ toTypeReport :: Ch.TypeReport -> TypeReport
 toTypeReport x = TypeReport
   { typedStmts = fmap f $ x ^. #symTypeStmts
   , errors = fmap toTypeError $ x ^. #errors
+  , varSymTypeMap = HashMap.toList $ convertDeepSymType <$> x ^. #varSymTypeMap
+  , varSymMap = HashMap.toList $ convertSym <$> x ^. #varSymMap
   }
   where
     f (stmtIndex, stmt) = (stmtIndex, fmap toTypedExpr stmt)

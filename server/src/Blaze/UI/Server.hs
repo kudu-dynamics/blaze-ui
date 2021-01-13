@@ -275,8 +275,8 @@ handleWebEvent bv = \case
 
       Right (func, tr) -> do
         printTypeReportToConsole func tr
-        sendToWeb . SWFunctionTypeReport .cs $ pshow tr
-
+        let tr' = WebPil.toTypeReport tr
+        sendToWeb $ SWFunctionTypeReport tr'
   where
     bvi = BNImporter bv
 

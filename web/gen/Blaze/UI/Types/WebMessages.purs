@@ -2,7 +2,7 @@
 module Blaze.UI.Types.WebMessages where
 
 import Blaze.Types.CallGraph (Function)
-import Blaze.UI.Web.Pil (PilType)
+import Blaze.UI.Web.Pil (PilType, TypeReport)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Lens (Iso', Lens', Prism', lens, prism')
@@ -26,7 +26,7 @@ data ServerToWeb
   | SWPilType (PilType Int)
   | SWNoop
   | SWFunctionsList (Array Function)
-  | SWFunctionTypeReport String
+  | SWFunctionTypeReport TypeReport
 
 
 instance showServerToWeb :: Show ServerToWeb where
@@ -85,7 +85,7 @@ _SWFunctionsList = prism' SWFunctionsList f
     f (SWFunctionsList a) = Just $ a
     f _ = Nothing
 
-_SWFunctionTypeReport :: Prism' ServerToWeb String
+_SWFunctionTypeReport :: Prism' ServerToWeb TypeReport
 _SWFunctionTypeReport = prism' SWFunctionTypeReport f
   where
     f (SWFunctionTypeReport a) = Just $ a

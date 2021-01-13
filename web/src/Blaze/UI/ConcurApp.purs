@@ -5,6 +5,8 @@ import Prelude
 
 import Blaze.Types.CallGraph (_Function)
 import Blaze.Types.CallGraph as CG
+import Blaze.UI.App (mkHello)
+import Blaze.UI.Components.FunctionView (functionView)
 import Blaze.UI.Socket (Conn(..))
 import Blaze.UI.Socket as Socket
 import Blaze.UI.Types (Nav(..))
@@ -24,10 +26,13 @@ import Control.Monad.State.Class (get, put)
 import Control.Monad.State.Trans (StateT, runStateT)
 import Control.MultiAlternative (orr)
 import Control.Wire as Wire
+import Data.Array as Array
 import Data.BinaryAnalysis (Address(..), Bytes(..))
 import Data.Int as Int
-import Data.Lens ((^?))
-import Data.Maybe (Maybe(..), fromJust, fromMaybe)
+import Data.Lens ((^.), (^?))
+import Data.Maybe (Maybe(..), fromJust, fromMaybe, maybe)
+import Data.String (Pattern(..))
+import Data.String as String
 import Data.Traversable (traverse)
 import Effect (Effect)
 import Effect.Aff (Milliseconds(..), delay, forkAff)
@@ -37,6 +42,7 @@ import Effect.Class.Console (log)
 import Effect.Random (random)
 import Pipes.Prelude (mapM)
 import React (ReactClass)
+import React.Basic.Hooks as Hooks
 
 data Msg = Up | Down
 
@@ -69,7 +75,6 @@ tabletest =
     ]
   ]
 
--- funcListItem :: Widget HTML 
 
 app2 :: Widget HTML Unit
 app2 = do
@@ -134,13 +139,14 @@ data FuncListAction = FuncListSelect CG.Function
 funcItem :: Conn ServerToWeb WebToServer
          -> CG.Function
          -> Widget HTML FuncListAction
-funcItem conn x@(CG.Function func) =
+funcItem conn x@(CG.Function func) = do
   M.listItem [ prop "button" true ]
-  [ M.listItemText
-    [ prop "primary" $ func.name
-    , prop "secondary" $ showAddress func.address
-    , FuncListSelect x <$ P.onClick
-    ] []
+    [ M.listItemText
+      [ prop "primary" $ func.name
+      , prop "secondary" $ showAddress func.address
+      , FuncListSelect x <$ P.onClick
+      ] []
+
   -- , M.listItemSecondaryAction []
   --   [ M.button [ -- prop "variant" "contained"
   --              ]
@@ -154,6 +160,10 @@ funcList :: Conn ServerToWeb WebToServer
 funcList conn funcs = go Nothing
   where
     go mFilterText = do
+      let filteredFuncs = flip (maybe funcs) mFilterText $ \t ->
+            Array.filter
+            (\fn -> String.contains (Pattern t) (fn ^. _Function).name)
+            funcs
       r <- D.div [ P.style { backgroundColor: "#f5f5f5"
                            , padding: "10px"
                            , width: "40%"
@@ -164,7 +174,7 @@ funcList conn funcs = go Nothing
                     , prop "dense" true
                     ]
              $ [searchBar $ fromMaybe "" mFilterText]
-             <> (funcItem conn <$> funcs)
+             <> (funcItem conn <$> filteredFuncs)
            ]
       case r of
         FuncListSelect func -> pure func
@@ -192,12 +202,14 @@ funcList conn funcs = go Nothing
 
 app :: Conn ServerToWeb WebToServer -> Widget HTML Unit
 app conn = do
+  
   liftEffect $ Socket.sendMessage conn WSGetFunctionsList
   funcs <- orr
            [ D.text "loading function list..."
            , liftAff $ Socket.getMessageWith conn (_ ^? _SWFunctionsList)
            ]
   selectedFunc <- funcList conn funcs
+  functionView conn selectedFunc
   D.text $ show selectedFunc
   -- where
   --   send = do

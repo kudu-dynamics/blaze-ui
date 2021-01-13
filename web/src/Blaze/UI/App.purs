@@ -2,10 +2,10 @@ module Blaze.UI.App where
 
 import Prelude
 
-import Blaze.UI.Socket (Conn)
-import Blaze.UI.Socket as Socket
 import Blaze.Types.CallGraph (_Function)
 import Blaze.Types.CallGraph as CG
+import Blaze.UI.Socket (Conn)
+import Blaze.UI.Socket as Socket
 import Blaze.UI.Types (Nav(..))
 import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..), _SWFunctionTypeReport)
 import Control.Alternative as Alt
@@ -29,13 +29,15 @@ import Effect.Random (randomInt)
 import Foreign (F, Foreign, MultipleErrors, readString, unsafeToForeign)
 import Foreign.Class (decode)
 import Foreign.Generic (aesonSumEncoding, decodeJSON, defaultOptions, encodeJSON, genericDecodeJSON, genericEncode, genericEncodeJSON)
+import Prim.Row (class Lacks)
 import React.Basic.DOM (button, div_, p_, text)
 import React.Basic.DOM as D
 import React.Basic.DOM.Events (targetValue)
 import React.Basic.Events (handler, handler_, syntheticEvent)
-import React.Basic.Hooks (Component, Ref, component, readRef, useEffect, useEffectOnce, useRef, useState, useState', writeRef)
+import React.Basic.Hooks (Component, JSX, ReactChildren, ReactComponent, Ref, Render, component, reactComponent, reactComponentWithChildren, readRef, useEffect, useEffectOnce, useRef, useState, useState', writeRef)
 import React.Basic.Hooks as Hooks
 import React.Basic.Hooks.Aff (useAff)
+import Unsafe.Coerce (unsafeCoerce)
 import Web.Event.EventTarget (EventListener, EventTarget, addEventListener, eventListener, removeEventListener)
 import Web.Socket.Event.EventTypes as WSET
 import Web.Socket.Event.MessageEvent as ME
@@ -47,6 +49,35 @@ import Web.UIEvent.KeyboardEvent.EventTypes (keydown)
 readHelper :: forall a b. (Foreign -> F a) -> b -> Maybe a
 readHelper read =
   either (const Nothing) Just <<< runExcept <<< read <<< unsafeToForeign
+
+
+-- mkHello :: forall hooks props children. Lacks "key" props => Lacks "ref" props
+--            => Effect (ReactComponent {name :: String | props})
+mkHello :: forall props a. Lacks "key" props => Lacks "ref" props =>
+           Effect (ReactComponent { children :: ReactChildren a, name :: String | props })
+mkHello = 
+  reactComponentWithChildren "Hello" \props -> Hooks.do      
+    pure do
+      div_
+        [ text $ "Hello, " <> props.name
+        ]
+
+mkHello2 :: Conn ServerToWeb WebToServer
+         -> Component { func :: CG.Function }
+mkHello2 conn = do
+  component "Hello2" \props -> Hooks.do
+    mreport <- useAff unit $ do
+      liftEffect <<< Socket.sendMessage conn $ WSGetTypeReport props.func
+      Socket.getMessageWith conn (_ ^? _SWFunctionTypeReport)
+      
+    pure do
+      div_
+        [ text $ (props.func ^. _Function).name
+        , div_ $ case mreport of
+          Nothing -> [ text "loading type report..." ]
+          Just tr -> [ text $ show tr ]
+        ]
+
 
 
 mkFunctionView :: Conn ServerToWeb WebToServer
@@ -62,7 +93,7 @@ mkFunctionView conn = do
         [ text $ (props.func ^. _Function).name
         , div_ $ case mreport of
           Nothing -> [ text "loading type report..." ]
-          Just tr -> [ text tr ]
+          Just tr -> [ text $ show tr ]
         ]
 
 

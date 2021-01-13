@@ -57,7 +57,7 @@ data ServerToWeb = SWTextMessage Text
                  | SWFunctionsList [CG.Function]
 
                  -- TODO: make a real type report
-                 | SWFunctionTypeReport Text
+                 | SWFunctionTypeReport WebPil.TypeReport
                  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 
 
@@ -115,7 +115,8 @@ myTypes =
   , mkT (Proxy :: Proxy (WebPil.TypeError))
   , mkT (Proxy :: Proxy (WebPil.TypeReport))
   , mkT (Proxy :: Proxy (WebPil.TypedExpr))
-
+  , mkT (Proxy :: Proxy (WebPil.DeepSymType))
+  
   
   -- , mkT (Proxy :: Proxy BadBoy)
   -- , mkT (Proxy :: Proxy (MMaybe A))
