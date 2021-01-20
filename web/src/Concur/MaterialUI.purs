@@ -2,7 +2,6 @@ module Concur.MaterialUI where
 
 import Prelude
 
-import Blaze.UI.App (mkHello)
 import Concur.React.DOM (El)
 import Concur.React.DOM as D
 import Effect (Effect)

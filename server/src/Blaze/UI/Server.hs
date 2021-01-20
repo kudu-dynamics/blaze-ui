@@ -276,7 +276,9 @@ handleWebEvent bv = \case
       Right (func, tr) -> do
         printTypeReportToConsole func tr
         let tr' = WebPil.toTypeReport tr
+        liftIO $ pprint tr'
         sendToWeb $ SWFunctionTypeReport tr'
+        -- sendToWeb $ SWPilType WebPil.testPilType
   where
     bvi = BNImporter bv
 

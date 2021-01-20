@@ -2,6 +2,7 @@
 module Blaze.Types.Pil.Common where
 
 import Blaze.Types.CallGraph (Function)
+import Data.BinaryAnalysis (ByteOffset)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Lens (Iso', Lens', Prism', lens, prism')
@@ -88,4 +89,29 @@ derive instance newtypePilVar :: Newtype PilVar _
 --------------------------------------------------------------------------------
 _PilVar :: Iso' PilVar { symbol :: String, ctx :: Maybe Ctx }
 _PilVar = _Newtype
+--------------------------------------------------------------------------------
+newtype StackOffset
+  = StackOffset
+      { ctx :: Ctx
+      , offset :: ByteOffset
+      }
+
+
+instance showStackOffset :: Show StackOffset where
+  show x = genericShow x
+derive instance eqStackOffset :: Eq StackOffset
+derive instance ordStackOffset :: Ord StackOffset
+instance encodeStackOffset :: Encode StackOffset where
+  encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
+                                               , unwrapSingleArguments = true
+                                               }) value
+instance decodeStackOffset :: Decode StackOffset where
+  decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
+                                               , unwrapSingleArguments = true
+                                               }) value
+derive instance genericStackOffset :: Generic StackOffset _
+derive instance newtypeStackOffset :: Newtype StackOffset _
+--------------------------------------------------------------------------------
+_StackOffset :: Iso' StackOffset { ctx :: Ctx, offset :: ByteOffset }
+_StackOffset = _Newtype
 --------------------------------------------------------------------------------

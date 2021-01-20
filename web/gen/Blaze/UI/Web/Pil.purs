@@ -2,6 +2,7 @@
 module Blaze.UI.Web.Pil where
 
 import Blaze.Types.Pil (Statement)
+import Blaze.Types.Pil.Checker (InfoExpression, Sym, SymInfo)
 import Blaze.Types.Pil.Common (PilVar)
 import Data.BinaryAnalysis (BitOffset, Bits)
 import Data.Generic.Rep (class Generic)
@@ -276,28 +277,6 @@ derive instance newtypeTFunctionOp :: Newtype (TFunctionOp a) _
 _TFunctionOp :: forall a. Iso' (TFunctionOp a) { ret :: a, params :: Array a }
 _TFunctionOp = _Newtype
 --------------------------------------------------------------------------------
-newtype Sym
-  = Sym Int
-
-
-instance showSym :: Show Sym where
-  show x = genericShow x
-derive instance eqSym :: Eq Sym
-derive instance ordSym :: Ord Sym
-instance encodeSym :: Encode Sym where
-  encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
-                                               , unwrapSingleArguments = true
-                                               }) value
-instance decodeSym :: Decode Sym where
-  decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
-                                               , unwrapSingleArguments = true
-                                               }) value
-derive instance genericSym :: Generic Sym _
-derive instance newtypeSym :: Newtype Sym _
---------------------------------------------------------------------------------
-_Sym :: Iso' Sym Int
-_Sym = _Newtype
---------------------------------------------------------------------------------
 newtype TypeError
   = TypeError
       { stmtOrigin :: Int
@@ -326,7 +305,7 @@ _TypeError = _Newtype
 --------------------------------------------------------------------------------
 newtype TypeReport
   = TypeReport
-      { typedStmts :: Array (Tuple Int (Statement TypedExpr))
+      { symStmts :: Array (Tuple Int (Statement (InfoExpression SymInfo)))
       , errors :: Array TypeError
       , varSymTypeMap :: Array (Tuple PilVar DeepSymType)
       , varSymMap :: Array (Tuple PilVar Sym)
@@ -348,7 +327,7 @@ instance decodeTypeReport :: Decode TypeReport where
 derive instance genericTypeReport :: Generic TypeReport _
 derive instance newtypeTypeReport :: Newtype TypeReport _
 --------------------------------------------------------------------------------
-_TypeReport :: Iso' TypeReport { typedStmts :: Array (Tuple Int (Statement TypedExpr))
+_TypeReport :: Iso' TypeReport { symStmts :: Array (Tuple Int (Statement (InfoExpression SymInfo)))
                                , errors :: Array TypeError
                                , varSymTypeMap :: Array (Tuple PilVar DeepSymType)
                                , varSymMap :: Array (Tuple PilVar Sym) }

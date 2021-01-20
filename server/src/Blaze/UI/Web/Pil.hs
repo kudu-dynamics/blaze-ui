@@ -2,16 +2,10 @@ module Blaze.UI.Web.Pil where
 
 import Blaze.UI.Prelude hiding (TypeError)
 import qualified Blaze.Types.Pil as Pil
-import Blaze.Types.Pil.Checker (InfoExpression, SymInfo)
+import Blaze.Types.Pil.Checker (InfoExpression, SymInfo, Sym(Sym), SymExpression)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Data.Text as Text
 import qualified Data.HashMap.Strict as HashMap
-
-newtype Sym = Sym Int
-  deriving (Eq, Ord, Show, Generic)
-
-instance ToJSON Sym
-instance FromJSON Sym
 
 data TypeError = TypeError
   { stmtOrigin :: Int
@@ -23,7 +17,7 @@ instance ToJSON TypeError
 instance FromJSON TypeError
 
 data TypeReport = TypeReport
-  { typedStmts :: [(Int, Pil.Statement TypedExpr)]
+  { symStmts :: [(Int, Pil.Statement SymExpression)]
   , errors :: [TypeError]
   , varSymTypeMap :: [(Pil.PilVar, DeepSymType)]
   , varSymMap :: [(Pil.PilVar, Sym)]
@@ -70,16 +64,11 @@ toTypedExpr x = TypedExpr
 
 toTypeReport :: Ch.TypeReport -> TypeReport
 toTypeReport x = TypeReport
-  { typedStmts = fmap f $ x ^. #symTypeStmts
+  { symStmts = x ^. #symStmts
   , errors = fmap toTypeError $ x ^. #errors
   , varSymTypeMap = HashMap.toList $ convertDeepSymType <$> x ^. #varSymTypeMap
-  , varSymMap = HashMap.toList $ convertSym <$> x ^. #varSymMap
+  , varSymMap = HashMap.toList $ x ^. #varSymMap
   }
-  where
-    f (stmtIndex, stmt) = (stmtIndex, fmap toTypedExpr stmt)
-
-
-
 
 
 ----------- Types conversion -----
@@ -156,14 +145,10 @@ data DeepSymType = DSVar Sym
                  | DSType (PilType DeepSymType)
                  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 
-
-convertSym :: Ch.Sym -> Sym
-convertSym (Ch.Sym s) = Sym s
-
 convertDeepSymType :: Ch.DeepSymType -> DeepSymType
 convertDeepSymType = \case
-  Ch.DSVar s -> DSVar (convertSym s)
-  Ch.DSRecursive s pt -> DSRecursive (convertSym s) (f pt)
+  Ch.DSVar s -> DSVar s
+  Ch.DSRecursive s pt -> DSRecursive s (f pt)
   Ch.DSType pt -> DSType (f pt)
   where
     f = fmap convertDeepSymType . convertPilType
@@ -184,4 +169,14 @@ convertPilType = \case
   Ch.TVLength l -> TVLength l
   Ch.TVSign b -> TVSign b
 
+
+testPilType :: DeepSymType
+testPilType = DSType TBool
+  -- ( TBitVector
+  --   ( TBitVectorOp
+  --     { bitWidth = DSType
+  --       ( TVBitWidth ( Bits 64 ) )
+  --     }
+  --   )
+  -- )
 

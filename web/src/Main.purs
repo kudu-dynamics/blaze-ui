@@ -4,9 +4,9 @@ import Prelude
 
 import Blaze.UI.Socket (Conn(..))
 import Blaze.UI.Socket as Socket
-import Blaze.UI.App (mkApp)
+import Blaze.UI.ReactHooksApp (mkApp)
 import Blaze.UI.Components.Counter (mkCounter)
-import Blaze.UI.ConcurApp as ConcurApp
+import Blaze.UI.App as App
 import Blaze.UI.Types.WebMessages (ServerToWeb, WebToServer)
 import Concur.Core (Widget)
 import Concur.React (HTML)
@@ -84,7 +84,7 @@ main = do
       -- setTextContent "Billy bob" rootNode
       launchAff_ $ do
         conn <- Socket.create wsUri [] :: Aff (Conn ServerToWeb WebToServer)
-        liftEffect $ ConcurApp.main conn
+        liftEffect $ App.main conn
         -- liftEffect $ do
         --   app <- mkApp conn
         --   render (app {}) root

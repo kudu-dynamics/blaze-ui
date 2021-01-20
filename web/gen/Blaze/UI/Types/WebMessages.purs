@@ -2,7 +2,7 @@
 module Blaze.UI.Types.WebMessages where
 
 import Blaze.Types.CallGraph (Function)
-import Blaze.UI.Web.Pil (PilType, TypeReport)
+import Blaze.UI.Web.Pil (DeepSymType, TypeReport)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Lens (Iso', Lens', Prism', lens, prism')
@@ -14,7 +14,7 @@ import Data.Symbol (SProxy(SProxy))
 import Foreign.Class (class Decode, class Encode)
 import Foreign.Generic (aesonSumEncoding, defaultOptions, genericDecode, genericEncode)
 import Foreign.Generic.EnumEncoding (defaultGenericEnumOptions, genericDecodeEnum, genericEncodeEnum)
-import Prim (Array, Int, String)
+import Prim (Array, String)
 
 import Prelude
 
@@ -23,7 +23,7 @@ data ServerToWeb
   | SWLogInfo String
   | SWLogWarn String
   | SWLogError String
-  | SWPilType (PilType Int)
+  | SWPilType DeepSymType
   | SWNoop
   | SWFunctionsList (Array Function)
   | SWFunctionTypeReport TypeReport
@@ -67,7 +67,7 @@ _SWLogError = prism' SWLogError f
     f (SWLogError a) = Just $ a
     f _ = Nothing
 
-_SWPilType :: Prism' ServerToWeb (PilType Int)
+_SWPilType :: Prism' ServerToWeb DeepSymType
 _SWPilType = prism' SWPilType f
   where
     f (SWPilType a) = Just $ a

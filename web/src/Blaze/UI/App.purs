@@ -1,204 +1,215 @@
 module Blaze.UI.App where
 
+import Data.Monoid
 import Prelude
+import Blaze.UI.Prelude
 
 import Blaze.Types.CallGraph (_Function)
 import Blaze.Types.CallGraph as CG
-import Blaze.UI.Socket (Conn)
+import Blaze.UI.Components.FunctionView (functionView)
+import Blaze.UI.Socket (Conn(..))
 import Blaze.UI.Socket as Socket
 import Blaze.UI.Types (Nav(..))
-import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..), _SWFunctionTypeReport)
-import Control.Alternative as Alt
-import Control.Monad.Except (runExcept)
+import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..), _SWFunctionTypeReport, _SWFunctionsList)
+import Blaze.UI.Web.Pil (DeepSymType(..), PilType(..))
+import Concur.Core (Widget)
+import Concur.Core.Types (affAction, pulse)
+import Concur.MaterialUI as M
+import Concur.React (HTML, componentClass, renderComponent)
+import Concur.React.DOM (div_, h2_, hr', text)
+import Concur.React.DOM as D
+import Concur.React.Props (ReactProps)
+import Concur.React.Props as P
+import Concur.React.Run (runWidgetInDom)
+import Control.Alt ((<|>))
+import Control.Monad.Rec.Class (forever)
+import Control.Monad.State (modify)
+import Control.Monad.State.Class (get, put)
+import Control.Monad.State.Trans (StateT, runStateT)
+import Control.MultiAlternative (orr)
+import Control.Wire as Wire
 import Data.Array as Array
-import Data.Either (Either(..), either)
-import Data.Generic.Rep (class Generic)
-import Data.Generic.Rep.Show (genericShow)
-import Data.Interpolate (i)
+import Data.BinaryAnalysis (Address(..), Bytes(..))
+import Data.Int as Int
 import Data.Lens ((^.), (^?))
-import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Newtype (class Newtype)
-import Data.Traversable (for_)
-import Data.Tuple.Nested ((/\))
+import Data.Maybe (Maybe(..), fromJust, fromMaybe, maybe)
+import Data.String (Pattern(..))
+import Data.String as String
+import Data.Traversable (traverse)
 import Effect (Effect)
-import Effect.Aff (Aff, Milliseconds(..), delay, effectCanceler, makeAff)
-import Effect.Aff as Aff
+import Effect.Aff (Milliseconds(..), delay, forkAff)
+import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
-import Effect.Console (log)
-import Effect.Random (randomInt)
-import Foreign (F, Foreign, MultipleErrors, readString, unsafeToForeign)
-import Foreign.Class (decode)
-import Foreign.Generic (aesonSumEncoding, decodeJSON, defaultOptions, encodeJSON, genericDecodeJSON, genericEncode, genericEncodeJSON)
-import Prim.Row (class Lacks)
-import React.Basic.DOM (button, div_, p_, text)
-import React.Basic.DOM as D
-import React.Basic.DOM.Events (targetValue)
-import React.Basic.Events (handler, handler_, syntheticEvent)
-import React.Basic.Hooks (Component, JSX, ReactChildren, ReactComponent, Ref, Render, component, reactComponent, reactComponentWithChildren, readRef, useEffect, useEffectOnce, useRef, useState, useState', writeRef)
+import Effect.Class.Console (log)
+import Effect.Random (random)
+import Foreign.Generic (encode, encodeJSON)
+import Pipes.Prelude (mapM)
+import React (ReactClass)
 import React.Basic.Hooks as Hooks
-import React.Basic.Hooks.Aff (useAff)
-import Unsafe.Coerce (unsafeCoerce)
-import Web.Event.EventTarget (EventListener, EventTarget, addEventListener, eventListener, removeEventListener)
-import Web.Socket.Event.EventTypes as WSET
-import Web.Socket.Event.MessageEvent as ME
-import Web.Socket.WebSocket (WebSocket)
-import Web.Socket.WebSocket as WS
-import Web.UIEvent.KeyboardEvent as KE
-import Web.UIEvent.KeyboardEvent.EventTypes (keydown)
-
-readHelper :: forall a b. (Foreign -> F a) -> b -> Maybe a
-readHelper read =
-  either (const Nothing) Just <<< runExcept <<< read <<< unsafeToForeign
 
 
--- mkHello :: forall hooks props children. Lacks "key" props => Lacks "ref" props
---            => Effect (ReactComponent {name :: String | props})
-mkHello :: forall props a. Lacks "key" props => Lacks "ref" props =>
-           Effect (ReactComponent { children :: ReactChildren a, name :: String | props })
-mkHello = 
-  reactComponentWithChildren "Hello" \props -> Hooks.do      
-    pure do
-      div_
-        [ text $ "Hello, " <> props.name
+tabletest :: Widget HTML Unit
+tabletest =
+  D.div [ P.style { backgroundColor: "#eeeeee"
+                  , padding: "10px"
+                  , width: "60%"
+                  }
         ]
-
-mkHello2 :: Conn ServerToWeb WebToServer
-         -> Component { func :: CG.Function }
-mkHello2 conn = do
-  component "Hello2" \props -> Hooks.do
-    mreport <- useAff unit $ do
-      liftEffect <<< Socket.sendMessage conn $ WSGetTypeReport props.func
-      Socket.getMessageWith conn (_ ^? _SWFunctionTypeReport)
-      
-    pure do
-      div_
-        [ text $ (props.func ^. _Function).name
-        , div_ $ case mreport of
-          Nothing -> [ text "loading type report..." ]
-          Just tr -> [ text $ show tr ]
-        ]
-
-
-
-mkFunctionView :: Conn ServerToWeb WebToServer
-               -> Component { func :: CG.Function }
-mkFunctionView conn = do
-  component "FunctionView" \props -> Hooks.do
-    mreport <- useAff unit $ do
-      liftEffect <<< Socket.sendMessage conn $ WSGetTypeReport props.func
-      Socket.getMessageWith conn (_ ^? _SWFunctionTypeReport)
-      
-    pure do
-      div_
-        [ text $ (props.func ^. _Function).name
-        , div_ $ case mreport of
-          Nothing -> [ text "loading type report..." ]
-          Just tr -> [ text $ show tr ]
-        ]
-
-
-mkFunctionsList :: Conn ServerToWeb WebToServer
-                -> Component { setNav :: Nav -> Effect Unit }
-mkFunctionsList conn = do
-  component "FunctionsList" \props -> Hooks.do
-    -- funcs /\ setFuncs <- useState' []
-
-    mmesg <- useAff unit $ do
-      liftEffect $ Socket.sendMessage conn WSGetFunctionsList
-      waitForFuncListMessage
-
-    pure $ div_
-      [ D.div_ [ text "Functions" ]
-      , D.div { id: "function-list"
-              , className: ""
-              , children:
-                case mmesg of
-                  Nothing -> [ text "loading..." ]
-                  Just funcs -> map (funcListItem props.setNav) funcs              
-              }
+  [ D.text "here"
+  , M.list []
+    [ M.listItem [ prop "button" true ]
+      [ M.listItemIcon [] [ M.button [ prop "variant" "contained" ] [D.text "X"] ]
+      , M.listItemText [ prop "primary" "" ] []
+      , M.listItemSecondaryAction [] [ M.button [] [ D.text "X" ] ]
       ]
+    , M.listItem [ prop "button" true ]
+      [ M.listItemIcon [] [ D.text "Y" ]
+      , M.listItemText [ prop "primary" "Pete" ] []
+      , M.listItemSecondaryAction [] [ M.button [] [ D.text "X" ] ]
+      ]
+    ]
+  ]
+
+
+-- Showcases a bug where if both children widgets update simultaneously,
+-- only one returns result, and the others are stuck in limbo.
+-- but the commented out portion, with random return delays, works
+-- (as long as the random delays aren't the same)
+-- Possible lame fix would be to have slight delay in Wire between writing
+-- to each sub
+wireTest :: Widget HTML Unit
+wireTest = do
+  w <- liftEffect Wire.new
+  tabletest
+  void $ control w <|> (recvWrapper w 10) <|> (recvWrapper w 20) -- <|> recv w 20 <|> recv w 30
+  D.text "Done"
   where
-    waitForFuncListMessage = do
-      msg <- Socket.getMessage conn
-      case msg of
-        SWFunctionsList funcs -> pure funcs
-        _ -> waitForFuncListMessage
+    control w = do
+      action <- ("Up" <$ M.button
+                 [ P.onClick
+                 , prop "color" "secondary"
+                 , prop "variant" "contained"
+                 ]
+                 [D.text "Up"])
+                <|> ("Down" <$ D.button [P.onClick] [D.text "Down"])
+      affAction [] $ Wire.dispatch w action
+      control w
+
+    recv w n = do
+      msg <- liftAff $ Wire.listen w
+      log msg
+      D.text msg
+
+    recvWrapper w n = D.div' [ D.text "|"
+                             , recv w n
+                             ]
+    -- recv w n = do
+    --   action <- orr
+    --             [ D.div' [D.text (show n)]
+    --             , do
+    --                  pulse
+    --                  msg <- affAction [] $ do
+    --                    msg <- Wire.listen w
+    --                    liftEffect $ log "GOT IT"
+    --                    -- ms <- (_ * 30.0) <$> liftEffect random
+    --                    -- delay $ Milliseconds ms
+    --                    pure msg
+    --                  liftEffect $ log "Only once"
+    --                  pure msg
+    --             ]
+    --   log "Got action"
+    --   -- case action of
+    --   --   Up -> D.text "Up"
+    --   --   Down -> D.text "Down"
+    --   case action of
+    --     Up -> recv w (n + 1)
+    --     Down -> recv w (n - 1)
 
 
-    funcListItem setNav func = do
-      div_
-        [ text $ (func ^. _Function).name
-        , D.button { onClick: handler_ $ do
-                        log $ "ok"
-                        setNav $ NavFunctionView func
-                   , children: [ D.text "Type Check" ]
-                   }
+showAddress :: Address -> String
+showAddress (Address (Bytes n)) = showHex n
 
-        , D.button { onClick: handler_ $ do
-                        log $ "Send a message here..."
-                   , children: [ D.text "Goto in Binja" ]
-                   }
-          
-        ]
+data FuncListAction = FuncListSelect CG.Function
+                    | FuncListFilter String
+
+funcItem :: Conn ServerToWeb WebToServer
+         -> CG.Function
+         -> Widget HTML FuncListAction
+funcItem conn x@(CG.Function func) = do
+  M.listItem [ prop "button" true ]
+    [ M.listItemText
+      [ prop "primary" $ func.name
+      , prop "secondary" $ showAddress func.address
+      , FuncListSelect x <$ P.onClick
+      ] []
+
+  -- , M.listItemSecondaryAction []
+  --   [ M.button [ -- prop "variant" "contained"
+  --              ]
+  --     [ D.text "Type Report" ]
+  --   ]
+  ]
+
+funcList :: Conn ServerToWeb WebToServer
+         -> Array CG.Function
+         -> Widget HTML CG.Function
+funcList conn funcs = go Nothing
+  where
+    go mFilterText = do
+      let filteredFuncs = flip (maybe funcs) mFilterText $ \t ->
+            Array.filter
+            (\fn -> String.contains (Pattern t) (fn ^. _Function).name)
+            funcs
+      r <- D.div [ P.style { backgroundColor: "#f5f5f5"
+                           , padding: "10px"
+                           , width: "40%"
+                           }
+                 ]
+           [ D.div [] [ D.text $ show mFilterText ]
+           , M.list [ prop "subheader" $ renderComponent title
+                    , prop "dense" true
+                    ]
+             $ [searchBar $ fromMaybe "" mFilterText]
+             <> (funcItem conn <$> filteredFuncs)
+           ]
+      case r of
+        FuncListSelect func -> pure func
+        FuncListFilter txt -> go (Just txt)
+
+    searchBar txt =
+      D.div []
+      [ M.textField [ prop "label" "Search Functions"
+                    , prop "variant" "outlined"
+                    , prop "fullWidth" true
+                    , prop "defaultValue" txt
+                    , FuncListFilter <<< P.unsafeTargetValue <$> P.onChange
+                    ]
+        []
+      ]
+    title :: forall a. Widget HTML a
+    title = M.listSubheader
+      [ prop "color" "primary"
+      , prop "component" "div"
+      , prop "disableSticky" true
+      ]
+      [ D.text "Functions List" ]
 
 
-
--- getMessage :: WebSocket -> Aff ServerToWeb
--- getMessage conn = makeAff \yieldResult -> do
---   listener <- eventListener $ \ev -> do
---     for_ (ME.fromEvent ev) \msgEvent -> do
---       for_ (readHelper readString (ME.data_ msgEvent)) \msgStr -> do
---         case runExcept (decodeJSON msgStr) of
---           Left errs -> do
---             log $ "Failed to decode: " <> msgStr
---             log $ show errs
---             yieldResult <<< Left <<< Aff.error $ show errs
---           Right msg -> yieldResult <<< Right $ msg
---   addEventListener WSET.onMessage listener false (WS.toEventTarget conn)
---   pure <<< effectCanceler $ do
---     removeEventListener WSET.onMessage listener false (WS.toEventTarget conn)
+ 
+app :: Conn ServerToWeb WebToServer -> Widget HTML Unit
+app conn = do
+  liftEffect $ Socket.sendMessage conn WSGetFunctionsList
+  funcs <- orr
+           [ D.text "loading function list..."
+           , liftAff $ Socket.getMessageWith conn (_ ^? _SWFunctionsList)
+           ]
+  selectedFunc <- funcList conn funcs
+  functionView conn selectedFunc
+  D.text $ show selectedFunc
 
 
-mkApp :: Conn ServerToWeb WebToServer -> Component {}
-mkApp conn = do
-  functionView <- mkFunctionView conn
-  functionsList <- mkFunctionsList conn
-  -- Socket.sendMessage conn $ WSTestEncoding (BadBoy {one: 7, two: "hey"})
-  component "App" \_ -> Hooks.do
-    nav /\ setNav <- useState' NavBinaryView
-    socketMsg /\ setSocketMsg <- useState' SWNoop
-
-    -- set up websocket listener
-    useEffectOnce <<< Socket.subscribe conn $ \msg -> do
-      log <<< show $ msg
-      setSocketMsg msg
-
-    msgToServer /\ setMsgToServer <- useState' ""
-
-    pure $ case nav of
-      NavBinaryView -> do
-        div_
-          [ text $ "hi"
-          , D.input { placeholder: "your message"
-                    , value: msgToServer
-                    , onChange: handler targetValue \mval -> do
-                      setMsgToServer <<< fromMaybe "" $ mval
-                    }          
-          , D.button { onClick: handler_ $ do
-                          Socket.sendMessage conn $ WSTextMessage msgToServer
-                          log $ "Sent: " <> msgToServer
-                     , children: [ D.text "Send" ]
-                     }
-
-          , D.div_
-            [ D.button { onClick: handler_ $ do
-                            Socket.sendMessage conn $ WSGetFunctionsList
-                            log $ "Requested function list"
-                       , children: [ D.text "Get Functions List" ]
-                       }
-            ]
-          , functionsList {setNav}
-          ]
-      NavFunctionView func -> functionView { func }
-
-        
+main :: Conn ServerToWeb WebToServer -> Effect Unit
+main conn = do
+    runWidgetInDom "main" $ orr
+      [ div_ [] $ app conn
+      ]
