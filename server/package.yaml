@@ -25,7 +25,7 @@ dependencies:
   - base >= 4.7 && < 5
   - base64
   - binary-analysis
-  - binja
+  - binaryninja
   - blaze
   - bytestring
   - containers
