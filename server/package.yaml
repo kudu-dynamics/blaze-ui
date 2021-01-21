@@ -101,7 +101,7 @@ library:
 
 include-dirs:
   - "src"
-  - "../../haskell-binja/res"
+  - "../../binaryninja-haskell/res"
 
 executables:
   blaze_ui_server:

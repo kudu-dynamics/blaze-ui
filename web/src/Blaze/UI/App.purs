@@ -194,8 +194,6 @@ funcList conn funcs = go Nothing
       ]
       [ D.text "Functions List" ]
 
-
- 
 app :: Conn ServerToWeb WebToServer -> Widget HTML Unit
 app conn = do
   liftEffect $ Socket.sendMessage conn WSGetFunctionsList
