@@ -5,10 +5,10 @@ import Prelude
 
 import Blaze.Types.CallGraph (_Function)
 import Blaze.Types.CallGraph as CG
-import Blaze.Types.Pil (ExprOp, Statement, _ConstBoolOp)
+import Blaze.Types.Pil (ExprOp, Statement, UpdateVarOp(..), VarFieldOp(..), VarJoinOp(..), VarOp(..), VarPhiOp(..), _ConstBoolOp, _FieldAddrOp, _StackLocalAddrOp)
 import Blaze.Types.Pil as Pil
 import Blaze.Types.Pil.Checker (InfoExpression(..), Sym(..), SymInfo(..), _SymInfo)
-import Blaze.Types.Pil.Common (PilVar(..))
+import Blaze.Types.Pil.Common (PilVar(..), StackOffset(..), _StackOffset)
 import Blaze.Types.Pil.Op.AdcOp (_AdcOp)
 import Blaze.Types.Pil.Op.AddOp (_AddOp)
 import Blaze.Types.Pil.Op.AddOverflowOp (_AddOverflowOp)
@@ -44,6 +44,40 @@ import Blaze.Types.Pil.Op.FcmpNeOp (_FcmpNeOp)
 import Blaze.Types.Pil.Op.FcmpOOp (_FcmpOOp)
 import Blaze.Types.Pil.Op.FcmpUoOp (_FcmpUoOp)
 import Blaze.Types.Pil.Op.FdivOp (_FdivOp)
+import Blaze.Types.Pil.Op.FloatConvOp (_FloatConvOp)
+import Blaze.Types.Pil.Op.FloatToIntOp (_FloatToIntOp)
+import Blaze.Types.Pil.Op.FloorOp (_FloorOp)
+import Blaze.Types.Pil.Op.FmulOp (_FmulOp)
+import Blaze.Types.Pil.Op.FnegOp (_FnegOp)
+import Blaze.Types.Pil.Op.FsqrtOp (_FsqrtOp)
+import Blaze.Types.Pil.Op.FsubOp (_FsubOp)
+import Blaze.Types.Pil.Op.FtruncOp (_FtruncOp)
+import Blaze.Types.Pil.Op.ImportOp (_ImportOp)
+import Blaze.Types.Pil.Op.IntToFloatOp (_IntToFloatOp)
+import Blaze.Types.Pil.Op.LoadOp (_LoadOp)
+import Blaze.Types.Pil.Op.LowPartOp (_LowPartOp)
+import Blaze.Types.Pil.Op.LslOp (_LslOp)
+import Blaze.Types.Pil.Op.LsrOp (_LsrOp)
+import Blaze.Types.Pil.Op.ModsDpOp (_ModsDpOp)
+import Blaze.Types.Pil.Op.ModsOp (_ModsOp)
+import Blaze.Types.Pil.Op.ModuDpOp (_ModuDpOp)
+import Blaze.Types.Pil.Op.ModuOp (_ModuOp)
+import Blaze.Types.Pil.Op.MulOp (_MulOp)
+import Blaze.Types.Pil.Op.MulsDpOp (_MulsDpOp)
+import Blaze.Types.Pil.Op.MuluDpOp (_MuluDpOp)
+import Blaze.Types.Pil.Op.NegOp (_NegOp)
+import Blaze.Types.Pil.Op.NotOp (_NotOp)
+import Blaze.Types.Pil.Op.OrOp (_OrOp)
+import Blaze.Types.Pil.Op.RlcOp (_RlcOp)
+import Blaze.Types.Pil.Op.RolOp (_RolOp)
+import Blaze.Types.Pil.Op.RorOp (_RorOp)
+import Blaze.Types.Pil.Op.RoundToIntOp (_RoundToIntOp)
+import Blaze.Types.Pil.Op.RrcOp (_RrcOp)
+import Blaze.Types.Pil.Op.SbbOp (_SbbOp)
+import Blaze.Types.Pil.Op.SubOp (_SubOp)
+import Blaze.Types.Pil.Op.SxOp (_SxOp)
+import Blaze.Types.Pil.Op.TestBitOp (_TestBitOp)
+import Blaze.UI.Prelude (showHex)
 import Blaze.UI.Socket (Conn(..))
 import Blaze.UI.Socket as Socket
 import Blaze.UI.Types (Nav(..))
@@ -66,9 +100,9 @@ import Control.Monad.State.Trans (StateT, runStateT)
 import Control.MultiAlternative (orr)
 import Control.Wire as Wire
 import Data.Array as Array
-import Data.BinaryAnalysis (Address(..), Bits(..), Bytes(..))
+import Data.BinaryAnalysis (Address(..), Bits(..), ByteOffset(..), Bytes(..), _ByteOffset, _Bytes)
 import Data.Int as Int
-import Data.Lens ((^.), (^?))
+import Data.Lens (view, (^.), (^?))
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Map (Map)
 import Data.Map as Map
@@ -124,6 +158,15 @@ intercalate x xs = case Array.uncons xs of
     Nothing -> [y]
     Just _ -> [y, x] <> intercalate x ys
 
+dispAddr :: Address -> FuncViewWidget StmtAction
+dispAddr (Address (Bytes x)) = D.text $ showHex x
+
+dispByteOffset :: ByteOffset -> FuncViewWidget StmtAction
+dispByteOffset = D.text <<< showHex <<< view _ByteOffset
+
+dispStackOffset :: StackOffset -> FuncViewWidget StmtAction
+dispStackOffset (StackOffset x) =
+  D.text <<< showHex $ x.offset ^. _ByteOffset
 
 dispExprOp :: Bits
            -> ExprOp SymExpression
@@ -169,64 +212,72 @@ dispExprOp sz xop = case xop of
   (Pil.FCMP_UO op) -> dispBinOp "fcmpUO" $ op ^. _FcmpUoOp
   (Pil.FDIV op) -> dispBinOp "fdiv" $ op ^. _FdivOp
 
-  -- (Pil.FIELD_ADDR op) -> 
-  --   "fieldAddr"
-  --   <-> paren (disp $ op ^. #baseAddr)
-  --   <-> paren (disp $ op ^. #offset)
+  (Pil.FIELD_ADDR op) ->
+    expr "fieldAddr"
+    [ bracket $ dispExpr (op ^. _FieldAddrOp).baseAddr
+    , D.text <<< showHex $ (op ^. _FieldAddrOp).offset ^. _ByteOffset
+    ]
 
-  -- (Pil.FLOAT_CONV op) -> dispUnOp "floatConv" op size
-  -- (Pil.FLOAT_TO_INT op) -> dispUnOp "floatToInt" op size
-  -- (Pil.FLOOR op) -> dispUnOp "floor" op size
-  -- (Pil.FMUL op) -> dispBinOp "fmul" op size
-  -- (Pil.FNEG op) -> dispUnOp "fneg" op size
-  -- (Pil.FSQRT op) -> dispUnOp "fsqrt" op size
-  -- (Pil.FSUB op) -> dispBinOp "fsub" op size
-  -- (Pil.FTRUNC op) -> dispUnOp "ftrunc" op size
-  -- (Pil.IMPORT op) -> dispConst "import" op size
-  -- (Pil.INT_TO_FLOAT op) -> dispUnOp "intToFloat" op size
-  -- (Pil.LOAD op) -> dispUnOp "load" op size
-  -- -- TODO: add memory versions for all SSA ops
-  -- (Pil.LOW_PART op) -> dispUnOp "lowPart" op size
-  -- (Pil.LSL op) -> dispBinOp "lsl" op size
-  -- (Pil.LSR op) -> dispBinOp "lsr" op size
-  -- (Pil.MODS op) -> dispBinOp "mods" op size
-  -- (Pil.MODS_DP op) -> dispBinOp "modsDP" op size
-  -- (Pil.MODU op) -> dispBinOp "modu" op size
-  -- (Pil.MODU_DP op) -> dispBinOp "moduDP" op size
-  -- (Pil.MUL op) -> dispBinOp "mul" op size
-  -- (Pil.MULS_DP op) -> dispBinOp "mulsDP" op size
-  -- (Pil.MULU_DP op) -> dispBinOp "muluDP" op size
-  -- (Pil.NEG op) -> dispUnOp "neg" op size
-  -- (Pil.NOT op) -> dispUnOp "not" op size
-  -- (Pil.OR op) -> dispBinOp "or" op size
+  (Pil.FLOAT_CONV op) -> dispUnOp "floatConv" $ op ^. _FloatConvOp
+  (Pil.FLOAT_TO_INT op) -> dispUnOp "floatToInt" $ op ^. _FloatToIntOp
+  (Pil.FLOOR op) -> dispUnOp "floor" $ op ^. _FloorOp
+  (Pil.FMUL op) -> dispBinOp "fmul" $ op ^. _FmulOp
+  (Pil.FNEG op) -> dispUnOp "fneg" $ op ^. _FnegOp
+  (Pil.FSQRT op) -> dispUnOp "fsqrt" $ op ^. _FsqrtOp
+  (Pil.FSUB op) -> dispBinOp "fsub" $ op ^. _FsubOp
+  (Pil.FTRUNC op) -> dispUnOp "ftrunc" $ op ^. _FtruncOp
+  (Pil.IMPORT op) -> dispConst "import" $ op ^. _ImportOp
+  (Pil.INT_TO_FLOAT op) -> dispUnOp "intToFloat" $ op ^. _IntToFloatOp
+  (Pil.LOAD op) -> dispUnOp "load" $ op ^. _LoadOp
+  -- TODO: add memory versions for all SSA ops
+  (Pil.LOW_PART op) -> dispUnOp "lowPart" $ op ^. _LowPartOp
+  (Pil.LSL op) -> dispBinOp "lsl" $ op ^. _LslOp
+  (Pil.LSR op) -> dispBinOp "lsr" $ op ^. _LsrOp
+  (Pil.MODS op) -> dispBinOp "mods" $ op ^. _ModsOp
+  (Pil.MODS_DP op) -> dispBinOp "modsDP" $ op ^. _ModsDpOp
+  (Pil.MODU op) -> dispBinOp "modu" $ op ^. _ModuOp
+  (Pil.MODU_DP op) -> dispBinOp "moduDP" $ op ^. _ModuDpOp
+  (Pil.MUL op) -> dispBinOp "mul" $ op ^. _MulOp
+  (Pil.MULS_DP op) -> dispBinOp "mulsDP" $ op ^. _MulsDpOp
+  (Pil.MULU_DP op) -> dispBinOp "muluDP" $ op ^. _MuluDpOp
+  (Pil.NEG op) -> dispUnOp "neg" $ op ^. _NegOp
+  (Pil.NOT op) -> dispUnOp "not" $ op ^. _NotOp
+  (Pil.OR op) -> dispBinOp "or" $ op ^. _OrOp
   -- -- TODO: Need to add carry
-  -- (Pil.RLC op) -> dispBinOp "rlc" op size
-  -- (Pil.ROL op) -> dispBinOp "rol" op size
-  -- (Pil.ROR op) -> dispBinOp "ror" op size
-  -- (Pil.ROUND_TO_INT op) -> dispUnOp "roundToInt" op size
+  (Pil.RLC op) -> dispBinCarryOp "rlc" $ op ^. _RlcOp
+  (Pil.ROL op) -> dispBinOp "rol" $ op ^. _RolOp
+  (Pil.ROR op) -> dispBinOp "ror" $ op ^. _RorOp
+  (Pil.ROUND_TO_INT op) -> dispUnOp "roundToInt" $ op ^. _RoundToIntOp
   -- -- TODO: Need to add carry
-  -- (Pil.RRC op) -> dispBinOp "rrc" op size
-  -- (Pil.SBB op) -> dispBinOp "sbb" op size
-  -- (Pil.STACK_LOCAL_ADDR op) -> "stackLocalAddr" <-> paren (disp $ op ^. #stackOffset)
-  -- (Pil.SUB op) -> dispBinOp "sub" op size
-  -- (Pil.SX op) -> dispUnOp "sx" op size
-  -- (Pil.TEST_BIT op) -> dispBinOp "testBit" op size
-  -- (Pil.UNIMPL t) -> "unimpl" <-> paren t
-  -- (Pil.UPDATE_VAR op) ->
-  --   "updateVar"
-  --   <-> paren (disp $ op ^. #dest)
-  --   <-> paren (disp $ op ^. #offset)
-  --   <-> paren (disp $ op ^. #src)
-  -- (Pil.VAR_PHI op) -> Text.pack $ printf "%s <- %s" (disp (op ^. #dest)) srcs
-  --   where
-  --     srcs :: Text
-  --     srcs = show (fmap disp (op ^. #src))
-  -- (Pil.VAR_JOIN op) -> Text.pack $ printf "varJoin %s %s %s" (disp (op ^. #high)) (disp (op ^. #low)) (disp size)
-  -- -- (Pil.VAR op) -> Text.pack $ printf "var \"%s\" %s" (disp $ op ^. Pil.src) (disp size)
-  -- -- TODO: Need size added
-  -- (Pil.VAR op) -> dispVar "var" op size
-  -- -- TODO: Add field offset
-  -- (Pil.VAR_FIELD op) -> dispField "varField" op size
+  (Pil.RRC op) -> dispBinCarryOp "rrc" $ op ^. _RrcOp
+  (Pil.SBB op) -> dispBinCarryOp "sbb" $ op ^. _SbbOp
+  (Pil.STACK_LOCAL_ADDR op) ->
+    expr "stackLocalAddr"
+    [ paren <<< dispStackOffset $ (op ^. _StackLocalAddrOp).stackOffset
+    ]
+  (Pil.SUB op) -> dispBinOp "sub" $ op ^. _SubOp
+  (Pil.SX op) -> dispUnOp "sx" $ op ^. _SxOp
+  (Pil.TEST_BIT op) -> dispBinOp "testBit" $ op ^. _TestBitOp
+  (Pil.UNIMPL t) -> expr "unimpl" [paren $ D.text t]
+  (Pil.UPDATE_VAR (UpdateVarOp op)) ->
+    expr "updateVar"
+    [ dispPilVar op.dest
+    , D.text <<< showHex $ op.offset ^. _ByteOffset
+    , paren $ dispExpr op.src
+    ]
+  (Pil.VAR_PHI (VarPhiOp op)) ->
+    expr "varPhi"
+    [ dispPilVar op.dest
+    , bracket <<< orr $ dispPilVar <$> op.src
+    ]
+  (Pil.VAR_JOIN (VarJoinOp op)) ->
+    expr "varJoin" [dispPilVar op.high, dispPilVar op.low]
+  (Pil.VAR (VarOp op)) -> expr "var" [ dispPilVar op.src ]
+  -- TODO: Add field offset
+  (Pil.VAR_FIELD (VarFieldOp op)) ->
+    expr "varField" [ dispPilVar op.src
+                    , dispByteOffset op.offset
+                    ]
   -- (Pil.XOR op) -> dispBinOp "xor" op size
   -- (Pil.ZX op) -> dispUnOp "zx" op size
   -- (Pil.CALL op) -> case op ^. #name of
@@ -338,26 +389,31 @@ dispExprOp sz xop = case xop of
     expr opStr xs = D.span [] $ [ dispOpStr opStr ] <> xs
                     <> (intercalate (D.text " ") xs)
 
-    parenExpr arg = orr [ D.text "("
-                        , dispExpr arg
-                        , D.text ")"
-                        ]
+    bracket x = orr [ D.text "["
+                    , x
+                    , D.text "]"
+                    ]
+
+    paren x = orr [ D.text "("
+                  , x
+                  , D.text ")"
+                  ]
 
     dispOpStr opStr =
       D.span [ P.className "pil-expr-op" ]
       [ D.text opStr ]
 
-    dispUnOp opStr op = expr opStr [parenExpr op.src]
+    dispUnOp opStr op = expr opStr [paren $ dispExpr op.src]
 
     dispBinOp opStr op =
-      expr opStr [ parenExpr op.left
-                 , parenExpr op.right
+      expr opStr [ paren $ dispExpr op.left
+                 , paren $ dispExpr op.right
                  ]
 
     dispBinCarryOp opStr op =
-      expr opStr [ parenExpr op.left
-                 , parenExpr op.right
-                 , parenExpr op.carry
+      expr opStr [ paren $ dispExpr op.left
+                 , paren $ dispExpr op.right
+                 , paren $ dispExpr op.carry
                  ]
     
     dispConst :: forall a r. Show a => String -> { constant :: a | r } -> FuncViewWidget StmtAction
