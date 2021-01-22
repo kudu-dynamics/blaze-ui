@@ -5,7 +5,7 @@ import Prelude
 
 import Blaze.Types.CallGraph (_Function)
 import Blaze.Types.CallGraph as CG
-import Blaze.Types.Pil (ExprOp, Statement, UpdateVarOp(..), VarFieldOp(..), VarJoinOp(..), VarOp(..), VarPhiOp(..), _ConstBoolOp, _FieldAddrOp, _StackLocalAddrOp)
+import Blaze.Types.Pil (CallDest, CallOp(..), ConstStrOp(..), ExprOp(..), ExtractOp(..), MemCmpOp(..), Statement, StrCmpOp(..), StrNCmpOp(..), UpdateVarOp(..), VarFieldOp(..), VarJoinOp(..), VarOp(..), VarPhiOp(..), _ConstBoolOp, _FieldAddrOp, _StackLocalAddrOp)
 import Blaze.Types.Pil as Pil
 import Blaze.Types.Pil.Checker (InfoExpression(..), Sym(..), SymInfo(..), _SymInfo)
 import Blaze.Types.Pil.Common (PilVar(..), StackOffset(..), _StackOffset)
@@ -77,6 +77,8 @@ import Blaze.Types.Pil.Op.SbbOp (_SbbOp)
 import Blaze.Types.Pil.Op.SubOp (_SubOp)
 import Blaze.Types.Pil.Op.SxOp (_SxOp)
 import Blaze.Types.Pil.Op.TestBitOp (_TestBitOp)
+import Blaze.Types.Pil.Op.XorOp (XorOp(..))
+import Blaze.Types.Pil.Op.ZxOp (ZxOp(..))
 import Blaze.UI.Prelude (showHex)
 import Blaze.UI.Socket (Conn(..))
 import Blaze.UI.Socket as Socket
@@ -101,6 +103,8 @@ import Control.MultiAlternative (orr)
 import Control.Wire as Wire
 import Data.Array as Array
 import Data.BinaryAnalysis (Address(..), Bits(..), ByteOffset(..), Bytes(..), _ByteOffset, _Bytes)
+import Data.Generic.Rep (class Generic)
+import Data.Generic.Rep.Show (genericShow)
 import Data.Int as Int
 import Data.Lens (view, (^.), (^?))
 import Data.Lens.Iso.Newtype (_Newtype)
@@ -133,6 +137,12 @@ type FuncViewState = { conn :: Conn ServerToWeb WebToServer
 
 data StmtAction = HighlightSym Sym
                 | Unhighlight
+
+derive instance genericStmtAction :: Generic StmtAction _
+instance showStmtAction :: Show StmtAction where
+  show x = genericShow x
+
+
 
 type FuncViewWidget a = StateT FuncViewState (Widget HTML) a
 
@@ -168,10 +178,11 @@ dispStackOffset :: StackOffset -> FuncViewWidget StmtAction
 dispStackOffset (StackOffset x) =
   D.text <<< showHex $ x.offset ^. _ByteOffset
 
-dispExprOp :: Bits
+
+dispExprOp :: SymInfo
            -> ExprOp SymExpression
            -> FuncViewWidget StmtAction
-dispExprOp sz xop = case xop of
+dispExprOp (SymInfo sinfo) xop = case xop of
   (Pil.ADC op) -> dispBinCarryOp "adc" $ op ^. _AdcOp
   (Pil.ADD op) -> dispBinOp "add" $ op ^. _AddOp
   (Pil.ADD_OVERFLOW op) -> dispBinOp "addOf" $ op ^. _AddOverflowOp
@@ -272,122 +283,62 @@ dispExprOp sz xop = case xop of
     ]
   (Pil.VAR_JOIN (VarJoinOp op)) ->
     expr "varJoin" [dispPilVar op.high, dispPilVar op.low]
-  (Pil.VAR (VarOp op)) -> expr "var" [ dispPilVar op.src ]
+  (Pil.VAR (VarOp op)) -> dispPilVar op.src
   -- TODO: Add field offset
   (Pil.VAR_FIELD (VarFieldOp op)) ->
     expr "varField" [ dispPilVar op.src
                     , dispByteOffset op.offset
                     ]
-  -- (Pil.XOR op) -> dispBinOp "xor" op size
-  -- (Pil.ZX op) -> dispUnOp "zx" op size
-  -- (Pil.CALL op) -> case op ^. #name of
-  --   (Just name) -> Text.pack $ printf "call %s %s %s" name dest params
-  --   Nothing -> Text.pack $ printf "call (Nothing) %s %s" dest params
-  --   where
-  --     dest = disp (op ^. #dest)
-  --     params :: Text
-  --     params = show (fmap disp (op ^. #params))
-  -- (Pil.StrCmp op) -> dispBinOp "strcmp" op size
-  -- (Pil.StrNCmp op) -> Text.pack $ printf "strncmp %d %s %s %s" (op ^. #len) (disp (op ^. #left)) (disp (op ^. #right)) (disp size)
-  -- (Pil.MemCmp op) -> dispBinOp "memcmp" op size
+  (Pil.XOR (XorOp op)) -> dispBinOp "xor" op
+  (Pil.ZX (ZxOp op)) -> dispUnOp "zx" op
+  (Pil.CALL (CallOp op)) -> 
+      expr "call" [ D.text $ fromMaybe "(Nothing)" op.name
+                  , dispCallDest op.dest
+                  , orr $ dispExpr <$> op.params
+                  ]
+  (Pil.StrCmp (StrCmpOp op)) -> dispBinOp "strcmp" op
+  (Pil.StrNCmp (StrNCmpOp op)) ->
+    expr "strncmp"
+    [ D.text $ show op.len
+    , paren <<< dispExpr $ op.left
+    , paren <<< dispExpr $ op.right
+    ]
+  (Pil.MemCmp (MemCmpOp op)) ->
+    expr "memcmp"
+    [ paren $ dispExpr op.left
+    , paren $ dispExpr op.right
+    , D.text <<< show $ op.size ^. _Bytes
+    ]
   -- -- TODO: Should ConstStr also use const rather than value as field name?
-  -- (Pil.ConstStr op) -> Text.pack $ printf "constStr \"%s\"" $ op ^. #value
-  -- (Pil.Extract op) -> Text.pack $ printf "extract %s %d" (disp (op ^. #src)) (op ^. #offset)
+  (Pil.ConstStr (ConstStrOp op)) ->
+    expr "constStr" [ D.text $ show op.value ]
+  (Pil.Extract (ExtractOp op)) ->
+    expr "extract"
+    [ paren $ dispExpr op.src
+    , D.text $ show op.offset
+    ]
 
-  -- (Pil.ADC x) -> todo
-  -- (Pil.ADD x) -> todo
-  -- (Pil.ADD_OVERFLOW x) -> todo
-  -- (Pil.AND x) -> todo
-  -- (Pil.ASR x) -> todo
-  -- (Pil.BOOL_TO_INT x) -> todo
-  -- (Pil.CEIL x) -> todo
-  -- (Pil.CMP_E x) -> todo
-  -- (Pil.CMP_NE x) -> todo
-  -- (Pil.CMP_SGE x) -> todo
-  -- (Pil.CMP_SGT x) -> todo
-  -- (Pil.CMP_SLE x) -> todo
-  -- (Pil.CMP_SLT x) -> todo
-  -- (Pil.CMP_UGE x) -> todo
-  -- (Pil.CMP_UGT x) -> todo
-  -- (Pil.CMP_ULE x) -> todo
-  -- (Pil.CMP_ULT x) -> todo
-  -- (Pil.CONST x) -> todo
-  -- (Pil.CONST_PTR x) -> todo
-  -- (Pil.CONST_FLOAT x) -> todo
-  -- (Pil.DIVS x) -> todo
-  -- (Pil.DIVS_DP x) -> todo
-  -- (Pil.DIVU x) -> todo
-  -- (Pil.DIVU_DP x) -> todo
-  -- (Pil.FABS x) -> todo
-  -- (Pil.FADD x) -> todo
-  -- (Pil.FCMP_E x) -> todo
-  -- (Pil.FCMP_GE x) -> todo
-  -- (Pil.FCMP_GT x) -> todo
-  -- (Pil.FCMP_LE x) -> todo
-  -- (Pil.FCMP_LT x) -> todo
-  -- (Pil.FCMP_NE x) -> todo
-  -- (Pil.FCMP_O x) -> todo
-  -- (Pil.FCMP_UO x) -> todo
-  -- (Pil.FDIV x) -> todo
-  -- (Pil.FLOAT_CONV x) -> todo
-  -- (Pil.FLOAT_TO_INT x) -> todo
-  -- (Pil.FLOOR x) -> todo
-  -- (Pil.FMUL x) -> todo
-  -- (Pil.FNEG x) -> todo
-  -- (Pil.FSQRT x) -> todo
-  -- (Pil.FSUB x) -> todo
-  -- (Pil.FTRUNC x) -> todo
-  -- (Pil.IMPORT x) -> todo
-  -- (Pil.INT_TO_FLOAT x) -> todo
-  -- (Pil.LOAD x) -> todo
-  -- (Pil.LOW_PART x) -> todo
-  -- (Pil.LSL x) -> todo
-  -- (Pil.LSR x) -> todo
-  -- (Pil.MODS x) -> todo
-  -- (Pil.MODS_DP x) -> todo
-  -- (Pil.MODU x) -> todo
-  -- (Pil.MODU_DP x) -> todo
-  -- (Pil.MUL x) -> todo
-  -- (Pil.MULS_DP x) -> todo
-  -- (Pil.MULU_DP x) -> todo
-  -- (Pil.NEG x) -> todo
-  -- (Pil.NOT x) -> todo
-  -- (Pil.OR x) -> todo
-  -- (Pil.RLC x) -> todo
-  -- (Pil.ROL x) -> todo
-  -- (Pil.ROR x) -> todo
-  -- (Pil.ROUND_TO_INT x) -> todo
-  -- (Pil.RRC x) -> todo
-  -- (Pil.SBB x) -> todo
-  -- (Pil.SUB x) -> todo
-  -- (Pil.SX x) -> todo
-  -- (Pil.TEST_BIT x) -> todo
-  -- (Pil.UNIMPL x) -> todo
-  -- (Pil.VAR_PHI x) -> todo
-  -- (Pil.VAR_JOIN x) -> todo
-  -- (Pil.VAR x) -> todo
-  -- (Pil.VAR_FIELD x) -> todo
-  -- (Pil.XOR x) -> todo
-  -- (Pil.ZX x) -> todo
-  -- (Pil.CALL x) -> todo
-  -- (Pil.Extract x) -> todo
-  -- (Pil.StrCmp x) -> todo
-  -- (Pil.StrNCmp x) -> todo
-  -- (Pil.MemCmp x) -> todo
-  -- (Pil.ConstStr x) -> todo
-  -- (Pil.STACK_LOCAL_ADDR x) -> todo
-  -- (Pil.UPDATE_VAR x) -> todo
-  -- (Pil.FIELD_ADDR x) -> todo
-  -- (Pil.CONST_BOOL x) -> todo
   _ -> todo
   where
-
+    isHighlighted :: FuncViewWidget Boolean
+    isHighlighted = do
+      st <- get
+      case st.highlightedSym of
+        Nothing -> pure false
+        Just s -> pure $ s == sinfo.sym
+      
     todo = D.span [ P.className "pil-expr-op" ] [D.text " todo "]
 
+    space = D.text " "
 
-    expr :: String -> Array (FuncViewWidget StmtAction) -> FuncViewWidget StmtAction
-    expr opStr xs = D.span [] $ [ dispOpStr opStr ] <> xs
-                    <> (intercalate (D.text " ") xs)
+    expr :: String
+         -> Array (FuncViewWidget StmtAction)
+         -> FuncViewWidget StmtAction
+    expr opStr xs = do
+      h <- isHighlighted
+      D.span
+        (if h then [P.className "expr-sym-highlight"] else [])
+        <<< intercalate space $ [ dispOpStr opStr ] <> xs
 
     bracket x = orr [ D.text "["
                     , x
@@ -400,7 +351,9 @@ dispExprOp sz xop = case xop of
                   ]
 
     dispOpStr opStr =
-      D.span [ P.className "pil-expr-op" ]
+      D.span [ P.className "pil-expr-op"
+             , P.onClick $> HighlightSym sinfo.sym
+             ]
       [ D.text opStr ]
 
     dispUnOp opStr op = expr opStr [paren $ dispExpr op.src]
@@ -423,14 +376,18 @@ dispExprOp sz xop = case xop of
                   [ D.text $ " " <> show x.constant ]
                 ]
 
+    dispCallDest :: CallDest SymExpression
+                 -> FuncViewWidget StmtAction
+    dispCallDest (Pil.CallConstPtr x) = dispConst "constPtr" $ x ^. _ConstPtrOp
+    dispCallDest (Pil.CallExpr x) = dispExpr x
+    dispCallDest (Pil.CallExprs xs) = orr $ paren <<< dispExpr <$> xs
 
 
 dispExpr :: SymExpression
          -> FuncViewWidget StmtAction
 dispExpr (InfoExpression x) =
-  D.span [ P.className "pil-expr" ] [ dispExprOp sz x.op ]
-  where
-    sz = (x.info ^. _SymInfo).size
+  D.span [ P.className "pil-expr" ] [ dispExprOp x.info x.op ]
+
 
 dispPilVar :: PilVar -> FuncViewWidget StmtAction
 dispPilVar pv@(PilVar x) = do
@@ -475,7 +432,6 @@ statement index stmt =
   , dispStmt stmt
   ]
 
-
 statements :: FuncViewWidget Unit
 statements = do
   D.div []
@@ -486,9 +442,11 @@ statements = do
     update (HighlightSym sym) = modify_ (_ {highlightedSym = Just sym})
     update Unhighlight= modify_ (_ {highlightedSym = Nothing})
 
+    view :: forall a. FuncViewWidget a
     view = do
       st <- get
       action <- orr $ (uncurry statement) <$> st.symStmts
+      log $ show action
       update action
       view
 
