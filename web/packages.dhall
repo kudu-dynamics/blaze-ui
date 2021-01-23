@@ -5,8 +5,8 @@ let overrides = {=}
 
 let additions = {=}
 
-in  upstream // overrides // additions
-  with foreign-generic =
+in upstream -- // overrides // additions
+   with foreign-generic =
     { dependencies =
         [ "assert"
         , "console"
