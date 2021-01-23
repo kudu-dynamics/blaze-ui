@@ -1,11 +1,7 @@
 let upstream =
       https://github.com/purescript/package-sets/releases/download/psc-0.13.8-20200831/packages.dhall sha256:cdb3529cac2cd8dd780f07c80fd907d5faceae7decfcaa11a12037df68812c83
 
-let overrides = {=}
-
-let additions = {=}
-
-in upstream -- // overrides // additions
+in upstream
    with foreign-generic =
     { dependencies =
         [ "assert"
@@ -26,7 +22,6 @@ in upstream -- // overrides // additions
         ]
     , repo =
         "https://github.com/mpdairy/purescript-foreign-generic.git"
-        -- "https://github.com/shmish111/purescript-foreign-generic.git"
     , version =
         "main"  -- branch, tag, or commit hash
     }
