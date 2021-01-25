@@ -1,8 +1,8 @@
 module Blaze.UI.App where
 
+import Blaze.UI.Prelude
 import Data.Monoid
 import Prelude
-import Blaze.UI.Prelude
 
 import Blaze.Types.CallGraph (_Function)
 import Blaze.Types.CallGraph as CG
@@ -10,7 +10,7 @@ import Blaze.UI.Components.FunctionView (functionView)
 import Blaze.UI.Socket (Conn(..))
 import Blaze.UI.Socket as Socket
 import Blaze.UI.Types (Nav(..))
-import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..), _SWFunctionTypeReport, _SWFunctionsList)
+import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..), _SWFunctionTypeReport, _SWFunctionsList, _SWPilType)
 import Blaze.UI.Web.Pil (DeepSymType(..), PilType(..))
 import Concur.Core (Widget)
 import Concur.Core.Types (affAction, pulse)
@@ -200,6 +200,10 @@ app conn = do
   funcs <- orr
            [ D.text "loading function list..."
            , liftAff $ Socket.getMessageWith conn (_ ^? _SWFunctionsList)
+           , do
+             m <- liftAff $ Socket.getMessageWith conn (_ ^? _SWPilType)
+             log (show m)
+             D.text "got it"
            ]
   selectedFunc <- funcList conn funcs
   functionView conn selectedFunc

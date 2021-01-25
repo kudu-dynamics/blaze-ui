@@ -54,7 +54,7 @@ import Blaze.Types.Pil.Op.FsubOp (_FsubOp)
 import Blaze.Types.Pil.Op.FtruncOp (_FtruncOp)
 import Blaze.Types.Pil.Op.ImportOp (_ImportOp)
 import Blaze.Types.Pil.Op.IntToFloatOp (_IntToFloatOp)
-import Blaze.Types.Pil.Op.LoadOp (_LoadOp)
+import Blaze.Types.Pil.Op.LoadOp (LoadOp(..), _LoadOp)
 import Blaze.Types.Pil.Op.LowPartOp (_LowPartOp)
 import Blaze.Types.Pil.Op.LslOp (_LslOp)
 import Blaze.Types.Pil.Op.LsrOp (_LsrOp)
@@ -103,6 +103,7 @@ import Control.MultiAlternative (orr)
 import Control.Wire as Wire
 import Data.Array as Array
 import Data.BinaryAnalysis (Address(..), Bits(..), ByteOffset(..), Bytes(..), _ByteOffset, _Bytes)
+import Data.Foldable (fold, foldr)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Int as Int
@@ -178,33 +179,54 @@ dispStackOffset :: StackOffset -> FuncViewWidget StmtAction
 dispStackOffset (StackOffset x) =
   D.text <<< showHex $ x.offset ^. _ByteOffset
 
+classes :: forall a. Array String -> ReactProps a
+classes = P.className <<< foldr (<>) "" <<< intercalate " "
+
+curly :: forall a. FuncViewWidget a -> FuncViewWidget a
+curly x = orr [ D.text "{"
+              , x
+              , D.text "}"
+              ]
+
+bracket :: forall a. FuncViewWidget a -> FuncViewWidget a
+bracket x = orr [ D.text "["
+                , x
+                , D.text "]"
+                ]
+
+paren :: forall a. FuncViewWidget a -> FuncViewWidget a
+paren x = orr [ D.text "("
+              , x
+              , D.text ")"
+              ]
+
 
 dispExprOp :: SymInfo
            -> ExprOp SymExpression
            -> FuncViewWidget StmtAction
 dispExprOp (SymInfo sinfo) xop = case xop of
   (Pil.ADC op) -> dispBinCarryOp "adc" $ op ^. _AdcOp
-  (Pil.ADD op) -> dispBinOp "add" $ op ^. _AddOp
+  (Pil.ADD op) -> infixBinOp "+" $ op ^. _AddOp
   (Pil.ADD_OVERFLOW op) -> dispBinOp "addOf" $ op ^. _AddOverflowOp
-  (Pil.AND op) -> dispBinOp "and" $ op ^. _AndOp
+  (Pil.AND op) -> infixBinOp "&&" $ op ^. _AndOp
   (Pil.ASR op) -> dispBinOp "asr" $ op ^. _AsrOp
   (Pil.BOOL_TO_INT op) -> dispUnOp "boolToInt" $ op ^. _BoolToIntOp
   (Pil.CEIL op) -> dispUnOp "ceil" $ op ^. _CeilOp
-  (Pil.CMP_E op) -> dispBinOp "cmpE" $ op ^. _CmpEOp
-  (Pil.CMP_NE op) -> dispBinOp "cmpNE" $ op ^. _CmpNeOp
-  (Pil.CMP_SGE op) -> dispBinOp "cmpSGE" $ op ^. _CmpSgeOp
-  (Pil.CMP_SGT op) -> dispBinOp "cmpSGT" $ op ^. _CmpSgtOp
-  (Pil.CMP_SLE op) -> dispBinOp "cmpSLE" $ op ^. _CmpSleOp
-  (Pil.CMP_SLT op) -> dispBinOp "cmpSLT" $ op ^. _CmpSltOp
-  (Pil.CMP_UGE op) -> dispBinOp "cmpUGE" $ op ^. _CmpUgeOp
-  (Pil.CMP_UGT op) -> dispBinOp "cmpUGT" $ op ^. _CmpUgtOp
-  (Pil.CMP_ULE op) -> dispBinOp "cmpULE" $ op ^. _CmpUleOp
-  (Pil.CMP_ULT op) -> dispBinOp "cmpULT" $ op ^. _CmpUltOp
+  (Pil.CMP_E op) -> infixBinOp "==" $ op ^. _CmpEOp
+  (Pil.CMP_NE op) -> infixBinOp "!=" $ op ^. _CmpNeOp
+  (Pil.CMP_SGE op) -> infixBinOp "s>=" $ op ^. _CmpSgeOp
+  (Pil.CMP_SGT op) -> infixBinOp "s>" $ op ^. _CmpSgtOp
+  (Pil.CMP_SLE op) -> infixBinOp "s<=" $ op ^. _CmpSleOp
+  (Pil.CMP_SLT op) -> infixBinOp "s<" $ op ^. _CmpSltOp
+  (Pil.CMP_UGE op) -> infixBinOp "u>=" $ op ^. _CmpUgeOp
+  (Pil.CMP_UGT op) -> infixBinOp "u>" $ op ^. _CmpUgtOp
+  (Pil.CMP_ULE op) -> infixBinOp "u<=" $ op ^. _CmpUleOp
+  (Pil.CMP_ULT op) -> infixBinOp "u<" $ op ^. _CmpUltOp
 
   (Pil.CONST op) -> dispConst "const" $ op ^. _ConstOp
   (Pil.CONST_BOOL op) -> dispConst "bool" $ op ^. _ConstBoolOp
   (Pil.CONST_FLOAT op) -> dispConst "float" $ op ^. _ConstFloatOp
-  (Pil.CONST_PTR op) -> dispConst "constPtr" $ op ^. _ConstPtrOp
+  (Pil.CONST_PTR op) -> dispConst "ptr" $ op ^. _ConstPtrOp
   
   (Pil.DIVS op) -> dispBinOp "divs" $ op ^. _DivsOp
   (Pil.DIVS_DP op) -> dispBinOp "divsDP" $ op ^. _DivsDpOp
@@ -212,13 +234,13 @@ dispExprOp (SymInfo sinfo) xop = case xop of
   (Pil.DIVU_DP op) -> dispBinOp "divuDP" $ op ^. _DivuDpOp
   (Pil.FABS op) -> dispUnOp "fabs" $ op ^. _FabsOp
 
-  (Pil.FADD op) -> dispBinOp "fadd" $ op ^. _FaddOp
-  (Pil.FCMP_E op) -> dispBinOp "fcmpE" $ op ^. _FcmpEOp
-  (Pil.FCMP_GE op) -> dispBinOp "fcmpGE" $ op ^. _FcmpGeOp
-  (Pil.FCMP_GT op) -> dispBinOp "fcmpGT" $ op ^. _FcmpGtOp
-  (Pil.FCMP_LE op) -> dispBinOp "fcmpLE" $ op ^. _FcmpLeOp
-  (Pil.FCMP_LT op) -> dispBinOp "fcmpLT" $ op ^. _FcmpLtOp
-  (Pil.FCMP_NE op) -> dispBinOp "fcmpNE" $ op ^. _FcmpNeOp
+  (Pil.FADD op) -> infixBinOp "f+" $ op ^. _FaddOp
+  (Pil.FCMP_E op) -> infixBinOp "f==" $ op ^. _FcmpEOp
+  (Pil.FCMP_GE op) -> infixBinOp "f>=" $ op ^. _FcmpGeOp
+  (Pil.FCMP_GT op) -> infixBinOp "f>" $ op ^. _FcmpGtOp
+  (Pil.FCMP_LE op) -> infixBinOp "f<=" $ op ^. _FcmpLeOp
+  (Pil.FCMP_LT op) -> infixBinOp "f<" $ op ^. _FcmpLtOp
+  (Pil.FCMP_NE op) -> infixBinOp "f!=" $ op ^. _FcmpNeOp
   (Pil.FCMP_O op) -> dispBinOp "fcmpO" $ op ^. _FcmpOOp
   (Pil.FCMP_UO op) -> dispBinOp "fcmpUO" $ op ^. _FcmpUoOp
   (Pil.FDIV op) -> dispBinOp "fdiv" $ op ^. _FdivOp
@@ -239,7 +261,7 @@ dispExprOp (SymInfo sinfo) xop = case xop of
   (Pil.FTRUNC op) -> dispUnOp "ftrunc" $ op ^. _FtruncOp
   (Pil.IMPORT op) -> dispConst "import" $ op ^. _ImportOp
   (Pil.INT_TO_FLOAT op) -> dispUnOp "intToFloat" $ op ^. _IntToFloatOp
-  (Pil.LOAD op) -> dispUnOp "load" $ op ^. _LoadOp
+  (Pil.LOAD (LoadOp op)) -> D.span [] [ bracket $ dispExpr op.src ]
   -- TODO: add memory versions for all SSA ops
   (Pil.LOW_PART op) -> dispUnOp "lowPart" $ op ^. _LowPartOp
   (Pil.LSL op) -> dispBinOp "lsl" $ op ^. _LslOp
@@ -293,8 +315,11 @@ dispExprOp (SymInfo sinfo) xop = case xop of
   (Pil.ZX (ZxOp op)) -> dispUnOp "zx" op
   (Pil.CALL (CallOp op)) -> 
       expr "call" [ D.text $ fromMaybe "(Nothing)" op.name
-                  , dispCallDest op.dest
-                  , orr $ dispExpr <$> op.params
+                  , paren $ dispCallDest op.dest
+                  , paren
+                    <<< orr
+                    <<< intercalate (D.text ", ")
+                    $ dispExpr <$> op.params
                   ]
   (Pil.StrCmp (StrCmpOp op)) -> dispBinOp "strcmp" op
   (Pil.StrNCmp (StrNCmpOp op)) ->
@@ -331,30 +356,44 @@ dispExprOp (SymInfo sinfo) xop = case xop of
 
     space = D.text " "
 
+    infixOp :: String
+            -> FuncViewWidget StmtAction
+            -> FuncViewWidget StmtAction
+            -> FuncViewWidget StmtAction
+    infixOp opStr a b = do
+      highlighted <- isHighlighted
+      D.span
+        []
+        [ a
+        , D.span [ P.onClick $> HighlightSym sinfo.sym
+                 , classes $ ["pointer-cursor", "pil-expr-op"]
+                   <> if highlighted then ["expr-sym-highlight"] else []
+                 ]
+          [ D.text opStr ]
+        , b
+        ]
+
+    infixBinOp opStr op =
+      infixOp opStr
+      (paren $ dispExpr op.left)
+      (paren $ dispExpr op.right)
+
     expr :: String
          -> Array (FuncViewWidget StmtAction)
          -> FuncViewWidget StmtAction
     expr opStr xs = do
-      h <- isHighlighted
+      highlighted <- isHighlighted
       D.span
-        (if h then [P.className "expr-sym-highlight"] else [])
+        []
         <<< intercalate space $ [ dispOpStr opStr ] <> xs
 
-    bracket x = orr [ D.text "["
-                    , x
-                    , D.text "]"
-                    ]
-
-    paren x = orr [ D.text "("
-                  , x
-                  , D.text ")"
-                  ]
-
-    dispOpStr opStr =
-      D.span [ P.className "pil-expr-op"
-             , P.onClick $> HighlightSym sinfo.sym
+    dispOpStr opStr = do
+      highlighted <- isHighlighted
+      D.span [ P.onClick $> HighlightSym sinfo.sym
+             , classes $ ["pointer-cursor", "pil-expr-op"]
+                <> if highlighted then ["expr-sym-highlight"] else []
              ]
-      [ D.text opStr ]
+        [ D.text opStr ]
 
     dispUnOp opStr op = expr opStr [paren $ dispExpr op.src]
 
@@ -392,8 +431,10 @@ dispExpr (InfoExpression x) =
 dispPilVar :: PilVar -> FuncViewWidget StmtAction
 dispPilVar pv@(PilVar x) = do
   st <- get
-  let msym = Map.lookup pv st.varSymMap 
-  r <- D.span [ P.className "pilvar"
+  let msym = Map.lookup pv st.varSymMap
+  let highlighted = fromMaybe false $ (==) <$> msym <*> st.highlightedSym
+  r <- D.span [ classes $ ["pilvar", "pointer-cursor"]
+                <> if highlighted then ["expr-sym-highlight"] else []
               , P.onClick $> (HighlightSym <$> msym)
               ]
        [ D.text x.symbol ]
@@ -407,8 +448,15 @@ dispStmt stmt = case stmt of
               , D.text " = "
               , dispExpr x.value
               ]
-  Pil.Constraint _ -> todo
-  Pil.Store (Pil.StoreOp a) -> todo
+  Pil.Constraint (Pil.ConstraintOp x) ->
+    D.span [] [ D.text "?: "
+              , dispExpr x.condition
+              ]
+  Pil.Store (Pil.StoreOp x) ->
+    D.span [] [ bracket $ dispExpr x.addr
+              , D.text " = "
+              , dispExpr x.value 
+              ]
   Pil.UnimplInstr s -> todo
   Pil.UnimplMem (Pil.UnimplMemOp a) -> todo
   Pil.Undef -> todo
@@ -417,7 +465,12 @@ dispStmt stmt = case stmt of
   Pil.EnterContext (Pil.EnterContextOp a) -> todo
   Pil.ExitContext (Pil.ExitContextOp a) -> todo
   Pil.Call (Pil.CallOp a) -> todo
-  Pil.DefPhi (Pil.DefPhiOp a) -> todo
+  Pil.DefPhi (Pil.DefPhiOp x) ->
+    D.span [] [ dispPilVar x.dest
+              , D.text " = Φ"
+              , orr <<< intercalate (D.text ", ") $ dispPilVar <$> x.src
+              ]
+    
   where
     wrapper = D.span
     todo = wrapper [] [D.text "_"]

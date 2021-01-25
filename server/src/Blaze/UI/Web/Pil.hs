@@ -171,12 +171,12 @@ convertPilType = \case
 
 
 testPilType :: DeepSymType
-testPilType = DSType TBool
-  -- ( TBitVector
-  --   ( TBitVectorOp
-  --     { bitWidth = DSType
-  --       ( TVBitWidth ( Bits 64 ) )
-  --     }
-  --   )
-  -- )
+testPilType = DSType -- TBool
+  ( TBitVector
+    ( TBitVectorOp
+      { bitWidth = DSType
+        ( TVBitWidth ( Bits 64 ) )
+      }
+    )
+  )
 

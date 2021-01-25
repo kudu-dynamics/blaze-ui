@@ -38,7 +38,7 @@ class BlazeIO():
     def send(self, bv, msg):
         self.__init_thread()
         self.bv_mapping[bv.file.filename] = bv
-        new_msg = {"_bvFilePath" : bv.file.filename, "_action" : msg}
+        new_msg = {"bvFilePath" : bv.file.filename, "action" : msg}
         self.out_queue.put(new_msg)
         
 
@@ -74,8 +74,8 @@ async def recv_loop(websocket, bv_mapping):
 
         # log_info(f"recv {msg}")
         try:
-            bv = bv_mapping[msg['_bvFilePath']]
-            message_handler(bv, msg['_action'])
+            bv = bv_mapping[msg['bvFilePath']]
+            message_handler(bv, msg['action'])
         except:
             log_warn(f"recv_loop: couldn't find bv in mapping for {msg}")
                      
