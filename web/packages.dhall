@@ -5,9 +5,7 @@ let overrides = {=}
 
 let additions = {=}
 
-in  upstream // overrides // additions
-  with foreign-generic = /tmp/kudu/purescript/purescript-foreign-generic/spago.dhall as Location
-
+in  upstream
   with foreign-generic =
     { dependencies =
         [ "assert"

@@ -256,8 +256,9 @@ handleWebEvent bv = \case
 
   WSGetFunctionsList -> do
     funcs <- liftIO $ Blaze.Import.CallGraph.getFunctions bvi
-    sendToWeb $ SWPilType WebPil.testPilType
-    -- sendToWeb $ SWFunctionsList funcs
+    -- sendToWeb $ SWPilType WebPil.testPilType
+    -- sendToWeb $ SWProblemType WebPil.testCallOp
+    sendToWeb $ SWFunctionsList funcs
     
   WSTextMessage t -> do
     debug $ "Text Message from Web: " <> t
@@ -276,9 +277,10 @@ handleWebEvent bv = \case
       Right (func, tr) -> do
         printTypeReportToConsole func tr
         let tr' = WebPil.toTypeReport tr
+        -- let tr'' = tr' & #symStmts %~ (take 1 . drop 7)
+        --let tr'' = tr' & #symStmts .~ WebPil.testCallOp
         liftIO $ pprint tr'
         sendToWeb $ SWFunctionTypeReport tr'
-        -- sendToWeb $ SWPilType WebPil.testPilType
   where
     bvi = BNImporter bv
 

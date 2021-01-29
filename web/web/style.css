@@ -8,3 +8,18 @@
 {
     cursor: pointer;
 }
+
+.type-report-statements {
+    width: 65%;
+}
+.type-report-types {
+    width: 35%;
+}
+
+.func-list-grid-item {
+    width: 25%;
+}
+
+.non-func-list-grid-item {
+    width: 75%;
+}

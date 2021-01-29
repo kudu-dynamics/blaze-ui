@@ -3,21 +3,23 @@ module Data.BinaryAnalysis where
 
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
+import Data.Int64 (Int64)
 import Data.Lens (Iso', Lens', Prism', lens, prism')
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Lens.Record (prop)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype)
 import Data.Symbol (SProxy(SProxy))
+import Data.Word64 (Word64)
 import Foreign.Class (class Decode, class Encode)
 import Foreign.Generic (aesonSumEncoding, defaultOptions, genericDecode, genericEncode)
 import Foreign.Generic.EnumEncoding (defaultGenericEnumOptions, genericDecodeEnum, genericEncodeEnum)
-import Prim (Int, String)
+import Prim (String)
 
 import Prelude
 
 newtype Bytes
-  = Bytes Int
+  = Bytes Word64
 
 
 instance showBytes :: Show Bytes where
@@ -35,11 +37,11 @@ instance decodeBytes :: Decode Bytes where
 derive instance genericBytes :: Generic Bytes _
 derive instance newtypeBytes :: Newtype Bytes _
 --------------------------------------------------------------------------------
-_Bytes :: Iso' Bytes Int
+_Bytes :: Iso' Bytes Word64
 _Bytes = _Newtype
 --------------------------------------------------------------------------------
 newtype Bits
-  = Bits Int
+  = Bits Word64
 
 
 instance showBits :: Show Bits where
@@ -57,11 +59,11 @@ instance decodeBits :: Decode Bits where
 derive instance genericBits :: Generic Bits _
 derive instance newtypeBits :: Newtype Bits _
 --------------------------------------------------------------------------------
-_Bits :: Iso' Bits Int
+_Bits :: Iso' Bits Word64
 _Bits = _Newtype
 --------------------------------------------------------------------------------
 newtype ByteOffset
-  = ByteOffset Int
+  = ByteOffset Int64
 
 
 instance showByteOffset :: Show ByteOffset where
@@ -79,11 +81,11 @@ instance decodeByteOffset :: Decode ByteOffset where
 derive instance genericByteOffset :: Generic ByteOffset _
 derive instance newtypeByteOffset :: Newtype ByteOffset _
 --------------------------------------------------------------------------------
-_ByteOffset :: Iso' ByteOffset Int
+_ByteOffset :: Iso' ByteOffset Int64
 _ByteOffset = _Newtype
 --------------------------------------------------------------------------------
 newtype BitOffset
-  = BitOffset Int
+  = BitOffset Int64
 
 
 instance showBitOffset :: Show BitOffset where
@@ -101,7 +103,7 @@ instance decodeBitOffset :: Decode BitOffset where
 derive instance genericBitOffset :: Generic BitOffset _
 derive instance newtypeBitOffset :: Newtype BitOffset _
 --------------------------------------------------------------------------------
-_BitOffset :: Iso' BitOffset Int
+_BitOffset :: Iso' BitOffset Int64
 _BitOffset = _Newtype
 --------------------------------------------------------------------------------
 newtype AddressWidth

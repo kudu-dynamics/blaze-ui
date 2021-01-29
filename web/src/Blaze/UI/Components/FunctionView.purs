@@ -79,12 +79,12 @@ import Blaze.Types.Pil.Op.SxOp (_SxOp)
 import Blaze.Types.Pil.Op.TestBitOp (_TestBitOp)
 import Blaze.Types.Pil.Op.XorOp (XorOp(..))
 import Blaze.Types.Pil.Op.ZxOp (ZxOp(..))
-import Blaze.UI.Prelude (showHex)
+import Blaze.UI.Prelude (prop, showHex)
 import Blaze.UI.Socket (Conn(..))
 import Blaze.UI.Socket as Socket
 import Blaze.UI.Types (Nav(..))
 import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..), _SWFunctionTypeReport, _SWFunctionsList, _SWPilType)
-import Blaze.UI.Web.Pil (DeepSymType, TypeReport(..), TypedExpr(..))
+import Blaze.UI.Web.Pil (DeepSymType(..), TypeReport(..), TypedExpr(..))
 import Concur.Core (Widget)
 import Concur.Core.Types (affAction, pulse)
 import Concur.MaterialUI as M
@@ -134,6 +134,7 @@ type FuncViewState = { conn :: Conn ServerToWeb WebToServer
                      , varSymTypeMap :: Map PilVar DeepSymType
                      , varSymMap :: Map PilVar Sym
                      , symStmts :: Array (Tuple Int (Statement SymExpression))
+                     , solutions :: Map Sym DeepSymType
                      }
 
 data StmtAction = HighlightSym Sym
@@ -142,7 +143,6 @@ data StmtAction = HighlightSym Sym
 derive instance genericStmtAction :: Generic StmtAction _
 instance showStmtAction :: Show StmtAction where
   show x = genericShow x
-
 
 
 type FuncViewWidget a = StateT FuncViewState (Widget HTML) a
@@ -169,7 +169,7 @@ intercalate x xs = case Array.uncons xs of
     Nothing -> [y]
     Just _ -> [y, x] <> intercalate x ys
 
-dispAddr :: Address -> FuncViewWidget StmtAction
+dispAddr :: forall a. Address -> FuncViewWidget a
 dispAddr (Address (Bytes x)) = D.text $ showHex x
 
 dispByteOffset :: ByteOffset -> FuncViewWidget StmtAction
@@ -177,7 +177,8 @@ dispByteOffset = D.text <<< showHex <<< view _ByteOffset
 
 dispStackOffset :: StackOffset -> FuncViewWidget StmtAction
 dispStackOffset (StackOffset x) =
-  D.text <<< showHex $ x.offset ^. _ByteOffset
+  --D.text <<< showHex $ x.offset ^. _ByteOffset
+  D.text <<< show $ x.offset ^. _ByteOffset
 
 classes :: forall a. Array String -> ReactProps a
 classes = P.className <<< foldr (<>) "" <<< intercalate " "
@@ -200,6 +201,8 @@ paren x = orr [ D.text "("
               , D.text ")"
               ]
 
+space :: forall a. FuncViewWidget a
+space = D.text " "
 
 dispExprOp :: SymInfo
            -> ExprOp SymExpression
@@ -354,8 +357,6 @@ dispExprOp (SymInfo sinfo) xop = case xop of
       
     todo = D.span [ P.className "pil-expr-op" ] [D.text " todo "]
 
-    space = D.text " "
-
     infixOp :: String
             -> FuncViewWidget StmtAction
             -> FuncViewWidget StmtAction
@@ -369,7 +370,7 @@ dispExprOp (SymInfo sinfo) xop = case xop of
                  , classes $ ["pointer-cursor", "pil-expr-op"]
                    <> if highlighted then ["expr-sym-highlight"] else []
                  ]
-          [ D.text opStr ]
+          [ D.text $ " " <> opStr <> " " ]
         , b
         ]
 
@@ -488,38 +489,95 @@ statement index stmt =
 statements :: FuncViewWidget Unit
 statements = do
   D.div []
-    [ D.div [] [D.text "Statements"]
+    [ D.h4 [] [D.text "Statements"]
     , view ]
   where
     
     update (HighlightSym sym) = modify_ (_ {highlightedSym = Just sym})
     update Unhighlight= modify_ (_ {highlightedSym = Nothing})
 
-    view :: forall a. FuncViewWidget a
+    view :: FuncViewWidget Unit
     view = do
       st <- get
       action <- orr $ (uncurry statement) <$> st.symStmts
       log $ show action
       update action
-      view
+
+
+dispSymType :: DeepSymType -> FuncViewWidget Sym
+dispSymType (DSVar s@(Sym n)) =
+  D.span [ P.onClick $> s
+         , classes ["pointer-cursor"]
+         ]
+  [ D.text $ "s" <> show n ]
+dispSymType (DSRecursive _ _) = D.text "ok "
+dispSymType (DSType _) = D.text "ok "
+
+dispTypes :: FuncViewWidget Sym
+dispTypes = do
+  st <- get
+  D.div []
+    [ D.h4 [] [ D.text "Type" ]
+    , case st.highlightedSym of
+         Nothing -> D.text "Select an expression"
+         Just s@(Sym n) ->
+           D.div []
+           [ D.h5 [] [ D.text $ "Sym " <> show n ]
+           , maybe (D.text "unknown") dispSymType $ Map.lookup s st.solutions
+           ]
+    ]
 
 -- eventually this could add a wrapper or something
-typeReport :: FuncViewWidget Unit
-typeReport = statements
+typeReport :: forall a. FuncViewWidget a
+typeReport = go
+  where
+    go = do
+      M.grid [ prop "container" true
+             , prop "spacing" 2 ]
+        [ M.grid [ prop "item" true
+                 , P.className "type-report-statements"
+                 ]
+          [ statements ]
+        , M.grid [ prop "item" true
+                 , P.className "type-report-types"
+                 ]
+          [ dispTypes ]
+        ]
+      go
 
-functionView :: Conn ServerToWeb WebToServer
+funcTitle :: forall a. CG.Function -> FuncViewWidget a
+funcTitle (CG.Function func) =
+  D.h2 [ P.className "function-view-title" ]
+  [ D.span [P.className "function-view-title-name"]
+    [ D.text func.name ]
+  , D.span [P.className "function-view-title-address"]
+    [ D.text " "
+    , paren $ dispAddr func.address
+    ]
+  ]
+
+funcViewMain :: forall a. CG.Function -> FuncViewWidget a
+funcViewMain func =
+  D.div []
+  [ funcTitle func
+  , typeReport
+  ]
+
+functionView :: forall a. Conn ServerToWeb WebToServer
              -> CG.Function
-             -> Widget HTML Unit
+             -> Widget HTML a
 functionView conn fn@(CG.Function func) = do
   liftEffect <<< Socket.sendMessage conn $ WSGetTypeReport fn
   (TypeReport tr) <- orr
     [ liftAff $ Socket.getMessageWith conn (_ ^? _SWFunctionTypeReport)
     , D.text "Loading type report"
     ]
-  void $ runStateT typeReport
+  void $ runStateT (funcViewMain fn)
     { conn
     , highlightedSym: Nothing
     , varSymTypeMap: Map.fromFoldable tr.varSymTypeMap
     , varSymMap: Map.fromFoldable tr.varSymMap
     , symStmts: tr.symStmts
+    , solutions: Map.fromFoldable tr.solutions
     }
+  D.text "Shouldn't reach here."

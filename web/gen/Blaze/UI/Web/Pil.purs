@@ -14,6 +14,7 @@ import Data.Maybe (Maybe, Maybe(..))
 import Data.Newtype (class Newtype)
 import Data.Symbol (SProxy(SProxy))
 import Data.Tuple (Tuple)
+import Data.Word64 (Word64)
 import Foreign.Class (class Decode, class Encode)
 import Foreign.Generic (aesonSumEncoding, defaultOptions, genericDecode, genericEncode)
 import Foreign.Generic.EnumEncoding (defaultGenericEnumOptions, genericDecodeEnum, genericEncodeEnum)
@@ -33,7 +34,7 @@ data PilType a
   | TBottom Sym
   | TFunction (TFunctionOp a)
   | TVBitWidth Bits
-  | TVLength Int
+  | TVLength Word64
   | TVSign Boolean
 
 
@@ -117,7 +118,7 @@ _TVBitWidth = prism' TVBitWidth f
     f (TVBitWidth a) = Just $ a
     f _ = Nothing
 
-_TVLength :: forall a. Prism' (PilType a) Int
+_TVLength :: forall a. Prism' (PilType a) Word64
 _TVLength = prism' TVLength f
   where
     f (TVLength a) = Just $ a
@@ -309,6 +310,7 @@ newtype TypeReport
       , errors :: Array TypeError
       , varSymTypeMap :: Array (Tuple PilVar DeepSymType)
       , varSymMap :: Array (Tuple PilVar Sym)
+      , solutions :: Array (Tuple Sym DeepSymType)
       }
 
 
@@ -330,7 +332,8 @@ derive instance newtypeTypeReport :: Newtype TypeReport _
 _TypeReport :: Iso' TypeReport { symStmts :: Array (Tuple Int (Statement (InfoExpression SymInfo)))
                                , errors :: Array TypeError
                                , varSymTypeMap :: Array (Tuple PilVar DeepSymType)
-                               , varSymMap :: Array (Tuple PilVar Sym) }
+                               , varSymMap :: Array (Tuple PilVar Sym)
+                               , solutions :: Array (Tuple Sym DeepSymType) }
 _TypeReport = _Newtype
 --------------------------------------------------------------------------------
 newtype TypedExpr

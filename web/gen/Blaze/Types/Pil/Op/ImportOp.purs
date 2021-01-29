@@ -3,6 +3,7 @@ module Blaze.Types.Pil.Op.ImportOp where
 
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
+import Data.Int64 (Int64)
 import Data.Lens (Iso', Lens', Prism', lens, prism')
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Lens.Record (prop)
@@ -12,13 +13,12 @@ import Data.Symbol (SProxy(SProxy))
 import Foreign.Class (class Decode, class Encode)
 import Foreign.Generic (aesonSumEncoding, defaultOptions, genericDecode, genericEncode)
 import Foreign.Generic.EnumEncoding (defaultGenericEnumOptions, genericDecodeEnum, genericEncodeEnum)
-import Prim (Int)
 
 import Prelude
 
 newtype ImportOp a
   = ImportOp
-      { constant :: Int
+      { constant :: Int64
       }
 
 
@@ -37,6 +37,6 @@ instance decodeImportOp :: Decode (ImportOp a) where
 derive instance genericImportOp :: Generic (ImportOp a) _
 derive instance newtypeImportOp :: Newtype (ImportOp a) _
 --------------------------------------------------------------------------------
-_ImportOp :: forall a. Iso' (ImportOp a) { constant :: Int }
+_ImportOp :: forall a. Iso' (ImportOp a) { constant :: Int64 }
 _ImportOp = _Newtype
 --------------------------------------------------------------------------------
