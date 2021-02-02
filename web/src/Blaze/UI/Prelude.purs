@@ -22,12 +22,6 @@ import Foreign (ForeignError(..), unsafeFromForeign, unsafeToForeign)
 import Foreign.Generic (defaultOptions, genericDecode, genericEncode)
 import Foreign.Generic.Class (class Decode, class Encode)
 
--- showHex :: Int -> String
--- showHex = ("0x" <> _) <<< Int.toStringAs Int.hexadecimal
-
-showHex :: forall a. Show a => a -> String
-showHex = show
-
 
 prop :: forall a b. String -> a -> ReactProps b
 prop = P.unsafeMkProp

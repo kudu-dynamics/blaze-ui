@@ -79,12 +79,13 @@ import Blaze.Types.Pil.Op.SxOp (_SxOp)
 import Blaze.Types.Pil.Op.TestBitOp (_TestBitOp)
 import Blaze.Types.Pil.Op.XorOp (XorOp(..))
 import Blaze.Types.Pil.Op.ZxOp (ZxOp(..))
-import Blaze.UI.Prelude (prop, showHex)
+import Blaze.UI.Classes.ShowHex (showHex)
+import Blaze.UI.Prelude (prop)
 import Blaze.UI.Socket (Conn(..))
 import Blaze.UI.Socket as Socket
 import Blaze.UI.Types (Nav(..))
 import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..), _SWFunctionTypeReport, _SWFunctionsList, _SWPilType)
-import Blaze.UI.Web.Pil (DeepSymType(..), TypeReport(..), TypedExpr(..))
+import Blaze.UI.Web.Pil (DeepSymType(..), PilType(..), TArrayOp(..), TBitVectorOp(..), TFloatOp(..), TFunctionOp(..), TIntOp(..), TPointerOp(..), TypeReport(..), TypedExpr(..))
 import Concur.Core (Widget)
 import Concur.Core.Types (affAction, pulse)
 import Concur.MaterialUI as M
@@ -102,11 +103,13 @@ import Control.Monad.State.Trans (StateT, runStateT)
 import Control.MultiAlternative (orr)
 import Control.Wire as Wire
 import Data.Array as Array
-import Data.BinaryAnalysis (Address(..), Bits(..), ByteOffset(..), Bytes(..), _ByteOffset, _Bytes)
+import Data.BigInt as BigInt
+import Data.BinaryAnalysis (Address(..), BitOffset(..), Bits(..), ByteOffset(..), Bytes(..), _ByteOffset, _Bytes)
 import Data.Foldable (fold, foldr)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Int as Int
+import Data.Int64 (Int64(..))
 import Data.Lens (view, (^.), (^?))
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Map (Map)
@@ -114,9 +117,10 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), fromJust, fromMaybe, maybe)
 import Data.String (Pattern(..))
 import Data.String as String
-import Data.Traversable (traverse)
+import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..), curry, uncurry)
 import Data.Tuple.Nested ((/\), type (/\))
+import Data.Word64 (Word64(..))
 import Effect (Effect)
 import Effect.Aff (Milliseconds(..), delay, forkAff)
 import Effect.Aff.Class (liftAff)
@@ -135,6 +139,7 @@ type FuncViewState = { conn :: Conn ServerToWeb WebToServer
                      , varSymMap :: Map PilVar Sym
                      , symStmts :: Array (Tuple Int (Statement SymExpression))
                      , solutions :: Map Sym DeepSymType
+                     , typeIndent :: Int
                      }
 
 data StmtAction = HighlightSym Sym
@@ -176,9 +181,10 @@ dispByteOffset :: ByteOffset -> FuncViewWidget StmtAction
 dispByteOffset = D.text <<< showHex <<< view _ByteOffset
 
 dispStackOffset :: StackOffset -> FuncViewWidget StmtAction
-dispStackOffset (StackOffset x) =
+dispStackOffset s@(StackOffset x) =
+  -- maybe we should show the Ctx?
   --D.text <<< showHex $ x.offset ^. _ByteOffset
-  D.text <<< show $ x.offset ^. _ByteOffset
+  D.text $ showHex s
 
 classes :: forall a. Array String -> ReactProps a
 classes = P.className <<< foldr (<>) "" <<< intercalate " "
@@ -250,7 +256,7 @@ dispExprOp (SymInfo sinfo) xop = case xop of
 
   (Pil.FIELD_ADDR op) ->
     expr "fieldAddr"
-    [ bracket $ dispExpr (op ^. _FieldAddrOp).baseAddr
+    [ paren $ dispExpr (op ^. _FieldAddrOp).baseAddr
     , D.text <<< showHex $ (op ^. _FieldAddrOp).offset ^. _ByteOffset
     ]
 
@@ -503,20 +509,106 @@ statements = do
       log $ show action
       update action
 
+dispType :: String -> Array (FuncViewWidget Sym) -> FuncViewWidget Sym
+dispType s fields = D.span [] $
+  [ D.span [classes ["type-name"]] [D.text s] ]
+  <> fields
 
+dispType_ :: String -> FuncViewWidget Sym
+dispType_ s = dispType s []
+
+-- indents by an extra n amount
+indent :: forall a. Int -> Array (FuncViewWidget a) -> FuncViewWidget a
+indent n xs = do
+  st <- get
+  let oldIndent = st.typeIndent
+      newIndent = oldIndent + n
+  modify_ (_ {typeIndent = oldIndent + n})
+  r <- orr $ f newIndent <$> xs
+  modify_ (_ {typeIndent = oldIndent})
+  pure r
+  where
+    f newIndent m =
+      D.div [ P.style { paddingLeft: show (newIndent * 5) <> "px" } ] [m]
+
+typeField_ :: String -> DeepSymType -> FuncViewWidget Sym
+typeField_ label x = D.span []
+  [ D.span [ classes ["type-field-label"] ] [ D.text $ label <> ": " ]
+  , dispSymType x
+  ]
+          
+
+typeField :: String -> DeepSymType -> FuncViewWidget Sym
+typeField label x =  D.div []
+  [ D.span [ classes ["type-field-label"] ] [ D.text $ label <> ":" ]
+  , indent 1 [ dispSymType x ]
+  ]
+
+dispTypeVal :: forall a. String -> FuncViewWidget a
+dispTypeVal s = D.span [classes ["type-val"]]
+   [ D.text s ]
+  
 dispSymType :: DeepSymType -> FuncViewWidget Sym
 dispSymType (DSVar s@(Sym n)) =
   D.span [ P.onClick $> s
          , classes ["pointer-cursor"]
          ]
   [ D.text $ "s" <> show n ]
-dispSymType (DSRecursive _ _) = D.text "ok "
-dispSymType (DSType _) = D.text "ok "
+dispSymType (DSRecursive s pt) =
+  D.span []
+  [ D.span [classes ["recursive-type"]]
+    [ paren $ dispSymType (DSVar s)
+    , indent 1
+      [ dispSymType (DSType pt) ]
+    ]
+  ]
+dispSymType (DSType t) = case t of
+  TBool -> dispType_ "Bool"
+  TChar -> dispType_ "Char"
+  TInt (TIntOp x) ->
+    dispType "Int"
+    [ indent 1
+      [ typeField_ "signed" x.signed
+      , typeField_ "bitWidth" x.bitWidth
+      ]
+    ]
 
-dispTypes :: FuncViewWidget Sym
+  TFloat (TFloatOp a) -> dispType_ "Float"
+
+  TBitVector (TBitVectorOp x) ->
+    dispType "BV " [dispSymType x.bitWidth]
+
+
+  TPointer (TPointerOp x) ->
+    dispType "Pointer"
+    [ indent 1
+      [ typeField_ "bitWidth" x.bitWidth
+      , typeField "pointeeType" x.pointeeType
+      ]
+    ]
+
+  TArray (TArrayOp x) -> dispType "Array"
+     [ indent 1
+       [ typeField_ "len" x.len
+       , typeField "elemType" x.elemType
+       ]
+     ]
+  TRecord fields -> dispType "Record"
+     [ indent 1 <<< flip map fields $ \((BitOffset (Int64 off)) /\ x) ->
+        typeField (BigInt.toString off) x
+     ]
+  TBottom s -> dispType_ "Bottom"
+  TFunction (TFunctionOp a) -> dispType_ "Function"
+
+  TVBitWidth (Bits (Word64 bits)) -> dispTypeVal $ BigInt.toString bits <> "w"
+  TVLength (Word64 n) -> dispTypeVal $ BigInt.toString n
+  TVSign b -> dispTypeVal $ if b then "true" else "false"
+
+
+dispTypes :: FuncViewWidget Unit
 dispTypes = do
   st <- get
-  D.div []
+  s <- D.div []
     [ D.h4 [] [ D.text "Type" ]
     , case st.highlightedSym of
          Nothing -> D.text "Select an expression"
@@ -526,6 +618,7 @@ dispTypes = do
            , maybe (D.text "unknown") dispSymType $ Map.lookup s st.solutions
            ]
     ]
+  modify_ (_ {highlightedSym = Just s})
 
 -- eventually this could add a wrapper or something
 typeReport :: forall a. FuncViewWidget a
@@ -579,5 +672,6 @@ functionView conn fn@(CG.Function func) = do
     , varSymMap: Map.fromFoldable tr.varSymMap
     , symStmts: tr.symStmts
     , solutions: Map.fromFoldable tr.solutions
+    , typeIndent: 0
     }
   D.text "Shouldn't reach here."

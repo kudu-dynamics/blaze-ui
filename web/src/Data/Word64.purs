@@ -21,7 +21,7 @@ import Foreign.Generic.Class (class Decode, class Encode)
 newtype Word64 = Word64 BigInt
 
 instance showWord64 :: Show Word64 where
-  show (Word64 x) = "0x" <> BigInt.toBase 16 x
+  show (Word64 x) = BigInt.toString x
 derive instance eqWord64 :: Eq Word64
 derive instance ordWord64 :: Ord Word64
 instance encodeWord64 :: Encode Word64 where

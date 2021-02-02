@@ -18,11 +18,10 @@ import Foreign (ForeignError(..), unsafeFromForeign, unsafeToForeign)
 import Foreign.Generic (defaultOptions, genericDecode, genericEncode)
 import Foreign.Generic.Class (class Decode, class Encode)
 
-
 newtype Int64 = Int64 BigInt
 
 instance showInt64 :: Show Int64 where
-  show (Int64 x) = "0x" <> BigInt.toBase 16 x
+  show (Int64 x) = BigInt.toString x
 derive instance eqInt64 :: Eq Int64
 derive instance ordInt64 :: Ord Int64
 instance encodeInt64 :: Encode Int64 where

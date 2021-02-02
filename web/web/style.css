@@ -23,3 +23,15 @@
 .non-func-list-grid-item {
     width: 75%;
 }
+
+.type-name {
+    font-weight: bold;
+}
+
+.type-field-label {
+    font-style: italic;
+}
+
+.type-val {
+    font-weight: bold;
+}

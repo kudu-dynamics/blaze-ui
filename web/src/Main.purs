@@ -62,8 +62,15 @@ blazeServerHost = "localhost"
 blazeServerWsPort :: String
 blazeServerWsPort = "31337"
 
+-- 
+-- sessionId :: String
+-- sessionId = "L2hvbWUvdGVkZHkva3VkdS9oYXNrZWxsL2hhc2tlbGwtYmxhemUvcmVzL2V4dHJhX2JpbnMvYnJ5YW50L2JyeWFudC5ibmRi"
+
+-- Earnshaw
 sessionId :: String
-sessionId = "L2hvbWUvdGVkZHkva3VkdS9oYXNrZWxsL2hhc2tlbGwtYmxhemUvcmVzL2V4dHJhX2JpbnMvYnJ5YW50L2JyeWFudC5ibmRi"
+sessionId = "L2hvbWUvdGVkZHkva3VkdS9oYXNrZWxsL2JsYXplL3Jlcy9leHRyYV9iaW5zL2Vhcm5zaGF3L3ZzZnRwZC5ibmRi"
+
+
 
 main :: Effect Unit
 main = do

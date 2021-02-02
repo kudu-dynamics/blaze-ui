@@ -5,9 +5,10 @@ import Prelude
 
 import Blaze.Types.CallGraph (_Function)
 import Blaze.Types.CallGraph as CG
+import Blaze.UI.Classes.ShowHex (showHex)
 import Blaze.UI.Components.FunctionView (functionView)
 import Blaze.UI.Components.TabView (tabbedView)
-import Blaze.UI.Prelude (prop, showHex)
+import Blaze.UI.Prelude (prop)
 import Blaze.UI.Socket (Conn(..))
 import Blaze.UI.Socket as Socket
 import Blaze.UI.Types (Nav(..))
