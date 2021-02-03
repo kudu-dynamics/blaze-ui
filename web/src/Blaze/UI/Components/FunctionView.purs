@@ -104,12 +104,12 @@ import Control.MultiAlternative (orr)
 import Control.Wire as Wire
 import Data.Array as Array
 import Data.BigInt as BigInt
-import Data.BinaryAnalysis (Address(..), BitOffset(..), Bits(..), ByteOffset(..), Bytes(..), _ByteOffset, _Bytes)
+import Data.BinaryAnalysis (Address(..), BitOffset(..), Bits(..), ByteOffset(..), Bytes(..), _Bits, _ByteOffset, _Bytes)
 import Data.Foldable (fold, foldr)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Int as Int
-import Data.Int64 (Int64(..))
+import Data.Int64 (Int64(..), _Int64)
 import Data.Lens (view, (^.), (^?))
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Map (Map)
@@ -120,7 +120,7 @@ import Data.String as String
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..), curry, uncurry)
 import Data.Tuple.Nested ((/\), type (/\))
-import Data.Word64 (Word64(..))
+import Data.Word64 (Word64(..), _Word64)
 import Effect (Effect)
 import Effect.Aff (Milliseconds(..), delay, forkAff)
 import Effect.Aff.Class (liftAff)
@@ -257,7 +257,7 @@ dispExprOp (SymInfo sinfo) xop = case xop of
   (Pil.FIELD_ADDR op) ->
     expr "fieldAddr"
     [ paren $ dispExpr (op ^. _FieldAddrOp).baseAddr
-    , D.text <<< showHex $ (op ^. _FieldAddrOp).offset ^. _ByteOffset
+    , D.text <<< BigInt.toString $ (op ^. _FieldAddrOp).offset ^. _ByteOffset <<< _Int64
     ]
 
   (Pil.FLOAT_CONV op) -> dispUnOp "floatConv" $ op ^. _FloatConvOp
@@ -529,7 +529,7 @@ indent n xs = do
   pure r
   where
     f newIndent m =
-      D.div [ P.style { paddingLeft: show (newIndent * 5) <> "px" } ] [m]
+      D.div [ P.style { paddingLeft: show 12 <> "px" } ] [m]
 
 typeField_ :: String -> DeepSymType -> FuncViewWidget Sym
 typeField_ label x = D.span []
@@ -556,11 +556,11 @@ dispSymType (DSVar s@(Sym n)) =
   [ D.text $ "s" <> show n ]
 dispSymType (DSRecursive s pt) =
   D.span []
-  [ D.span [classes ["recursive-type"]]
-    [ paren $ dispSymType (DSVar s)
-    , indent 1
-      [ dispSymType (DSType pt) ]
-    ]
+  [ D.span [classes ["recursive-type"]] [ D.text "Recursive " ]
+  , D.span [classes ["recursive-type-sym"]] [ paren $ dispSymType (DSVar s) ]
+  , D.text ":"
+  , indent 1
+    [ dispSymType (DSType pt) ]
   ]
 dispSymType (DSType t) = case t of
   TBool -> dispType_ "Bool"
