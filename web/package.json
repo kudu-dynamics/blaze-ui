@@ -16,6 +16,7 @@
     "@material-ui/lab": "^4.0.0-alpha.36",
     "@material-ui/styles": "^4.11.2",
     "@types/react": "^17.0.0",
+    "big-integer": "^1.6.48",
     "json-bigint": "^1.0.0",
     "react": "^17.0.1",
     "react-dom": "^17.0.1",

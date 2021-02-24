@@ -3,6 +3,7 @@ module Blaze.Types.Pil.Op.ConstPtrOp where
 
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
+import Data.Int64 (Int64)
 import Data.Lens (Iso', Lens', Prism', lens, prism')
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Lens.Record (prop)
@@ -12,13 +13,12 @@ import Data.Symbol (SProxy(SProxy))
 import Foreign.Class (class Decode, class Encode)
 import Foreign.Generic (aesonSumEncoding, defaultOptions, genericDecode, genericEncode)
 import Foreign.Generic.EnumEncoding (defaultGenericEnumOptions, genericDecodeEnum, genericEncodeEnum)
-import Prim (Int)
 
 import Prelude
 
 newtype ConstPtrOp a
   = ConstPtrOp
-      { constant :: Int
+      { constant :: Int64
       }
 
 
@@ -37,6 +37,6 @@ instance decodeConstPtrOp :: Decode (ConstPtrOp a) where
 derive instance genericConstPtrOp :: Generic (ConstPtrOp a) _
 derive instance newtypeConstPtrOp :: Newtype (ConstPtrOp a) _
 --------------------------------------------------------------------------------
-_ConstPtrOp :: forall a. Iso' (ConstPtrOp a) { constant :: Int }
+_ConstPtrOp :: forall a. Iso' (ConstPtrOp a) { constant :: Int64 }
 _ConstPtrOp = _Newtype
 --------------------------------------------------------------------------------

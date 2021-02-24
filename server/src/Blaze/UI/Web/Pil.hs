@@ -21,6 +21,7 @@ data TypeReport = TypeReport
   , errors :: [TypeError]
   , varSymTypeMap :: [(Pil.PilVar, DeepSymType)]
   , varSymMap :: [(Pil.PilVar, Sym)]
+  , solutions :: [(Sym, DeepSymType)]
   } deriving (Show, Eq, Ord, Generic)
 
 instance ToJSON TypeReport
@@ -68,6 +69,7 @@ toTypeReport x = TypeReport
   , errors = fmap toTypeError $ x ^. #errors
   , varSymTypeMap = HashMap.toList $ convertDeepSymType <$> x ^. #varSymTypeMap
   , varSymMap = HashMap.toList $ x ^. #varSymMap
+  , solutions = HashMap.toList $ convertDeepSymType <$> x ^. #solutions
   }
 
 
@@ -171,12 +173,36 @@ convertPilType = \case
 
 
 testPilType :: DeepSymType
-testPilType = DSType TBool
-  -- ( TBitVector
-  --   ( TBitVectorOp
-  --     { bitWidth = DSType
-  --       ( TVBitWidth ( Bits 64 ) )
-  --     }
-  --   )
-  -- )
+testPilType = DSType -- TBool
+  ( TBitVector
+    ( TBitVectorOp
+      { bitWidth = DSType
+        ( TVBitWidth ( Bits 64 ) )
+      }
+    )
+  )
+
+
+testCallOp :: [(Int, Pil.Statement SymExpression)]
+testCallOp =
+  [ ( 5
+    , Pil.Call $ Pil.CallOp
+      { dest = Pil.CallConstPtr
+        ( Pil.ConstPtrOp 777 )
+      , name = Just "exit"
+      , params =
+        [ Ch.InfoExpression
+          { info = Ch.SymInfo
+                   { size = Bits 32
+                   , sym = Sym 41
+                   }
+          , op = Pil.CONST
+                 ( Pil.ConstOp 42 )
+          }
+        ]
+      }
+    )
+  ]
+
+
 

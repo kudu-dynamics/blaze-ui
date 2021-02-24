@@ -3,6 +3,9 @@ let upstream =
 
 in upstream
    with foreign-generic =
+
+in  upstream
+  with foreign-generic =
     { dependencies =
         [ "assert"
         , "console"

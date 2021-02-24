@@ -75,6 +75,7 @@ import Blaze.Types.Pil.Op.ZxOp (ZxOp)
 import Data.BinaryAnalysis (ByteOffset, Bytes)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
+import Data.Int64 (Int64)
 import Data.Lens (Iso', Lens', Prism', lens, prism')
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Lens.Record (prop)
@@ -1143,7 +1144,7 @@ _VarFieldOp = _Newtype
 newtype ExtractOp a
   = ExtractOp
       { src :: a
-      , offset :: Int
+      , offset :: Int64
       }
 
 
@@ -1162,7 +1163,7 @@ instance decodeExtractOp :: (Decode a) => Decode (ExtractOp a) where
 derive instance genericExtractOp :: Generic (ExtractOp a) _
 derive instance newtypeExtractOp :: Newtype (ExtractOp a) _
 --------------------------------------------------------------------------------
-_ExtractOp :: forall a. Iso' (ExtractOp a) { src :: a, offset :: Int }
+_ExtractOp :: forall a. Iso' (ExtractOp a) { src :: a, offset :: Int64 }
 _ExtractOp = _Newtype
 --------------------------------------------------------------------------------
 newtype StrCmpOp a

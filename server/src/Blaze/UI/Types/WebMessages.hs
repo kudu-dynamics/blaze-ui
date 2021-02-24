@@ -53,6 +53,7 @@ data ServerToWeb = SWTextMessage Text
                  | SWLogWarn Text
                  | SWLogError Text
                  | SWPilType (WebPil.DeepSymType)
+                 | SWProblemType [(Int, Pil.Statement Ch.SymExpression)]
                  | SWNoop
                  | SWFunctionsList [CG.Function]
 
@@ -229,9 +230,17 @@ myTypes =
 
 psWord64 :: PB.PSType
 psWord64 = PB.TypeInfo
-  { _typePackage = "purescript-word" -- deprecated?
-  , _typeModule = "Data.Word"
+  { _typePackage = "blaze-ui" -- deprecated?
+  , _typeModule = "Data.Word64"
   , _typeName = "Word64"
+  , _typeParameters = []
+  }
+
+psInt64 :: PB.PSType
+psInt64 = PB.TypeInfo
+  { _typePackage = "blaze-ui" -- deprecated?
+  , _typeModule = "Data.Int64"
+  , _typeName = "Int64"
   , _typeParameters = []
   }
 
@@ -245,10 +254,10 @@ psBigInt = PB.TypeInfo
 
 -- shouldn't really be `Int` because there might be overflow
 word64Bridge :: PB.BridgePart
-word64Bridge = PB.typeName ^== "Word64" >> return PB.psInt
+word64Bridge = PB.typeName ^== "Word64" >> return psWord64
 
 int64Bridge :: PB.BridgePart
-int64Bridge = PB.typeName ^== "Int64" >> return PB.psInt
+int64Bridge = PB.typeName ^== "Int64" >> return psInt64
 
 genPB :: IO ()
 genPB = do

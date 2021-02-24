@@ -2,22 +2,25 @@ module Blaze.UI.App where
 
 import Data.Monoid
 import Prelude
-import Blaze.UI.Prelude
 
 import Blaze.Types.CallGraph (_Function)
 import Blaze.Types.CallGraph as CG
+import Blaze.UI.Classes.ShowHex (showHex)
 import Blaze.UI.Components.FunctionView (functionView)
+import Blaze.UI.Components.TabView (tabbedView)
+import Blaze.UI.Prelude (prop)
 import Blaze.UI.Socket (Conn(..))
 import Blaze.UI.Socket as Socket
 import Blaze.UI.Types (Nav(..))
-import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..), _SWFunctionTypeReport, _SWFunctionsList)
+import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..), _SWFunctionTypeReport, _SWFunctionsList, _SWPilType, _SWProblemType)
 import Blaze.UI.Web.Pil (DeepSymType(..), PilType(..))
 import Concur.Core (Widget)
+import Concur.Core.FRP (Signal, display, dyn, loopS, loopW, step)
 import Concur.Core.Types (affAction, pulse)
-import Concur.MaterialUI as M
 import Concur.React (HTML, componentClass, renderComponent)
 import Concur.React.DOM (div_, h2_, hr', text)
 import Concur.React.DOM as D
+import Concur.React.MUI.DOM as M
 import Concur.React.Props (ReactProps)
 import Concur.React.Props as P
 import Concur.React.Run (runWidgetInDom)
@@ -29,6 +32,7 @@ import Control.Monad.State.Trans (StateT, runStateT)
 import Control.MultiAlternative (orr)
 import Control.Wire as Wire
 import Data.Array as Array
+import Data.BigInt as BigInt
 import Data.BinaryAnalysis (Address(..), Bytes(..))
 import Data.Int as Int
 import Data.Lens ((^.), (^?))
@@ -36,6 +40,7 @@ import Data.Maybe (Maybe(..), fromJust, fromMaybe, maybe)
 import Data.String (Pattern(..))
 import Data.String as String
 import Data.Traversable (traverse)
+import Data.Tuple.Nested ((/\), type (/\))
 import Effect (Effect)
 import Effect.Aff (Milliseconds(..), delay, forkAff)
 import Effect.Aff.Class (liftAff)
@@ -46,7 +51,6 @@ import Foreign.Generic (encode, encodeJSON)
 import Pipes.Prelude (mapM)
 import React (ReactClass)
 import React.Basic.Hooks as Hooks
-
 
 tabletest :: Widget HTML Unit
 tabletest =
@@ -152,30 +156,28 @@ funcItem conn x@(CG.Function func) = do
 
 funcList :: Conn ServerToWeb WebToServer
          -> Array CG.Function
-         -> Widget HTML CG.Function
-funcList conn funcs = go Nothing
-  where
-    go mFilterText = do
-      let filteredFuncs = flip (maybe funcs) mFilterText $ \t ->
-            Array.filter
-            (\fn -> String.contains (Pattern t) (fn ^. _Function).name)
-            funcs
-      r <- D.div [ P.style { backgroundColor: "#f5f5f5"
-                           , padding: "10px"
-                           , width: "40%"
-                           }
-                 ]
-           [ D.div [] [ D.text $ show mFilterText ]
-           , M.list [ prop "subheader" $ renderComponent title
-                    , prop "dense" true
-                    ]
-             $ [searchBar $ fromMaybe "" mFilterText]
-             <> (funcItem conn <$> filteredFuncs)
-           ]
-      case r of
-        FuncListSelect func -> pure func
-        FuncListFilter txt -> go (Just txt)
+         -> Maybe String
+         -> Widget HTML (Maybe String /\ CG.Function)
+funcList conn funcs mFilterText = do
+  let filteredFuncs = flip (maybe funcs) mFilterText $ \t ->
+        Array.filter
+        (\fn -> String.contains (Pattern t) (fn ^. _Function).name)
+        funcs
+  r <- D.div [ P.style { backgroundColor: "#f5f5f5"
+                       , padding: "10px"
+                       }
+             ]
+       [ M.list [ prop "subheader" $ renderComponent title
+                , prop "dense" true
+                ]
+         $ [searchBar $ fromMaybe "" mFilterText]
+         <> (funcItem conn <$> filteredFuncs)
+       ]
+  case r of
+    FuncListSelect func -> pure (mFilterText /\ func)
+    FuncListFilter txt -> funcList conn funcs (Just txt)
 
+  where
     searchBar txt =
       D.div []
       [ M.textField [ prop "label" "Search Functions"
@@ -186,13 +188,69 @@ funcList conn funcs = go Nothing
                     ]
         []
       ]
+
     title :: forall a. Widget HTML a
     title = M.listSubheader
-      [ prop "color" "primary"
-      , prop "component" "div"
-      , prop "disableSticky" true
+            [ prop "color" "primary"
+            , prop "component" "div"
+            , prop "disableSticky" true
+            ]
+          [ D.text "Functions List" ]
+
+
+tabDemo :: Widget HTML Unit
+tabDemo = do
+  void $ M.appBar [] 
+    [ M.tabs []
+      [ M.tab [ P.label "One" ] []
+      , M.tab [ P.label "Two" ] []
+      , M.tab [ P.label "Three"] []
       ]
-      [ D.text "Functions List" ]
+    ]
+
+counter :: Boolean -> Int -> Signal HTML Int
+counter winner init = loopW init $ \n -> D.div'
+  [ n+1 <$ D.button [P.onClick] [D.text "+"]
+  , D.span' [D.text (show n)]
+  , n-1 <$ D.button [P.onClick] [D.text "-"]
+  , if winner then D.text "Winner" else D.text "_"
+  ]
+
+counter2 :: Int -> Widget HTML Unit
+counter2 n = do
+  void $ D.div [] [ D.button [ P.onClick ] [ D.text $ show n ] ]
+  counter2 (n + 1)
+
+signalDemo :: Widget HTML Unit
+signalDemo = dyn $ loopS (0 /\ 10) $ \(a /\ b) -> do
+  display $ D.text (show $ max a b)
+  a' <- counter (a > b) a
+  b' <- counter (b > a) b
+  s <- hello ""
+  pure $ a' /\ b'
+
+hello :: String -> Signal HTML String
+hello s = step s do
+  greeting <- D.div'
+    [ "Hello" <$ D.button [P.onClick] [D.text "Say Hello"]
+    , "Namaste" <$ D.button [P.onClick] [D.text "Say Namaste"]
+    ]
+  void $ D.text (greeting <> " Sailor!") <|> D.button [P.onClick] [D.text "restart"]
+  pure (hello greeting)
+
+tabDemo2 :: Widget HTML Unit
+tabDemo2 = do
+  tabbedView a [a, b, c]
+  where
+    a = { name: "A"
+        , view: dyn $ hello "Jim"
+        }
+    b = { name: "B"
+        , view: D.div [P.key "counter"] [counter2 10]
+        }
+    c = { name: "C"
+        , view: D.text "hey there"
+        }
 
 app :: Conn ServerToWeb WebToServer -> Widget HTML Unit
 app conn = do
@@ -200,14 +258,33 @@ app conn = do
   funcs <- orr
            [ D.text "loading function list..."
            , liftAff $ Socket.getMessageWith conn (_ ^? _SWFunctionsList)
+           , do
+             m <- liftAff $ Socket.getMessageWith conn (_ ^? _SWProblemType)
+             log (show m)
+             D.text "got it"
            ]
-  selectedFunc <- funcList conn funcs
-  functionView conn selectedFunc
-  D.text $ show selectedFunc
+  void $ gridLoop Nothing Nothing funcs
+  where
+    gridLoop alreadySelectedFunc mFilterText funcs = do
+      (mFilterText' /\ selectedFunc) <-
+        M.grid [prop "container" true, prop "spacing" 2]
+        [ M.grid [ prop "item" true
+                 , P.className "func-list-grid-item"
+                 ]
+          [ funcList conn funcs mFilterText ]
+        , M.grid [ prop "item" true
+                 , P.className "non-func-list-grid-item"
+                 ]
+          [ case alreadySelectedFunc of
+               Nothing -> D.text "Select a function"
+               Just func -> functionView conn func
+          ]
+        ]
+      gridLoop (Just selectedFunc) mFilterText' funcs
 
 
 main :: Conn ServerToWeb WebToServer -> Effect Unit
 main conn = do
-    runWidgetInDom "main" $ orr
-      [ div_ [] $ app conn
-      ]
+  runWidgetInDom "main" $ orr
+    [ div_ [] $ app conn
+    ]

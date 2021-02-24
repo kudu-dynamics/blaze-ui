@@ -54,7 +54,7 @@ import Blaze.Types.Pil.Op.FsubOp (_FsubOp)
 import Blaze.Types.Pil.Op.FtruncOp (_FtruncOp)
 import Blaze.Types.Pil.Op.ImportOp (_ImportOp)
 import Blaze.Types.Pil.Op.IntToFloatOp (_IntToFloatOp)
-import Blaze.Types.Pil.Op.LoadOp (_LoadOp)
+import Blaze.Types.Pil.Op.LoadOp (LoadOp(..), _LoadOp)
 import Blaze.Types.Pil.Op.LowPartOp (_LowPartOp)
 import Blaze.Types.Pil.Op.LslOp (_LslOp)
 import Blaze.Types.Pil.Op.LsrOp (_LsrOp)
@@ -79,12 +79,13 @@ import Blaze.Types.Pil.Op.SxOp (_SxOp)
 import Blaze.Types.Pil.Op.TestBitOp (_TestBitOp)
 import Blaze.Types.Pil.Op.XorOp (XorOp(..))
 import Blaze.Types.Pil.Op.ZxOp (ZxOp(..))
-import Blaze.UI.Prelude (showHex)
+import Blaze.UI.Classes.ShowHex (showHex)
+import Blaze.UI.Prelude (prop)
 import Blaze.UI.Socket (Conn(..))
 import Blaze.UI.Socket as Socket
 import Blaze.UI.Types (Nav(..))
 import Blaze.UI.Types.WebMessages (ServerToWeb(..), WebToServer(..), _SWFunctionTypeReport, _SWFunctionsList, _SWPilType)
-import Blaze.UI.Web.Pil (DeepSymType, TypeReport(..), TypedExpr(..))
+import Blaze.UI.Web.Pil (DeepSymType(..), PilType(..), TArrayOp(..), TBitVectorOp(..), TFloatOp(..), TFunctionOp(..), TIntOp(..), TPointerOp(..), TypeReport(..), TypedExpr(..))
 import Concur.Core (Widget)
 import Concur.Core.Types (affAction, pulse)
 import Concur.MaterialUI as M
@@ -102,10 +103,13 @@ import Control.Monad.State.Trans (StateT, runStateT)
 import Control.MultiAlternative (orr)
 import Control.Wire as Wire
 import Data.Array as Array
-import Data.BinaryAnalysis (Address(..), Bits(..), ByteOffset(..), Bytes(..), _ByteOffset, _Bytes)
+import Data.BigInt as BigInt
+import Data.BinaryAnalysis (Address(..), BitOffset(..), Bits(..), ByteOffset(..), Bytes(..), _Bits, _ByteOffset, _Bytes)
+import Data.Foldable (fold, foldr)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Int as Int
+import Data.Int64 (Int64(..), _Int64)
 import Data.Lens (view, (^.), (^?))
 import Data.Lens.Iso.Newtype (_Newtype)
 import Data.Map (Map)
@@ -113,9 +117,10 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), fromJust, fromMaybe, maybe)
 import Data.String (Pattern(..))
 import Data.String as String
-import Data.Traversable (traverse)
+import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..), curry, uncurry)
 import Data.Tuple.Nested ((/\), type (/\))
+import Data.Word64 (Word64(..), _Word64)
 import Effect (Effect)
 import Effect.Aff (Milliseconds(..), delay, forkAff)
 import Effect.Aff.Class (liftAff)
@@ -133,6 +138,8 @@ type FuncViewState = { conn :: Conn ServerToWeb WebToServer
                      , varSymTypeMap :: Map PilVar DeepSymType
                      , varSymMap :: Map PilVar Sym
                      , symStmts :: Array (Tuple Int (Statement SymExpression))
+                     , solutions :: Map Sym DeepSymType
+                     , typeIndent :: Int
                      }
 
 data StmtAction = HighlightSym Sym
@@ -141,7 +148,6 @@ data StmtAction = HighlightSym Sym
 derive instance genericStmtAction :: Generic StmtAction _
 instance showStmtAction :: Show StmtAction where
   show x = genericShow x
-
 
 
 type FuncViewWidget a = StateT FuncViewState (Widget HTML) a
@@ -168,43 +174,68 @@ intercalate x xs = case Array.uncons xs of
     Nothing -> [y]
     Just _ -> [y, x] <> intercalate x ys
 
-dispAddr :: Address -> FuncViewWidget StmtAction
+dispAddr :: forall a. Address -> FuncViewWidget a
 dispAddr (Address (Bytes x)) = D.text $ showHex x
 
 dispByteOffset :: ByteOffset -> FuncViewWidget StmtAction
 dispByteOffset = D.text <<< showHex <<< view _ByteOffset
 
 dispStackOffset :: StackOffset -> FuncViewWidget StmtAction
-dispStackOffset (StackOffset x) =
-  D.text <<< showHex $ x.offset ^. _ByteOffset
+dispStackOffset s@(StackOffset x) =
+  -- maybe we should show the Ctx?
+  --D.text <<< showHex $ x.offset ^. _ByteOffset
+  D.text $ showHex s
 
+classes :: forall a. Array String -> ReactProps a
+classes = P.className <<< foldr (<>) "" <<< intercalate " "
+
+curly :: forall a. FuncViewWidget a -> FuncViewWidget a
+curly x = orr [ D.text "{"
+              , x
+              , D.text "}"
+              ]
+
+bracket :: forall a. FuncViewWidget a -> FuncViewWidget a
+bracket x = orr [ D.text "["
+                , x
+                , D.text "]"
+                ]
+
+paren :: forall a. FuncViewWidget a -> FuncViewWidget a
+paren x = orr [ D.text "("
+              , x
+              , D.text ")"
+              ]
+
+space :: forall a. FuncViewWidget a
+space = D.text " "
 
 dispExprOp :: SymInfo
            -> ExprOp SymExpression
            -> FuncViewWidget StmtAction
 dispExprOp (SymInfo sinfo) xop = case xop of
   (Pil.ADC op) -> dispBinCarryOp "adc" $ op ^. _AdcOp
-  (Pil.ADD op) -> dispBinOp "add" $ op ^. _AddOp
+  (Pil.ADD op) -> infixBinOp "+" $ op ^. _AddOp
   (Pil.ADD_OVERFLOW op) -> dispBinOp "addOf" $ op ^. _AddOverflowOp
-  (Pil.AND op) -> dispBinOp "and" $ op ^. _AndOp
+  (Pil.AND op) -> infixBinOp "&&" $ op ^. _AndOp
   (Pil.ASR op) -> dispBinOp "asr" $ op ^. _AsrOp
   (Pil.BOOL_TO_INT op) -> dispUnOp "boolToInt" $ op ^. _BoolToIntOp
   (Pil.CEIL op) -> dispUnOp "ceil" $ op ^. _CeilOp
-  (Pil.CMP_E op) -> dispBinOp "cmpE" $ op ^. _CmpEOp
-  (Pil.CMP_NE op) -> dispBinOp "cmpNE" $ op ^. _CmpNeOp
-  (Pil.CMP_SGE op) -> dispBinOp "cmpSGE" $ op ^. _CmpSgeOp
-  (Pil.CMP_SGT op) -> dispBinOp "cmpSGT" $ op ^. _CmpSgtOp
-  (Pil.CMP_SLE op) -> dispBinOp "cmpSLE" $ op ^. _CmpSleOp
-  (Pil.CMP_SLT op) -> dispBinOp "cmpSLT" $ op ^. _CmpSltOp
-  (Pil.CMP_UGE op) -> dispBinOp "cmpUGE" $ op ^. _CmpUgeOp
-  (Pil.CMP_UGT op) -> dispBinOp "cmpUGT" $ op ^. _CmpUgtOp
-  (Pil.CMP_ULE op) -> dispBinOp "cmpULE" $ op ^. _CmpUleOp
-  (Pil.CMP_ULT op) -> dispBinOp "cmpULT" $ op ^. _CmpUltOp
+  (Pil.CMP_E op) -> infixBinOp "==" $ op ^. _CmpEOp
+  (Pil.CMP_NE op) -> infixBinOp "!=" $ op ^. _CmpNeOp
+  (Pil.CMP_SGE op) -> infixBinOp "s>=" $ op ^. _CmpSgeOp
+  (Pil.CMP_SGT op) -> infixBinOp "s>" $ op ^. _CmpSgtOp
+  (Pil.CMP_SLE op) -> infixBinOp "s<=" $ op ^. _CmpSleOp
+  (Pil.CMP_SLT op) -> infixBinOp "s<" $ op ^. _CmpSltOp
+  (Pil.CMP_UGE op) -> infixBinOp "u>=" $ op ^. _CmpUgeOp
+  (Pil.CMP_UGT op) -> infixBinOp "u>" $ op ^. _CmpUgtOp
+  (Pil.CMP_ULE op) -> infixBinOp "u<=" $ op ^. _CmpUleOp
+  (Pil.CMP_ULT op) -> infixBinOp "u<" $ op ^. _CmpUltOp
 
   (Pil.CONST op) -> dispConst "const" $ op ^. _ConstOp
   (Pil.CONST_BOOL op) -> dispConst "bool" $ op ^. _ConstBoolOp
   (Pil.CONST_FLOAT op) -> dispConst "float" $ op ^. _ConstFloatOp
-  (Pil.CONST_PTR op) -> dispConst "constPtr" $ op ^. _ConstPtrOp
+  (Pil.CONST_PTR op) -> dispConst "ptr" $ op ^. _ConstPtrOp
   
   (Pil.DIVS op) -> dispBinOp "divs" $ op ^. _DivsOp
   (Pil.DIVS_DP op) -> dispBinOp "divsDP" $ op ^. _DivsDpOp
@@ -212,21 +243,21 @@ dispExprOp (SymInfo sinfo) xop = case xop of
   (Pil.DIVU_DP op) -> dispBinOp "divuDP" $ op ^. _DivuDpOp
   (Pil.FABS op) -> dispUnOp "fabs" $ op ^. _FabsOp
 
-  (Pil.FADD op) -> dispBinOp "fadd" $ op ^. _FaddOp
-  (Pil.FCMP_E op) -> dispBinOp "fcmpE" $ op ^. _FcmpEOp
-  (Pil.FCMP_GE op) -> dispBinOp "fcmpGE" $ op ^. _FcmpGeOp
-  (Pil.FCMP_GT op) -> dispBinOp "fcmpGT" $ op ^. _FcmpGtOp
-  (Pil.FCMP_LE op) -> dispBinOp "fcmpLE" $ op ^. _FcmpLeOp
-  (Pil.FCMP_LT op) -> dispBinOp "fcmpLT" $ op ^. _FcmpLtOp
-  (Pil.FCMP_NE op) -> dispBinOp "fcmpNE" $ op ^. _FcmpNeOp
+  (Pil.FADD op) -> infixBinOp "f+" $ op ^. _FaddOp
+  (Pil.FCMP_E op) -> infixBinOp "f==" $ op ^. _FcmpEOp
+  (Pil.FCMP_GE op) -> infixBinOp "f>=" $ op ^. _FcmpGeOp
+  (Pil.FCMP_GT op) -> infixBinOp "f>" $ op ^. _FcmpGtOp
+  (Pil.FCMP_LE op) -> infixBinOp "f<=" $ op ^. _FcmpLeOp
+  (Pil.FCMP_LT op) -> infixBinOp "f<" $ op ^. _FcmpLtOp
+  (Pil.FCMP_NE op) -> infixBinOp "f!=" $ op ^. _FcmpNeOp
   (Pil.FCMP_O op) -> dispBinOp "fcmpO" $ op ^. _FcmpOOp
   (Pil.FCMP_UO op) -> dispBinOp "fcmpUO" $ op ^. _FcmpUoOp
   (Pil.FDIV op) -> dispBinOp "fdiv" $ op ^. _FdivOp
 
   (Pil.FIELD_ADDR op) ->
     expr "fieldAddr"
-    [ bracket $ dispExpr (op ^. _FieldAddrOp).baseAddr
-    , D.text <<< showHex $ (op ^. _FieldAddrOp).offset ^. _ByteOffset
+    [ paren $ dispExpr (op ^. _FieldAddrOp).baseAddr
+    , D.text <<< BigInt.toString $ (op ^. _FieldAddrOp).offset ^. _ByteOffset <<< _Int64
     ]
 
   (Pil.FLOAT_CONV op) -> dispUnOp "floatConv" $ op ^. _FloatConvOp
@@ -239,7 +270,7 @@ dispExprOp (SymInfo sinfo) xop = case xop of
   (Pil.FTRUNC op) -> dispUnOp "ftrunc" $ op ^. _FtruncOp
   (Pil.IMPORT op) -> dispConst "import" $ op ^. _ImportOp
   (Pil.INT_TO_FLOAT op) -> dispUnOp "intToFloat" $ op ^. _IntToFloatOp
-  (Pil.LOAD op) -> dispUnOp "load" $ op ^. _LoadOp
+  (Pil.LOAD (LoadOp op)) -> D.span [] [ bracket $ dispExpr op.src ]
   -- TODO: add memory versions for all SSA ops
   (Pil.LOW_PART op) -> dispUnOp "lowPart" $ op ^. _LowPartOp
   (Pil.LSL op) -> dispBinOp "lsl" $ op ^. _LslOp
@@ -293,8 +324,11 @@ dispExprOp (SymInfo sinfo) xop = case xop of
   (Pil.ZX (ZxOp op)) -> dispUnOp "zx" op
   (Pil.CALL (CallOp op)) -> 
       expr "call" [ D.text $ fromMaybe "(Nothing)" op.name
-                  , dispCallDest op.dest
-                  , orr $ dispExpr <$> op.params
+                  , paren $ dispCallDest op.dest
+                  , paren
+                    <<< orr
+                    <<< intercalate (D.text ", ")
+                    $ dispExpr <$> op.params
                   ]
   (Pil.StrCmp (StrCmpOp op)) -> dispBinOp "strcmp" op
   (Pil.StrNCmp (StrNCmpOp op)) ->
@@ -329,32 +363,44 @@ dispExprOp (SymInfo sinfo) xop = case xop of
       
     todo = D.span [ P.className "pil-expr-op" ] [D.text " todo "]
 
-    space = D.text " "
+    infixOp :: String
+            -> FuncViewWidget StmtAction
+            -> FuncViewWidget StmtAction
+            -> FuncViewWidget StmtAction
+    infixOp opStr a b = do
+      highlighted <- isHighlighted
+      D.span
+        []
+        [ a
+        , D.span [ P.onClick $> HighlightSym sinfo.sym
+                 , classes $ ["pointer-cursor", "pil-expr-op"]
+                   <> if highlighted then ["expr-sym-highlight"] else []
+                 ]
+          [ D.text $ " " <> opStr <> " " ]
+        , b
+        ]
+
+    infixBinOp opStr op =
+      infixOp opStr
+      (paren $ dispExpr op.left)
+      (paren $ dispExpr op.right)
 
     expr :: String
          -> Array (FuncViewWidget StmtAction)
          -> FuncViewWidget StmtAction
     expr opStr xs = do
-      h <- isHighlighted
+      highlighted <- isHighlighted
       D.span
-        (if h then [P.className "expr-sym-highlight"] else [])
+        []
         <<< intercalate space $ [ dispOpStr opStr ] <> xs
 
-    bracket x = orr [ D.text "["
-                    , x
-                    , D.text "]"
-                    ]
-
-    paren x = orr [ D.text "("
-                  , x
-                  , D.text ")"
-                  ]
-
-    dispOpStr opStr =
-      D.span [ P.className "pil-expr-op"
-             , P.onClick $> HighlightSym sinfo.sym
+    dispOpStr opStr = do
+      highlighted <- isHighlighted
+      D.span [ P.onClick $> HighlightSym sinfo.sym
+             , classes $ ["pointer-cursor", "pil-expr-op"]
+                <> if highlighted then ["expr-sym-highlight"] else []
              ]
-      [ D.text opStr ]
+        [ D.text opStr ]
 
     dispUnOp opStr op = expr opStr [paren $ dispExpr op.src]
 
@@ -392,8 +438,10 @@ dispExpr (InfoExpression x) =
 dispPilVar :: PilVar -> FuncViewWidget StmtAction
 dispPilVar pv@(PilVar x) = do
   st <- get
-  let msym = Map.lookup pv st.varSymMap 
-  r <- D.span [ P.className "pilvar"
+  let msym = Map.lookup pv st.varSymMap
+  let highlighted = fromMaybe false $ (==) <$> msym <*> st.highlightedSym
+  r <- D.span [ classes $ ["pilvar", "pointer-cursor"]
+                <> if highlighted then ["expr-sym-highlight"] else []
               , P.onClick $> (HighlightSym <$> msym)
               ]
        [ D.text x.symbol ]
@@ -407,8 +455,15 @@ dispStmt stmt = case stmt of
               , D.text " = "
               , dispExpr x.value
               ]
-  Pil.Constraint _ -> todo
-  Pil.Store (Pil.StoreOp a) -> todo
+  Pil.Constraint (Pil.ConstraintOp x) ->
+    D.span [] [ D.text "?: "
+              , dispExpr x.condition
+              ]
+  Pil.Store (Pil.StoreOp x) ->
+    D.span [] [ bracket $ dispExpr x.addr
+              , D.text " = "
+              , dispExpr x.value 
+              ]
   Pil.UnimplInstr s -> todo
   Pil.UnimplMem (Pil.UnimplMemOp a) -> todo
   Pil.Undef -> todo
@@ -417,7 +472,12 @@ dispStmt stmt = case stmt of
   Pil.EnterContext (Pil.EnterContextOp a) -> todo
   Pil.ExitContext (Pil.ExitContextOp a) -> todo
   Pil.Call (Pil.CallOp a) -> todo
-  Pil.DefPhi (Pil.DefPhiOp a) -> todo
+  Pil.DefPhi (Pil.DefPhiOp x) ->
+    D.span [] [ dispPilVar x.dest
+              , D.text " = Φ"
+              , orr <<< intercalate (D.text ", ") $ dispPilVar <$> x.src
+              ]
+    
   where
     wrapper = D.span
     todo = wrapper [] [D.text "_"]
@@ -435,38 +495,183 @@ statement index stmt =
 statements :: FuncViewWidget Unit
 statements = do
   D.div []
-    [ D.div [] [D.text "Statements"]
+    [ D.h4 [] [D.text "Statements"]
     , view ]
   where
     
     update (HighlightSym sym) = modify_ (_ {highlightedSym = Just sym})
     update Unhighlight= modify_ (_ {highlightedSym = Nothing})
 
-    view :: forall a. FuncViewWidget a
+    view :: FuncViewWidget Unit
     view = do
       st <- get
       action <- orr $ (uncurry statement) <$> st.symStmts
       log $ show action
       update action
-      view
+
+dispType :: String -> Array (FuncViewWidget Sym) -> FuncViewWidget Sym
+dispType s fields = D.span [] $
+  [ D.span [classes ["type-name"]] [D.text s] ]
+  <> fields
+
+dispType_ :: String -> FuncViewWidget Sym
+dispType_ s = dispType s []
+
+-- indents by an extra n amount
+indent :: forall a. Int -> Array (FuncViewWidget a) -> FuncViewWidget a
+indent n xs = do
+  st <- get
+  let oldIndent = st.typeIndent
+      newIndent = oldIndent + n
+  modify_ (_ {typeIndent = oldIndent + n})
+  r <- orr $ f newIndent <$> xs
+  modify_ (_ {typeIndent = oldIndent})
+  pure r
+  where
+    f newIndent m =
+      D.div [ P.style { paddingLeft: show 12 <> "px" } ] [m]
+
+typeField_ :: String -> DeepSymType -> FuncViewWidget Sym
+typeField_ label x = D.span []
+  [ D.span [ classes ["type-field-label"] ] [ D.text $ label <> ": " ]
+  , dispSymType x
+  ]
+          
+
+typeField :: String -> DeepSymType -> FuncViewWidget Sym
+typeField label x =  D.div []
+  [ D.span [ classes ["type-field-label"] ] [ D.text $ label <> ":" ]
+  , indent 1 [ dispSymType x ]
+  ]
+
+dispTypeVal :: forall a. String -> FuncViewWidget a
+dispTypeVal s = D.span [classes ["type-val"]]
+   [ D.text s ]
+  
+dispSymType :: DeepSymType -> FuncViewWidget Sym
+dispSymType (DSVar s@(Sym n)) =
+  D.span [ P.onClick $> s
+         , classes ["pointer-cursor"]
+         ]
+  [ D.text $ "s" <> show n ]
+dispSymType (DSRecursive s pt) =
+  D.span []
+  [ D.span [classes ["recursive-type"]] [ D.text "Recursive " ]
+  , D.span [classes ["recursive-type-sym"]] [ paren $ dispSymType (DSVar s) ]
+  , D.text ":"
+  , indent 1
+    [ dispSymType (DSType pt) ]
+  ]
+dispSymType (DSType t) = case t of
+  TBool -> dispType_ "Bool"
+  TChar -> dispType_ "Char"
+  TInt (TIntOp x) ->
+    dispType "Int"
+    [ indent 1
+      [ typeField_ "signed" x.signed
+      , typeField_ "bitWidth" x.bitWidth
+      ]
+    ]
+
+  TFloat (TFloatOp a) -> dispType_ "Float"
+
+  TBitVector (TBitVectorOp x) ->
+    dispType "BV " [dispSymType x.bitWidth]
+
+
+  TPointer (TPointerOp x) ->
+    dispType "Pointer"
+    [ indent 1
+      [ typeField_ "bitWidth" x.bitWidth
+      , typeField "pointeeType" x.pointeeType
+      ]
+    ]
+
+  TArray (TArrayOp x) -> dispType "Array"
+     [ indent 1
+       [ typeField_ "len" x.len
+       , typeField "elemType" x.elemType
+       ]
+     ]
+  TRecord fields -> dispType "Record"
+     [ indent 1 <<< flip map fields $ \((BitOffset (Int64 off)) /\ x) ->
+        typeField (BigInt.toString off) x
+     ]
+  TBottom s -> dispType_ "Bottom"
+  TFunction (TFunctionOp a) -> dispType_ "Function"
+
+  TVBitWidth (Bits (Word64 bits)) -> dispTypeVal $ BigInt.toString bits <> "w"
+  TVLength (Word64 n) -> dispTypeVal $ BigInt.toString n
+  TVSign b -> dispTypeVal $ if b then "true" else "false"
+
+
+dispTypes :: FuncViewWidget Unit
+dispTypes = do
+  st <- get
+  s <- D.div []
+    [ D.h4 [] [ D.text "Type" ]
+    , case st.highlightedSym of
+         Nothing -> D.text "Select an expression"
+         Just s@(Sym n) ->
+           D.div []
+           [ D.h5 [] [ D.text $ "Sym " <> show n ]
+           , maybe (D.text "unknown") dispSymType $ Map.lookup s st.solutions
+           ]
+    ]
+  modify_ (_ {highlightedSym = Just s})
 
 -- eventually this could add a wrapper or something
-typeReport :: FuncViewWidget Unit
-typeReport = statements
+typeReport :: forall a. FuncViewWidget a
+typeReport = go
+  where
+    go = do
+      M.grid [ prop "container" true
+             , prop "spacing" 2 ]
+        [ M.grid [ prop "item" true
+                 , P.className "type-report-statements"
+                 ]
+          [ statements ]
+        , M.grid [ prop "item" true
+                 , P.className "type-report-types"
+                 ]
+          [ dispTypes ]
+        ]
+      go
 
-functionView :: Conn ServerToWeb WebToServer
+funcTitle :: forall a. CG.Function -> FuncViewWidget a
+funcTitle (CG.Function func) =
+  D.h2 [ P.className "function-view-title" ]
+  [ D.span [P.className "function-view-title-name"]
+    [ D.text func.name ]
+  , D.span [P.className "function-view-title-address"]
+    [ D.text " "
+    , paren $ dispAddr func.address
+    ]
+  ]
+
+funcViewMain :: forall a. CG.Function -> FuncViewWidget a
+funcViewMain func =
+  D.div []
+  [ funcTitle func
+  , typeReport
+  ]
+
+functionView :: forall a. Conn ServerToWeb WebToServer
              -> CG.Function
-             -> Widget HTML Unit
+             -> Widget HTML a
 functionView conn fn@(CG.Function func) = do
   liftEffect <<< Socket.sendMessage conn $ WSGetTypeReport fn
   (TypeReport tr) <- orr
     [ liftAff $ Socket.getMessageWith conn (_ ^? _SWFunctionTypeReport)
     , D.text "Loading type report"
     ]
-  void $ runStateT typeReport
+  void $ runStateT (funcViewMain fn)
     { conn
     , highlightedSym: Nothing
     , varSymTypeMap: Map.fromFoldable tr.varSymTypeMap
     , varSymMap: Map.fromFoldable tr.varSymMap
     , symStmts: tr.symStmts
+    , solutions: Map.fromFoldable tr.solutions
+    , typeIndent: 0
     }
+  D.text "Shouldn't reach here."

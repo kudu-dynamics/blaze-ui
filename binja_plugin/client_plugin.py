@@ -7,6 +7,7 @@ from binaryninja.flowgraph import FlowGraph, FlowGraphNode
 from binaryninja.enums import InstructionTextTokenType
 from binaryninjaui import FlowGraphWidget, ViewType
 from binaryninja.plugin import BackgroundTaskThread
+from .cfg import (start_cfg)
 import sys
 import os
 import os.path
@@ -38,7 +39,7 @@ class BlazeIO():
     def send(self, bv, msg):
         self.__init_thread()
         self.bv_mapping[bv.file.filename] = bv
-        new_msg = {"_bvFilePath" : bv.file.filename, "_action" : msg}
+        new_msg = {"bvFilePath" : bv.file.filename, "action" : msg}
         self.out_queue.put(new_msg)
         
 
@@ -74,8 +75,8 @@ async def recv_loop(websocket, bv_mapping):
 
         # log_info(f"recv {msg}")
         try:
-            bv = bv_mapping[msg['_bvFilePath']]
-            message_handler(bv, msg['_action'])
+            bv = bv_mapping[msg['bvFilePath']]
+            message_handler(bv, msg['action'])
         except:
             log_warn(f"recv_loop: couldn't find bv in mapping for {msg}")
                      
@@ -141,9 +142,12 @@ def listen_stop(bv):
 actionSayHello = "Blaze\\Say Hello"
 actionSendInstruction = "Blaze\\Send Instruction"
 actionTypeCheckFunction = "Blaze\\Type Check Function"
+actionBlazeCfg = "Blaze\\Start CFG"
 
 PluginCommand.register(actionSayHello, "Say Hello", say_hello)
 PluginCommand.register_for_function(actionTypeCheckFunction, "Type Check Function", type_check_function)
+PluginCommand.register_for_function(actionBlazeCfg, "Start CFG", start_cfg)
+
 
 # PluginCommand.register_for_medium_level_il_instruction(actionSendInstruction, "Send Instruction", send_instruction)
 
