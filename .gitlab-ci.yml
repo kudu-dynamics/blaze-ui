@@ -123,8 +123,8 @@ test:branch:
     GIT_STRATEGY: none
     GIT_CLEAN_FLAGS: none
   script:
-    - cd /blaze/blaze-ui
-    - STACK_TEST_TIMEOUT=1800 .ci/scripts/run_stack_test.py
+    - cd /blaze/blaze-ui/server
+    - STACK_TEST_TIMEOUT=1800 ../.ci/scripts/run_stack_test.py
 
 test:detached:
   stage: test
@@ -138,8 +138,8 @@ test:detached:
     GIT_STRATEGY: none
     GIT_CLEAN_FLAGS: none
   script:
-    - cd /blaze/blaze-ui
-    - STACK_TEST_TIMEOUT=1800 .ci/scripts/run_stack_test.py
+    - cd /blaze/blaze-ui/server
+    - STACK_TEST_TIMEOUT=1800 ../.ci/scripts/run_stack_test.py
 
 # If we just pushed to the default branch, tag the image as :latest and push
 
