@@ -102,7 +102,7 @@ include-dirs:
   - "../../binaryninja-haskell/res"
 
 executables:
-  blaze_ui_server:
+  blaze-ui-server:
     main: Main.hs
     source-dirs:  app
     ghc-options:

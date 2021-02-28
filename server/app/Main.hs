@@ -15,9 +15,9 @@ main = do
 
     [host, wsPort, httpPort ] -> return $ ServerConfig (cs host) (P.read wsPort) (P.read httpPort)
     _ -> do
-      putText "BLAZE_UI_HOST='localhost' BLAZE_UI_PORT='1234' blaze_ui_server"
+      putText "BLAZE_UI_HOST='localhost' BLAZE_UI_WS_PORT='1234' BLAZE_UI_HTTP_PORT='2345' blaze-ui-server"
       putText "or"
-      putText "blaze_ui_server [host] [websockets port] [http port]"
+      putText "blaze-ui-server [host] [websockets port] [http port]"
       P.error "Invalid args"
   void . forkIO $ WebServer.run cfg
   Server.run cfg
