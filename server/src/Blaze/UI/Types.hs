@@ -20,6 +20,7 @@ import Blaze.Function (Function)
 import qualified Blaze.Types.CallGraph as CG
 import qualified Blaze.Types.Function as F
 import Blaze.UI.Types.BinjaMessages (Cfg)
+import Blaze.Types.Cfg (CfNode)
 
 data BinjaMessage a = BinjaMessage
   { bvFilePath :: Text
@@ -34,7 +35,7 @@ data ServerToBinja = SBLogInfo { message :: Text }
                    | SBLogError { message :: Text }
                    | SBCfg { funcAddress :: Word64
                            -- TODO: send cfg with text
-                           , cfg :: Cfg [Text]
+                           , cfg :: Cfg (CfNode [Text])
                            }
                    | SBNoop
                    deriving (Eq, Ord, Show, Generic)

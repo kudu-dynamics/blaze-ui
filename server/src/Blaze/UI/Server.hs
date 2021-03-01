@@ -18,14 +18,15 @@ import qualified Data.HashMap.Strict as HashMap
 import Blaze.Pil as Pil
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
-import Blaze.Pretty (prettyIndexedStmts)
+import qualified Blaze.Import.Source.BinaryNinja.Cfg as Cfg
+import Blaze.Pretty (prettyIndexedStmts, showHex)
 import qualified Blaze.Types.Path.AlgaPath as AP
 import qualified Blaze.Types.Pil as Pil
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.Types.CallGraph as CG
 import qualified Blaze.UI.Web.Pil as WebPil
-
+import Blaze.UI.Types.BinjaMessages (convertPilCfg)
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
   x <- WS.receiveData conn :: IO LBS.ByteString
@@ -312,6 +313,21 @@ handleBinjaEvent bv = \case
         printTypeReportToConsole fn tr
         sendToBinja . SBLogInfo $ "Completed checking " <> fn ^. BNFunc.name
         sendToBinja . SBLogInfo $ "See server log for results."
+
+  BSStartCfgForFunction funcAddr -> do
+    mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
+    case mfunc of
+      Nothing -> sendToBinja
+        . SBLogError $ "Couldn't find function at " <> showHex funcAddr
+      Just func -> do
+        mr <- liftIO $ Cfg.getCfg (BNImporter bv) bv 0 func
+        case mr of
+          Nothing -> sendToBinja
+            . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
+          Just r -> sendToBinja
+            . SBCfg funcAddr $ convertPilCfg $ r ^. #result
+        debug "Good job"
+    
 
   BSNoop -> debug "Binja noop"
 
