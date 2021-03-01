@@ -1,12 +1,109 @@
+from typing import Dict, Any
+
 from binaryninja import PluginCommand, HighlightStandardColor, log_info, log_error, log_warn, BinaryView
 from binaryninjaui import UIAction
 from binaryninja.function import DisassemblyTextRenderer, InstructionTextToken
-from binaryninja.flowgraph import FlowGraph, FlowGraphNode
-from binaryninja.enums import InstructionTextTokenType, BranchType
+from binaryninja.flowgraph import FlowGraph, FlowGraphNode, EdgeStyle
+from binaryninja.enums import (BranchType, InstructionTextTokenType,
+                               HighlightStandardColor, FlowGraphOption,
+                               EdgePenStyle, ThemeColor)
 from binaryninjaui import FlowGraphWidget, ViewType
 from binaryninja.plugin import BackgroundTaskThread
 from binaryninja.interaction import show_graph_report
 
+example_graph = {
+    'nodes': [
+        {
+            'id': 1,
+            'lines': [
+                'Branch cond: cmpE (rcx) (0)'
+            ],
+        },
+        {
+            'id': 2,
+            'lines': [
+                'rdi = rcx', \
+                'call f f [0xdeadbeef]', \
+                'enter context?',
+            ],
+        },
+        {
+            'id': 3,
+            'lines': [
+                'rax = mul (2) (rdi)',
+            ],
+        },
+        {
+            'id': 4,
+            'lines': [
+                'exit context?', \
+                'rcx = rax',
+            ],
+        },
+        {
+            'id': 5,
+            'lines': [
+                'rax = rcx',
+            ],
+        }
+    ],
+    'edges': [
+        {
+            'from': 1,
+            'to': 5,
+            'type': 'true',
+        },
+        {
+            'from': 1,
+            'to': 2,
+            'type': 'false',
+        },
+        {
+            'from': 2,
+            'to': 3,
+            'type': 'call',
+        },
+        {
+            'from': 3,
+            'to': 4,
+            'type': 'return',
+        },
+        {
+            'from': 4,
+            'to': 5,
+            'type': 'unconditional',
+        }
+    ]
+}
+
+EDGE_TYPES = {
+    'true': (BranchType.TrueBranch, None),
+    'false': (BranchType.FalseBranch, None),
+    'unconditional': (BranchType.UnconditionalBranch, None),
+    'call': (BranchType.UserDefinedBranch,
+             EdgeStyle(style=EdgePenStyle.DashLine,
+                       theme_color=ThemeColor.UnconditionalBranchColor)),
+    'return': (BranchType.UserDefinedBranch,
+               EdgeStyle(style=EdgePenStyle.DotLine,
+                         theme_color=ThemeColor.UnconditionalBranchColor)),
+}
+
+
+def show_cfg(cfg: Dict[str, Any] = example_graph):
+    graph = FlowGraph()
+    nodes = {}
+
+    for node in cfg['nodes']:
+        fg_node = FlowGraphNode(graph)
+        fg_node.lines = node['lines']
+        nodes[node['id']] = fg_node
+        graph.append(fg_node)
+
+    for edge in cfg['edges']:
+        branch_type, edge_style = EDGE_TYPES[edge['type']]
+        nodes[edge['from']].add_outgoing_edge(branch_type, nodes[edge['to']],
+                                              edge_style)
+    show_graph_report("Graph", graph)
 
 # Basic sample flowgrpah
 #
