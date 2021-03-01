@@ -37,6 +37,9 @@ data ServerToBinja = SBLogInfo { message :: Text }
                            -- TODO: send cfg with text
                            , cfg :: Cfg (CfNode [Text])
                            }
+                   | SBCfgPruningDemo { cfg :: Cfg (CfNode [Text])
+                                      , prunedCfg :: Cfg (CfNode [Text])
+                                      }
                    | SBNoop
                    deriving (Eq, Ord, Show, Generic)
 
@@ -48,6 +51,7 @@ data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
                    | BSTypeCheckFunction { address :: Word64 }
                    | BSStartCfgForFunction { address :: Word64 }
+                   | BSCfgPruningDemo
                    | BSNoop
                    deriving (Eq, Ord, Show, Generic)
 

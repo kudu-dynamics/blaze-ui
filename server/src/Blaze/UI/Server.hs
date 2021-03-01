@@ -2,6 +2,7 @@
 
 module Blaze.UI.Server where
 
+import qualified Prelude as P
 import Blaze.UI.Prelude
 import Blaze.Import.Source.BinaryNinja (BNImporter(BNImporter))
 import qualified Blaze.Import.CallGraph
@@ -26,7 +27,11 @@ import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.Types.CallGraph as CG
 import qualified Blaze.UI.Web.Pil as WebPil
-import Blaze.UI.Types.BinjaMessages (convertPilCfg)
+import Blaze.UI.Types.BinjaMessages (convertPilCfg, convertInterCfg)
+import qualified Blaze.CfgPruningDemo as CfgDemo
+import qualified Text.Pretty.Simple as PP
+import qualified Data.Text.IO as TextIO
+
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
   x <- WS.receiveData conn :: IO LBS.ByteString
@@ -324,10 +329,23 @@ handleBinjaEvent bv = \case
         case mr of
           Nothing -> sendToBinja
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
-          Just r -> sendToBinja
-            . SBCfg funcAddr $ convertPilCfg $ r ^. #result
+          Just r -> do
+            pprint . Aeson.encode . convertPilCfg $ r ^. #result
+            sendToBinja . SBCfg funcAddr $ convertPilCfg $ r ^. #result
         debug "Good job"
-    
+
+  BSCfgPruningDemo -> do
+    micfg <- liftIO $ CfgDemo.testExpand
+    case micfg of
+      Nothing -> P.error "Couldn't find testExpand binary"
+      Just icfg -> do
+        let icfg' = CfgDemo.prune icfg
+        putText "\n------------- Demo ICFG -------------\n"
+        liftIO . TextIO.writeFile "/tmp/cfg.json" . cs . PP.pStringNoColor . cs . Aeson.encode $ convertInterCfg icfg
+        putText "\n------------- Demo Pruned ICFG -------------\n"
+        liftIO . TextIO.writeFile "/tmp/cfg_pruned.json" . cs . PP.pStringNoColor . cs . Aeson.encode $ convertInterCfg icfg'
+
+        sendToBinja $ SBCfgPruningDemo (convertInterCfg icfg) (convertInterCfg icfg')
 
   BSNoop -> debug "Binja noop"
 

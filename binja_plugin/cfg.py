@@ -12,7 +12,7 @@ from binaryninja.interaction import show_graph_report
 #
 # Creates a flow graph, showing some basic functionality
 
-def start_cfg(bv, func):
+def load_cfg(bv, cfg):
     graph = FlowGraph()
     node_a = FlowGraphNode(graph)
     node_a.lines = ["Node A"]
@@ -40,3 +40,8 @@ def start_cfg(bv, func):
     node2_a.add_outgoing_edge(BranchType.UnconditionalBranch, node2_b)
     node2_a.add_outgoing_edge(BranchType.UnconditionalBranch, node2_c)
     show_graph_report("Out of order", graph)
+
+
+
+
+

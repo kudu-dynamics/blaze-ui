@@ -21,6 +21,13 @@ import qualified Blaze.Graph as G
 import qualified Data.HashMap.Strict as HMap
 import qualified Data.Set as Set
 import Blaze.Pretty (pretty)
+import Blaze.Cfg.Interprocedural (
+  InterCfg (InterCfg),
+  unInterCfg,
+ )
+
+convertInterCfg :: InterCfg -> Cfg (CfNode [Text])
+convertInterCfg = convertPilCfg . unInterCfg
 
 convertPilCfg :: PilCfg -> Cfg (CfNode [Text])
 convertPilCfg pcfg = Cfg
