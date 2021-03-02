@@ -341,9 +341,13 @@ handleBinjaEvent bv = \case
       Just icfg -> do
         let icfg' = CfgDemo.prune icfg
         putText "\n------------- Demo ICFG -------------\n"
-        liftIO . TextIO.writeFile "/tmp/cfg.json" . cs . PP.pStringNoColor . cs . Aeson.encode $ convertInterCfg icfg
+        liftIO . TextIO.writeFile "/tmp/cfg.json" . cs . Aeson.encode $ convertInterCfg icfg
+        liftIO . TextIO.writeFile "/tmp/pcfg.json" . cs . PP.pStringNoColor . cs . Aeson.encode $ convertInterCfg icfg
+
         putText "\n------------- Demo Pruned ICFG -------------\n"
-        liftIO . TextIO.writeFile "/tmp/cfg_pruned.json" . cs . PP.pStringNoColor . cs . Aeson.encode $ convertInterCfg icfg'
+        liftIO . TextIO.writeFile "/tmp/cfg_pruned.json" . cs . Aeson.encode $ convertInterCfg icfg'
+        liftIO . TextIO.writeFile "/tmp/pcfg_pruned.json" . cs . PP.pStringNoColor . cs . Aeson.encode $ convertInterCfg icfg'
+
 
         sendToBinja $ SBCfgPruningDemo (convertInterCfg icfg) (convertInterCfg icfg')
 
