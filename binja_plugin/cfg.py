@@ -1,6 +1,7 @@
 from typing import Dict, Any, Tuple, Optional
 from pathlib import Path
 import json
+import enum
 
 from binaryninja import PluginCommand, HighlightStandardColor, log_info, log_error, log_warn, BinaryView
 from binaryninjaui import UIAction
@@ -13,9 +14,12 @@ from binaryninjaui import FlowGraphWidget, ViewType
 from binaryninja.plugin import BackgroundTaskThread
 from binaryninja.interaction import show_graph_report
 
-ENTER_FUNC_TAG = 'EnterFunc'
-LEAVE_FUNC_TAG = 'LeaveFunc'
-BASIC_BLOCK_TAG = 'BasicBlock'
+
+class CFNode(str, enum.Enum):
+    BasicBlock = 'BasicBlock'
+    Call = 'Call'
+    EnterFunc = 'EnterFunc'
+    LeaveFunc = 'LeaveFunc'
 
 
 def fixup_graph(graph):
@@ -29,18 +33,32 @@ with open(Path(__file__).parent / 'res' / 'cfg.json') as f:
 with open(Path(__file__).parent / 'res' / 'cfg_pruned.json') as f:
     AFTER_GRAPH = fixup_graph(json.load(f))
 
+BEFORE_GRAPH_HIGHLIGHTING = {
+    53: HighlightStandardColor.RedHighlightColor,
+    59: HighlightStandardColor.YellowHighlightColor,
+    66: HighlightStandardColor.GreenHighlightColor,
+    82: HighlightStandardColor.BlueHighlightColor
+}
+
+AFTER_GRAPH_HIGHLIGHTING = {
+    46: HighlightStandardColor.RedHighlightColor,
+    52: HighlightStandardColor.YellowHighlightColor,
+    53: HighlightStandardColor.GreenHighlightColor,
+    56: HighlightStandardColor.BlueHighlightColor
+}
+
 
 def get_edge_type(edge, nodes) -> Tuple[BranchType, Optional[EdgeStyle]]:
     node_from = nodes[edge['src']]
     node_to = nodes[edge['dst']]
 
-    if node_to['tag'] == ENTER_FUNC_TAG:
+    if node_to['tag'] == CFNode.EnterFunc:
         assert edge['branchType'] == 'UnconditionalBranch', 'bad assumption'
         return (BranchType.UserDefinedBranch,
                 EdgeStyle(style=EdgePenStyle.DashLine,
                           theme_color=ThemeColor.UnconditionalBranchColor))
 
-    if node_from['tag'] == LEAVE_FUNC_TAG:
+    if node_from['tag'] == CFNode.LeaveFunc:
         assert edge['branchType'] == 'UnconditionalBranch', 'bad assumption'
         return (BranchType.UserDefinedBranch,
                 EdgeStyle(style=EdgePenStyle.DotLine,
@@ -55,17 +73,43 @@ def get_edge_type(edge, nodes) -> Tuple[BranchType, Optional[EdgeStyle]]:
 
 def format_block_header(node_id: int, node: dict) -> str:
     tag = node['tag']
-    start_addr = node["contents"].get("start", None)
-    if tag == BASIC_BLOCK_TAG and start_addr is not None:
-        return f'#{node_id} ({start_addr:#x}) {node["tag"]}'
+    start_addr = node['contents'].get('start', None)
+
+    if tag == CFNode.BasicBlock:
+        return f'{start_addr:#x} (id {node_id}) {tag}'
+
+    if tag == CFNode.EnterFunc:
+        prevFun = node['contents']['prevCtx']['func']['name']
+        nextFun = node['contents']['nextCtx']['func']['name']
+        return f'#{node_id} {tag} {prevFun} -> {nextFun}'
+
+    if tag == CFNode.LeaveFunc:
+        prevFun = node['contents']['prevCtx']['func']['name']
+        nextFun = node['contents']['nextCtx']['func']['name']
+        return f'#{node_id} {tag} {nextFun} <- {prevFun}'
+
+    if tag == CFNode.Call:
+        fun = node['contents']['function']['name']
+        return f'#{node_id} ({start_addr:#x}) {tag} {fun}'
+
+    assert False, f'Inexaustive match on CFNode? tag={tag}'
 
 
-def show_cfg(cfg: Dict[str, Any] = BEFORE_GRAPH):
+def show_cfg(
+        cfg: Dict[str, Any] = BEFORE_GRAPH,
+        highlighting: Optional[Dict[int, HighlightStandardColor]] = None) \
+        -> None:
+
+    highlighting = highlighting if highlighting else {}
+
     graph = FlowGraph()
     nodes = {}
 
     for (node_id, node) in cfg['nodeMap'].items():
         fg_node = FlowGraphNode(graph)
+
+        if (highlight := highlighting.get(node_id)) is not None:
+            fg_node.highlight = highlight
 
         fg_node.lines = [format_block_header(node_id, node)]
         if (nodeData := node.get('contents', {}).get('nodeData', None)):
