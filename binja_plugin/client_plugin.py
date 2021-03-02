@@ -7,7 +7,7 @@ from binaryninja.flowgraph import FlowGraph, FlowGraphNode
 from binaryninja.enums import InstructionTextTokenType
 from binaryninjaui import FlowGraphWidget, ViewType
 from binaryninja.plugin import BackgroundTaskThread
-from .cfg import (start_cfg)
+# from .cfg import (start_cfg)
 import sys
 import os
 import os.path
@@ -19,16 +19,17 @@ import queue
 BLAZE_UI_HOST = os.environ.get('BLAZE_UI_HOST', 'localhost')
 BLAZE_UI_WS_PORT = os.environ.get('BLAZE_UI_WS_PORT', '31337')
 
+
 class BlazeIO():
     def __init__(self, event_loop):
         self.thread = None
         self.loop = event_loop
-        self.bv_mapping = {} # {bvFilePath -> bv}
+        self.bv_mapping = {}  # {bvFilePath -> bv}
 
     def reset(self):
         self.thread = None
         log_info("reset BlazeIO")
-        
+
     def __init_thread(self):
         if not self.thread:
             self.out_queue = queue.Queue()
@@ -39,9 +40,9 @@ class BlazeIO():
     def send(self, bv, msg):
         self.__init_thread()
         self.bv_mapping[bv.file.filename] = bv
-        new_msg = {"bvFilePath" : bv.file.filename, "action" : msg}
+        new_msg = {"bvFilePath": bv.file.filename, "action": msg}
         self.out_queue.put(new_msg)
-        
+
 
 def message_handler(bv, msg):
     tag = msg['tag']
@@ -49,7 +50,7 @@ def message_handler(bv, msg):
     if tag == 'SBLogInfo':
         # log_info(f"Blaze: {msg['message']}")
         log_info(msg['message'])
-        
+
     elif tag == 'SBLogWarn':
         # log_warn(f"Blaze: {msg['message']}")
         log_warn(msg['message'])
@@ -57,13 +58,14 @@ def message_handler(bv, msg):
     elif tag == 'SBLogError':
         # log_error(f"Blaze: {msg['message']}")
         log_error(msg['message'])
-        
+
     elif tag == 'SBNoop':
         log_info(f"got Noop")
 
     else:
-        log_info(f"unknown message type")    
+        log_info(f"unknown message type")
     return
+
 
 async def recv_loop(websocket, bv_mapping):
     while True:
@@ -79,8 +81,8 @@ async def recv_loop(websocket, bv_mapping):
             message_handler(bv, msg['action'])
         except:
             log_warn(f"recv_loop: couldn't find bv in mapping for {msg}")
-                     
-            
+
+
 async def send_loop(loop, websocket, out_queue):
     while True:
         msg = await loop.run_in_executor(None, out_queue.get)
@@ -91,12 +93,14 @@ async def send_loop(loop, websocket, out_queue):
         out_queue.task_done()
         # log_info(f"sent {msg}")
 
+
 async def main_websocket_loop(loop, out_queue, bv_mapping):
     uri = "ws://" + BLAZE_UI_HOST + ":" + BLAZE_UI_WS_PORT + "/binja"
 
+    log_info('connecting to websocket...')
     async with websockets.connect(uri) as websocket:
-        consumer_task = asyncio.ensure_future(
-            recv_loop(websocket, bv_mapping))
+        log_info('connected')
+        consumer_task = asyncio.ensure_future(recv_loop(websocket, bv_mapping))
         producer_task = asyncio.ensure_future(
             send_loop(loop, websocket, out_queue))
         done, pending = await asyncio.wait(
@@ -108,7 +112,7 @@ async def main_websocket_loop(loop, out_queue, bv_mapping):
         log_info('stopped loops!')
         blaze.reset()
         loop.stop()
-        
+
 
 class MainWebsocketThread(BackgroundTaskThread):
     def __init__(self, bv_mapping, event_loop, out_queue):
@@ -118,36 +122,44 @@ class MainWebsocketThread(BackgroundTaskThread):
         self.bv_mapping = bv_mapping
 
     def run(self):
-        self.loop.create_task(main_websocket_loop(self.loop, self.out_queue, self.bv_mapping))
+        self.loop.create_task(
+            main_websocket_loop(self.loop, self.out_queue, self.bv_mapping))
         self.loop.run_forever()
 
-        
-blaze = BlazeIO(asyncio.get_event_loop())
+
+loop = asyncio.new_event_loop()
+loop.set_debug(True)
+asyncio.set_event_loop(loop)
+blaze = BlazeIO(loop)
+
 
 def say_hello(bv):
     global blaze
     blaze.send(bv, {'tag': 'BSTextMessage', 'message': 'this is Bilbo'})
 
+
 def type_check_function(bv, func):
     global blaze
     blaze.send(bv, {'tag': 'BSTypeCheckFunction', 'address': func.start})
 
-    
+
 def listen_start(bv):
     pass
 
+
 def listen_stop(bv):
     pass
+
 
 actionSayHello = "Blaze\\Say Hello"
 actionSendInstruction = "Blaze\\Send Instruction"
 actionTypeCheckFunction = "Blaze\\Type Check Function"
 actionBlazeCfg = "Blaze\\Start CFG"
 
-PluginCommand.register(actionSayHello, "Say Hello", say_hello)
-PluginCommand.register_for_function(actionTypeCheckFunction, "Type Check Function", type_check_function)
-PluginCommand.register_for_function(actionBlazeCfg, "Start CFG", start_cfg)
-
+# PluginCommand.register(actionSayHello, "Say Hello", say_hello)
+# PluginCommand.register_for_function(actionTypeCheckFunction,
+#                                     "Type Check Function", type_check_function)
+# PluginCommand.register_for_function(actionBlazeCfg, "Start CFG", start_cfg)
 
 # PluginCommand.register_for_medium_level_il_instruction(actionSendInstruction, "Send Instruction", send_instruction)
 
