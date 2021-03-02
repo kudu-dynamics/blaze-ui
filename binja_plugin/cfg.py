@@ -81,16 +81,16 @@ def format_block_header(node_id: int, node: dict) -> str:
     if tag == CFNode.EnterFunc:
         prevFun = node['contents']['prevCtx']['func']['name']
         nextFun = node['contents']['nextCtx']['func']['name']
-        return f'#{node_id} {tag} {prevFun} -> {nextFun}'
+        return f'(id {node_id}) {tag} {prevFun} -> {nextFun}'
 
     if tag == CFNode.LeaveFunc:
         prevFun = node['contents']['prevCtx']['func']['name']
         nextFun = node['contents']['nextCtx']['func']['name']
-        return f'#{node_id} {tag} {nextFun} <- {prevFun}'
+        return f'(id {node_id}) {tag} {nextFun} <- {prevFun}'
 
     if tag == CFNode.Call:
         fun = node['contents']['function']['name']
-        return f'#{node_id} ({start_addr:#x}) {tag} {fun}'
+        return f'{start_addr:#x} (id {node_id}) {tag} {fun}'
 
     assert False, f'Inexaustive match on CFNode? tag={tag}'
 
@@ -123,3 +123,12 @@ def show_cfg(
         nodes[edge['src']].add_outgoing_edge(branch_type, nodes[edge['dst']],
                                              edge_style)
     show_graph_report("Graph", graph)
+
+
+PluginCommand.register_for_function(
+    r'Blaze\PIL ICFG', 'Display PIL interprocedural CFG',
+    lambda bv, func: show_cfg(BEFORE_GRAPH, BEFORE_GRAPH_HIGHLIGHTING))
+
+PluginCommand.register_for_function(
+    r'Blaze\PIL ICFG (pruned)', 'Display pruned PIL interprocedural CFG',
+    lambda bv, func: show_cfg(AFTER_GRAPH, AFTER_GRAPH_HIGHLIGHTING))
