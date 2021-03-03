@@ -188,8 +188,10 @@ myTypes =
     -- memory address specifier ops
   , mkT (Proxy :: Proxy (Pil.FieldAddrOp A))  -- struct
   , mkT (Proxy :: Proxy (Pil.ConstBoolOp A))
+  , mkT (Proxy :: Proxy (Pil.BranchCondOp A))
 
   , mkT (Proxy :: Proxy (Pil.StackOffset))
+  
 
   -- types from Web.Pil
   , mkT (Proxy :: Proxy (WebPil.PilType A))
