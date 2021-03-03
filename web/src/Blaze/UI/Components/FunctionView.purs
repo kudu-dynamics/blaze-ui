@@ -427,7 +427,7 @@ dispExprOp (SymInfo sinfo) xop = case xop of
     dispCallDest (Pil.CallConstPtr x) = dispConst "constPtr" $ x ^. _ConstPtrOp
     dispCallDest (Pil.CallExpr x) = dispExpr x
     dispCallDest (Pil.CallExprs xs) = orr $ paren <<< dispExpr <$> xs
-
+    dispCallDest (Pil.CallFunc fn) = D.span [] [ D.text $ (fn ^. _Function).name ]
 
 dispExpr :: SymExpression
          -> FuncViewWidget StmtAction
@@ -468,6 +468,7 @@ dispStmt stmt = case stmt of
   Pil.UnimplMem (Pil.UnimplMemOp a) -> todo
   Pil.Undef -> todo
   Pil.Nop -> todo
+  Pil.BranchCond _ -> todo
   Pil.Annotation s -> todo
   Pil.EnterContext (Pil.EnterContextOp a) -> todo
   Pil.ExitContext (Pil.ExitContextOp a) -> todo

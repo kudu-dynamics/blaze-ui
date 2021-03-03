@@ -1452,3 +1452,27 @@ derive instance newtypeConstBoolOp :: Newtype (ConstBoolOp a) _
 _ConstBoolOp :: forall a. Iso' (ConstBoolOp a) { constant :: Boolean }
 _ConstBoolOp = _Newtype
 --------------------------------------------------------------------------------
+newtype BranchCondOp a
+  = BranchCondOp
+      { cond :: a
+      }
+
+
+instance showBranchCondOp :: (Show a) => Show (BranchCondOp a) where
+  show x = genericShow x
+derive instance eqBranchCondOp :: (Eq a) => Eq (BranchCondOp a)
+derive instance ordBranchCondOp :: (Ord a) => Ord (BranchCondOp a)
+instance encodeBranchCondOp :: (Encode a) => Encode (BranchCondOp a) where
+  encode value = genericEncode (defaultOptions { unwrapSingleConstructors = true
+                                               , unwrapSingleArguments = true
+                                               }) value
+instance decodeBranchCondOp :: (Decode a) => Decode (BranchCondOp a) where
+  decode value = genericDecode (defaultOptions { unwrapSingleConstructors = true
+                                               , unwrapSingleArguments = true
+                                               }) value
+derive instance genericBranchCondOp :: Generic (BranchCondOp a) _
+derive instance newtypeBranchCondOp :: Newtype (BranchCondOp a) _
+--------------------------------------------------------------------------------
+_BranchCondOp :: forall a. Iso' (BranchCondOp a) { cond :: a }
+_BranchCondOp = _Newtype
+--------------------------------------------------------------------------------
