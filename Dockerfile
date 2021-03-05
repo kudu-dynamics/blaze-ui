@@ -13,4 +13,4 @@ ENV BLAZE_UI_HOST=localhost
 ENV BLAZE_UI_WS_PORT=5765
 ENV BLAZE_UI_HTTP_PORT=5766
 
-CMD ["stack", "exec", "blaze-ui-server"]
+CMD ["stack", "exec", "blaze-server"]
