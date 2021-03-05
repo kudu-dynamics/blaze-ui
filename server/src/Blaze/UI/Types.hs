@@ -19,7 +19,7 @@ import Blaze.UI.Types.WebMessages as WebMessages
 import Blaze.Function (Function)
 import qualified Blaze.Types.CallGraph as CG
 import qualified Blaze.Types.Function as F
-import Blaze.UI.Types.BinjaMessages (Cfg)
+import Blaze.UI.Types.BinjaMessages (Cfg, CfgId)
 import Blaze.Types.Cfg (CfNode)
 
 data BinjaMessage a = BinjaMessage
@@ -51,6 +51,7 @@ data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
                    | BSTypeCheckFunction { address :: Word64 }
                    | BSStartCfgForFunction { address :: Word64 }
+                   | BSExpandCall
                    | BSCfgPruningDemo
                    | BSNoop
                    deriving (Eq, Ord, Show, Generic)
@@ -114,6 +115,7 @@ data Event = WebEvent WebToServer
            | BinjaEvent BinjaToServer
            deriving (Eq, Ord, Show, Generic)
 
+
 data EventLoopCtx = EventLoopCtx
   { binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
@@ -122,7 +124,6 @@ data EventLoopCtx = EventLoopCtx
 data EventLoopState = EventLoopState
   { binjaOutput :: [ServerToBinja]
   , webOutput :: [ServerToWeb]
-  , blazeActions :: [IO BlazeToServer]
   } deriving (Generic)
 
 -- IO is in EventLoop only for debugging.
@@ -145,6 +146,11 @@ forkEventLoop_ = void . forkEventLoop
 
 debug :: Text -> EventLoop ()
 debug =  putText
+
+-- shared across sessions
+data ChallengeState = ChallengeState
+  { icfgs :: TVar (HashMap CfgId (TVar CfgState))
+  }
 
 -- there are multiple outboxes in case there are multiple conns to same binary
 data SessionState = SessionState

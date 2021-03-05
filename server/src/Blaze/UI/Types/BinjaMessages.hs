@@ -26,6 +26,8 @@ import Blaze.Cfg.Interprocedural (
   unInterCfg,
  )
 
+type CfgId = UUID
+
 convertInterCfg :: InterCfg -> Cfg (CfNode [Text])
 convertInterCfg = convertPilCfg . unInterCfg
 
