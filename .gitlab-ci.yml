@@ -97,7 +97,7 @@ build:branch:
     - docker pull "${image}:branch-${CI_COMMIT_REF_SLUG}" ||
       docker pull "${image}:latest" ||
       true
-    - \time -v docker build --pull . -f Dockerfile
+    - \time -v docker build --pull --squash . -f Dockerfile
       -t "${image}:commit-${CI_COMMIT_SHA}"
       -t "${image}:branch-${CI_COMMIT_REF_SLUG}"
     - docker push "${image}:commit-${CI_COMMIT_SHA}"
@@ -115,7 +115,7 @@ build:detached:
     - docker pull "${image}:merge-${CI_MERGE_REQUEST_IID}" ||
       docker pull "${image}:latest" ||
       true
-    - \time -v docker build --pull . -f Dockerfile
+    - \time -v docker build --pull --squash . -f Dockerfile
       -t "${image}:merge-${CI_MERGE_REQUEST_IID}"
     - docker push "${image}:merge-${CI_MERGE_REQUEST_IID}"
 
