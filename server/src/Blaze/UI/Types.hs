@@ -51,7 +51,6 @@ data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
                    | BSTypeCheckFunction { address :: Word64 }
                    | BSStartCfgForFunction { address :: Word64 }
-                   | BSCfgPruningDemo
                    | BSNoop
                    deriving (Eq, Ord, Show, Generic)
 
