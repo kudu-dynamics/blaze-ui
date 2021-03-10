@@ -13,6 +13,7 @@ import Language.PureScript.Bridge ((^==))
 import System.Directory (removeDirectoryRecursive)
 import Data.BinaryAnalysis as BA
 import qualified Blaze.Types.CallGraph as CG
+import qualified Blaze.Types.Function as Blaze
 import qualified Blaze.Types.Pil as Pil
 import qualified Blaze.UI.Web.Pil as WebPil
 import qualified Blaze.Types.Pil.Checker as Ch
@@ -40,7 +41,7 @@ import qualified Blaze.Types.Pil.Checker as Ch
 
 data WebToServer = WSTextMessage Text
                  | WSGetFunctionsList
-                 | WSGetTypeReport CG.Function
+                 | WSGetTypeReport Blaze.Function
                  | WSNoop
                  deriving (Eq, Ord, Show, Generic)
 
@@ -55,7 +56,7 @@ data ServerToWeb = SWTextMessage Text
                  | SWPilType (WebPil.DeepSymType)
                  | SWProblemType [(Int, Pil.Statement Ch.SymExpression)]
                  | SWNoop
-                 | SWFunctionsList [CG.Function]
+                 | SWFunctionsList [Blaze.Function]
 
                  -- TODO: make a real type report
                  | SWFunctionTypeReport WebPil.TypeReport
@@ -79,8 +80,8 @@ myTypes =
   , mkT (Proxy :: Proxy BA.Symbol)
 
   -- Types from Blaze.CallGraph
-  , mkT (Proxy :: Proxy CG.Function)
-  , mkT (Proxy :: Proxy CG.CallDest)
+  , mkT (Proxy :: Proxy Blaze.Function)
+  , mkT (Proxy :: Proxy (Pil.CallDest A))
 
 
   -- Types from Blaze.Pil

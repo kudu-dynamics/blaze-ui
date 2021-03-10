@@ -7,7 +7,7 @@ from binaryninja.flowgraph import FlowGraph, FlowGraphNode
 from binaryninja.enums import InstructionTextTokenType
 from binaryninjaui import FlowGraphWidget, ViewType
 from binaryninja.plugin import BackgroundTaskThread
-# from .cfg import (start_cfg)
+from .cfg import (display_icfg)
 import sys
 import os
 import os.path
@@ -61,6 +61,13 @@ def message_handler(bv, msg):
 
     elif tag == 'SBNoop':
         log_info(f"got Noop")
+
+    elif tag == 'SBCfg':
+        display_icfg(bv, msg['cfg'])
+
+    elif tag == 'SBCfgPruningDemo':
+        display_icfg(bv, msg['cfg'])
+        display_icfg(bv, msg['prunedCfg'])
 
     else:
         log_info(f"unknown message type")
@@ -143,6 +150,16 @@ def type_check_function(bv, func):
     blaze.send(bv, {'tag': 'BSTypeCheckFunction', 'address': func.start})
 
 
+def start_cfg(bv, func):
+    global blaze
+    blaze.send(bv, {'tag': 'BSStartCfgForFunction', 'address': func.start})
+
+
+def cfg_pruning_demo(bv, func):
+    global blaze
+    blaze.send(bv, {'tag': 'BSCfgPruningDemo', 'address': func.start})
+
+
 def listen_start(bv):
     pass
 
@@ -155,11 +172,14 @@ actionSayHello = "Blaze\\Say Hello"
 actionSendInstruction = "Blaze\\Send Instruction"
 actionTypeCheckFunction = "Blaze\\Type Check Function"
 actionBlazeCfg = "Blaze\\Start CFG"
+actionBlazeCfgPruningDemo = "Blaze\\CFG Pruning Demo"
 
-# PluginCommand.register(actionSayHello, "Say Hello", say_hello)
-# PluginCommand.register_for_function(actionTypeCheckFunction,
-#                                     "Type Check Function", type_check_function)
-# PluginCommand.register_for_function(actionBlazeCfg, "Start CFG", start_cfg)
+PluginCommand.register(actionSayHello, "Say Hello", say_hello)
+PluginCommand.register_for_function(actionTypeCheckFunction,
+                                    "Type Check Function", type_check_function)
+PluginCommand.register_for_function(actionBlazeCfg, "Start CFG", start_cfg)
+PluginCommand.register_for_function(actionBlazeCfgPruningDemo,
+                                    "CFG Pruning Demo", cfg_pruning_demo)
 
 # PluginCommand.register_for_medium_level_il_instruction(actionSendInstruction, "Send Instruction", send_instruction)
 

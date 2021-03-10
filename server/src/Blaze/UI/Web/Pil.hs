@@ -38,8 +38,6 @@ data TypedExpr = TypedExpr
 instance ToJSON TypedExpr
 instance FromJSON TypedExpr
 
-
-
 toTypeError :: Ch.UnifyConstraintsError Ch.DeepSymType -> TypeError
 toTypeError x = TypeError
   { stmtOrigin = x ^. #stmtOrigin
@@ -187,8 +185,7 @@ testCallOp :: [(Int, Pil.Statement SymExpression)]
 testCallOp =
   [ ( 5
     , Pil.Call $ Pil.CallOp
-      { dest = Pil.CallConstPtr
-        ( Pil.ConstPtrOp 777 )
+      { dest = Pil.CallAddr 777
       , name = Just "exit"
       , params =
         [ Ch.InfoExpression

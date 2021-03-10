@@ -13,10 +13,14 @@ import qualified Data.HashMap.Strict as HashMap
 import Web.Scotty (Parsable(parseParam))
 import Data.Text.Encoding.Base64.URL (encodeBase64, decodeBase64)
 import qualified Blaze.Types.Pil.Checker as Ch
-import Binja.Function (Function)
+import qualified Binja.Function as BNFunc
 import qualified Data.Aeson.Types as Aeson
 import Blaze.UI.Types.WebMessages as WebMessages
+import Blaze.Function (Function)
 import qualified Blaze.Types.CallGraph as CG
+import qualified Blaze.Types.Function as F
+import Blaze.UI.Types.BinjaMessages (Cfg)
+import Blaze.Types.Cfg (CfNode)
 
 data BinjaMessage a = BinjaMessage
   { bvFilePath :: Text
@@ -29,6 +33,13 @@ instance FromJSON a => FromJSON (BinjaMessage a)
 data ServerToBinja = SBLogInfo { message :: Text }
                    | SBLogWarn { message :: Text }
                    | SBLogError { message :: Text }
+                   | SBCfg { funcAddress :: Word64
+                           -- TODO: send cfg with text
+                           , cfg :: Cfg (CfNode [Text])
+                           }
+                   | SBCfgPruningDemo { cfg :: Cfg (CfNode [Text])
+                                      , prunedCfg :: Cfg (CfNode [Text])
+                                      }
                    | SBNoop
                    deriving (Eq, Ord, Show, Generic)
 
@@ -39,6 +50,8 @@ instance FromJSON ServerToBinja
 data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
                    | BSTypeCheckFunction { address :: Word64 }
+                   | BSStartCfgForFunction { address :: Word64 }
+                   | BSCfgPruningDemo
                    | BSNoop
                    deriving (Eq, Ord, Show, Generic)
 
@@ -93,8 +106,8 @@ sessionIdToBinaryPath (SessionId x) = decodeBase64 x
 
 data BlazeToServer = BZNoop
                    | BZImportantInteger Int
-                   | BZTypeCheckFunctionReport Function Ch.TypeReport
-                   | BZFunctionList [CG.Function]
+                   | BZTypeCheckFunctionReport BNFunc.Function Ch.TypeReport
+                   | BZFunctionList [Function]
                    deriving (Eq, Ord, Show, Generic)
 
 data Event = WebEvent WebToServer
