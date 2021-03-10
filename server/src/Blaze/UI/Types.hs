@@ -50,7 +50,7 @@ instance FromJSON ServerToBinja
 data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
                    | BSTypeCheckFunction { address :: Word64 }
-                   | BSStartCfgForFunction { address :: Word64 }
+                   | BSStartCfgForFunction { address :: Word64 }                     
                    | BSExpandCall
                    | BSCfgPruningDemo
                    | BSNoop
@@ -147,10 +147,10 @@ forkEventLoop_ = void . forkEventLoop
 debug :: Text -> EventLoop ()
 debug =  putText
 
--- shared across sessions
-data ChallengeState = ChallengeState
-  { icfgs :: TVar (HashMap CfgId (TVar CfgState))
-  }
+-- -- shared across sessions
+-- data ChallengeState = ChallengeState
+--   { icfgs :: TVar (HashMap CfgId (TVar CfgState))
+--   }
 
 -- there are multiple outboxes in case there are multiple conns to same binary
 data SessionState = SessionState
