@@ -65,13 +65,8 @@ def message_handler(bv, msg):
     elif tag == 'SBCfg':
         display_icfg(bv, msg['cfg'])
 
-    elif tag == 'SBCfgPruningDemo':
-        display_icfg(bv, msg['cfg'])
-        display_icfg(bv, msg['prunedCfg'])
-
     else:
-        log_info(f"unknown message type")
-    return
+        log_error(f"unknown message type: {tag}")
 
 
 async def recv_loop(websocket, bv_mapping):
@@ -159,11 +154,6 @@ def start_cfg(bv, func):
     blaze.send(bv, {'tag': 'BSStartCfgForFunction', 'address': func.start})
 
 
-def cfg_pruning_demo(bv, func):
-    global blaze
-    blaze.send(bv, {'tag': 'BSCfgPruningDemo', 'address': func.start})
-
-
 def listen_start(bv):
     pass
 
@@ -176,14 +166,11 @@ actionSayHello = "Blaze\\Say Hello"
 actionSendInstruction = "Blaze\\Send Instruction"
 actionTypeCheckFunction = "Blaze\\Type Check Function"
 actionBlazeCfg = "Blaze\\Start CFG"
-actionBlazeCfgPruningDemo = "Blaze\\CFG Pruning Demo"
 
 PluginCommand.register(actionSayHello, "Say Hello", say_hello)
-PluginCommand.register_for_function(actionTypeCheckFunction,
-                                    "Type Check Function", type_check_function)
+PluginCommand.register_for_function(actionTypeCheckFunction, "Type Check Function",
+                                    type_check_function)
 PluginCommand.register_for_function(actionBlazeCfg, "Start CFG", start_cfg)
-PluginCommand.register_for_function(actionBlazeCfgPruningDemo,
-                                    "CFG Pruning Demo", cfg_pruning_demo)
 
 # PluginCommand.register_for_medium_level_il_instruction(actionSendInstruction, "Send Instruction", send_instruction)
 
