@@ -13,18 +13,16 @@ import qualified Data.ByteString.Char8 as BSC
 import Binja.Core (BNBinaryView)
 import qualified Binja.Core as BN
 import qualified Binja.Function as BNFunc
-import Blaze.UI.Types
+import Blaze.UI.Types hiding (cfg)
 import qualified Data.HashMap.Strict as HashMap
-import Blaze.Pil as Pil
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
-import Blaze.Pretty (prettyIndexedStmts)
-import qualified Blaze.Types.Path.AlgaPath as AP
-import qualified Blaze.Types.Pil as Pil
+import qualified Blaze.Import.Source.BinaryNinja.Cfg as Cfg
+import Blaze.Pretty (prettyIndexedStmts, showHex)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
-import qualified Blaze.Types.CallGraph as CG
 import qualified Blaze.UI.Web.Pil as WebPil
+import Blaze.UI.Types.BinjaMessages (convertPilCfg)
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -81,12 +79,12 @@ createWebOutbox conn ss = do
 sendToBinja :: ServerToBinja -> EventLoop ()
 sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
   qs <- fmap HashMap.elems . readTVar $ ctx ^. #binjaOutboxes
-  mapM_ (flip writeTQueue msg) qs
+  mapM_ (`writeTQueue` msg) qs
 
 sendToWeb :: ServerToWeb -> EventLoop ()
 sendToWeb msg = ask >>= \ctx -> liftIO . atomically $ do
   qs <- fmap HashMap.elems . readTVar $ ctx ^. #webOutboxes
-  mapM_ (flip writeTQueue msg) qs
+  mapM_ (`writeTQueue` msg) qs
 
 -- TODO: log warning to binja, web, and console
 -- logWarn :: Text -> EventLoop ()
@@ -296,7 +294,7 @@ handleBinjaEvent bv = \case
     -- demo forking
     forkEventLoop_ $ do
       liftIO $ threadDelay 5000000 >> putText "calculating integer"
-      n <- liftIO $ randomIO :: EventLoop Int
+      n <- liftIO randomIO :: EventLoop Int
       sendToBinja . SBLogInfo
         $ "Here is your important integer: " <> show n
       
@@ -312,6 +310,23 @@ handleBinjaEvent bv = \case
         printTypeReportToConsole fn tr
         sendToBinja . SBLogInfo $ "Completed checking " <> fn ^. BNFunc.name
         sendToBinja . SBLogInfo $ "See server log for results."
+
+  BSStartCfgForFunction funcAddr -> do
+    mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
+    case mfunc of
+      Nothing -> sendToBinja
+        . SBLogError $ "Couldn't find function at " <> showHex funcAddr
+      Just func -> do
+        mr <- liftIO $ Cfg.getCfg (BNImporter bv) bv 0 func
+        case mr of
+          Nothing -> sendToBinja
+            . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
+          Just r -> do
+            pprint . Aeson.encode . convertPilCfg $ r ^. #result
+            sendToBinja . SBCfg funcAddr $ convertPilCfg $ r ^. #result
+        debug "Good job"
+
+  BSExpandCall -> debug "Binja expand call"
 
   BSNoop -> debug "Binja noop"
 

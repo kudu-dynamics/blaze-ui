@@ -18,6 +18,7 @@ module Blaze.UI.Prelude
   , liftMaybeTIO
   , pshow
   , pprint
+  , pputText
   , pairs
   , indexed
   , hdebug
@@ -151,6 +152,9 @@ pshow = PP.pShowOpt ppOptions
 
 pprint :: (MonadIO m, Show a) => a -> m ()
 pprint = PP.pPrintOpt PP.NoCheckColorTty ppOptions
+
+pputText :: MonadIO m => Text -> m ()
+pputText = PP.pPrintString . cs
 
 pairs :: [a] -> [(a, a)]
 pairs xs = zip xs $ drop 1 xs

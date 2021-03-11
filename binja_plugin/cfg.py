@@ -1,42 +1,84 @@
-from binaryninja import PluginCommand, HighlightStandardColor, log_info, log_error, log_warn, BinaryView
-from binaryninjaui import UIAction
-from binaryninja.function import DisassemblyTextRenderer, InstructionTextToken
-from binaryninja.flowgraph import FlowGraph, FlowGraphNode
-from binaryninja.enums import InstructionTextTokenType, BranchType
-from binaryninjaui import FlowGraphWidget, ViewType
-from binaryninja.plugin import BackgroundTaskThread
+import enum
+from typing import Any, Dict, Optional, Tuple
+
+from binaryninja import BinaryView
+from binaryninja.enums import BranchType, EdgePenStyle, ThemeColor
+from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphNode
 from binaryninja.interaction import show_graph_report
 
 
-# Basic sample flowgrpah
-#
-# Creates a flow graph, showing some basic functionality
+class CFNode(str, enum.Enum):
+    BasicBlock = 'BasicBlock'
+    Call = 'Call'
+    EnterFunc = 'EnterFunc'
+    LeaveFunc = 'LeaveFunc'
 
-def start_cfg(bv, func):
+
+def get_edge_type(edge, nodes) -> Tuple[BranchType, Optional[EdgeStyle]]:
+    node_from = nodes[edge['src']]
+    node_to = nodes[edge['dst']]
+
+    if node_to['tag'] == CFNode.EnterFunc:
+        assert edge['branchType'] == 'UnconditionalBranch', 'bad assumption'
+        return (BranchType.UserDefinedBranch,
+                EdgeStyle(
+                    style=EdgePenStyle.DashLine, theme_color=ThemeColor.UnconditionalBranchColor))
+
+    if node_from['tag'] == CFNode.LeaveFunc:
+        assert edge['branchType'] == 'UnconditionalBranch', 'bad assumption'
+        return (BranchType.UserDefinedBranch,
+                EdgeStyle(
+                    style=EdgePenStyle.DotLine, theme_color=ThemeColor.UnconditionalBranchColor))
+
+    return {
+        'TrueBranch': (BranchType.TrueBranch, None),
+        'FalseBranch': (BranchType.FalseBranch, None),
+        'UnconditionalBranch': (BranchType.UnconditionalBranch, None),
+    }[edge['branchType']]
+
+
+def format_block_header(node_id: int, node: dict) -> str:
+    tag = node['tag']
+    start_addr = node['contents'].get('start', None)
+
+    if tag == CFNode.BasicBlock:
+        return f'{start_addr:#x} (id {node_id}) {tag}'
+
+    if tag == CFNode.EnterFunc:
+        prevFun = node['contents']['prevCtx']['func']['name']
+        nextFun = node['contents']['nextCtx']['func']['name']
+        return f'(id {node_id}) {tag} {prevFun} -> {nextFun}'
+
+    if tag == CFNode.LeaveFunc:
+        prevFun = node['contents']['prevCtx']['func']['name']
+        nextFun = node['contents']['nextCtx']['func']['name']
+        return f'(id {node_id}) {tag} {nextFun} <- {prevFun}'
+
+    if tag == CFNode.Call:
+        fun = node['contents']['function']['name']
+        return f'{start_addr:#x} (id {node_id}) {tag} {fun}'
+
+    assert False, f'Inexaustive match on CFNode? tag={tag}'
+    return None
+
+
+def display_icfg(_bv: BinaryView, cfg: Dict[str, Any]) -> None:
+    cfg = {**cfg, 'nodeMap': {k: v for [k, v] in cfg['nodeMap']}}
+
     graph = FlowGraph()
-    node_a = FlowGraphNode(graph)
-    node_a.lines = ["Node A"]
-    node_b = FlowGraphNode(graph)
-    node_b.lines = ["Node B"]
-    node_c = FlowGraphNode(graph)
-    node_c.lines = ["Node C"]
-    graph.append(node_a)
-    graph.append(node_b)
-    graph.append(node_c)
-    node_a.add_outgoing_edge(BranchType.UnconditionalBranch, node_b)
-    node_a.add_outgoing_edge(BranchType.UnconditionalBranch, node_c)
-    show_graph_report("In order", graph)
+    nodes = {}
 
-    graph2 = FlowGraph()
-    node2_a = FlowGraphNode(graph)
-    node2_a.lines = ["Node A"]
-    node2_b = FlowGraphNode(graph)
-    node2_b.lines = ["Node B"]
-    node2_c = FlowGraphNode(graph)
-    node2_c.lines = ["Node C"]
-    graph2.append(node2_b)
-    graph2.append(node2_c)
-    graph2.append(node2_a)
-    node2_a.add_outgoing_edge(BranchType.UnconditionalBranch, node2_b)
-    node2_a.add_outgoing_edge(BranchType.UnconditionalBranch, node2_c)
-    show_graph_report("Out of order", graph)
+    for (node_id, node) in cfg['nodeMap'].items():
+        fg_node = FlowGraphNode(graph)
+
+        fg_node.lines = [format_block_header(node_id, node)]
+        if (nodeData := node.get('contents', {}).get('nodeData', None)):
+            fg_node.lines += nodeData
+
+        nodes[node_id] = fg_node
+        graph.append(fg_node)
+
+    for edge in cfg['edges']:
+        branch_type, edge_style = get_edge_type(edge, cfg['nodeMap'])
+        nodes[edge['src']].add_outgoing_edge(branch_type, nodes[edge['dst']], edge_style)
+    show_graph_report("PIL ICFG", graph)
