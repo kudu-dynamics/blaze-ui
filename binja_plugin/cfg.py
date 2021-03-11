@@ -1,17 +1,9 @@
-from typing import Dict, Any, Tuple, Optional
-from pathlib import Path
-import json
 import enum
+from typing import Any, Dict, Optional, Tuple
 
-from binaryninja import PluginCommand, HighlightStandardColor, log_info, log_error, log_warn, BinaryView
-from binaryninjaui import UIAction
-from binaryninja.function import DisassemblyTextRenderer, InstructionTextToken
-from binaryninja.flowgraph import FlowGraph, FlowGraphNode, EdgeStyle
-from binaryninja.enums import (BranchType, InstructionTextTokenType,
-                               HighlightStandardColor, FlowGraphOption,
-                               EdgePenStyle, ThemeColor)
-from binaryninjaui import FlowGraphWidget, ViewType
-from binaryninja.plugin import BackgroundTaskThread
+from binaryninja import BinaryView
+from binaryninja.enums import BranchType, EdgePenStyle, ThemeColor
+from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphNode
 from binaryninja.interaction import show_graph_report
 
 
@@ -22,11 +14,6 @@ class CFNode(str, enum.Enum):
     LeaveFunc = 'LeaveFunc'
 
 
-def fixup_graph(graph):
-    graph = {**graph, 'nodeMap': {k: v for [k, v] in graph['nodeMap']}}
-    return graph
-
-
 def get_edge_type(edge, nodes) -> Tuple[BranchType, Optional[EdgeStyle]]:
     node_from = nodes[edge['src']]
     node_to = nodes[edge['dst']]
@@ -34,14 +21,14 @@ def get_edge_type(edge, nodes) -> Tuple[BranchType, Optional[EdgeStyle]]:
     if node_to['tag'] == CFNode.EnterFunc:
         assert edge['branchType'] == 'UnconditionalBranch', 'bad assumption'
         return (BranchType.UserDefinedBranch,
-                EdgeStyle(style=EdgePenStyle.DashLine,
-                          theme_color=ThemeColor.UnconditionalBranchColor))
+                EdgeStyle(
+                    style=EdgePenStyle.DashLine, theme_color=ThemeColor.UnconditionalBranchColor))
 
     if node_from['tag'] == CFNode.LeaveFunc:
         assert edge['branchType'] == 'UnconditionalBranch', 'bad assumption'
         return (BranchType.UserDefinedBranch,
-                EdgeStyle(style=EdgePenStyle.DotLine,
-                          theme_color=ThemeColor.UnconditionalBranchColor))
+                EdgeStyle(
+                    style=EdgePenStyle.DotLine, theme_color=ThemeColor.UnconditionalBranchColor))
 
     return {
         'TrueBranch': (BranchType.TrueBranch, None),
@@ -72,9 +59,11 @@ def format_block_header(node_id: int, node: dict) -> str:
         return f'{start_addr:#x} (id {node_id}) {tag} {fun}'
 
     assert False, f'Inexaustive match on CFNode? tag={tag}'
+    return None
 
 
-def display_icfg(bv: BinaryView, cfg: Dict[str, Any]) -> None:
+def display_icfg(_bv: BinaryView, cfg: Dict[str, Any]) -> None:
+    cfg = {**cfg, 'nodeMap': {k: v for [k, v] in cfg['nodeMap']}}
 
     graph = FlowGraph()
     nodes = {}
@@ -91,6 +80,5 @@ def display_icfg(bv: BinaryView, cfg: Dict[str, Any]) -> None:
 
     for edge in cfg['edges']:
         branch_type, edge_style = get_edge_type(edge, cfg['nodeMap'])
-        nodes[edge['src']].add_outgoing_edge(branch_type, nodes[edge['dst']],
-                                             edge_style)
+        nodes[edge['src']].add_outgoing_edge(branch_type, nodes[edge['dst']], edge_style)
     show_graph_report("PIL ICFG", graph)
