@@ -61,7 +61,7 @@ lint:
   image: ${BLAZE_IMAGE}
   needs: []
   script:
-    - hlint --color=always src test demo
+    - hlint --color=always server/src server/test
   allow_failure: true
 
 # We need 2 build jobs: one for branch pipelines and one for MR pipelines
