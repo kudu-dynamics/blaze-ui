@@ -86,12 +86,12 @@ createWebOutbox conn ss = do
 sendToBinja :: ServerToBinja -> EventLoop ()
 sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
   qs <- fmap HashMap.elems . readTVar $ ctx ^. #binjaOutboxes
-  mapM_ (flip writeTQueue msg) qs
+  mapM_ (`writeTQueue` msg) qs
 
 sendToWeb :: ServerToWeb -> EventLoop ()
 sendToWeb msg = ask >>= \ctx -> liftIO . atomically $ do
   qs <- fmap HashMap.elems . readTVar $ ctx ^. #webOutboxes
-  mapM_ (flip writeTQueue msg) qs
+  mapM_ (`writeTQueue` msg) qs
 
 -- TODO: log warning to binja, web, and console
 -- logWarn :: Text -> EventLoop ()
@@ -301,7 +301,7 @@ handleBinjaEvent bv = \case
     -- demo forking
     forkEventLoop_ $ do
       liftIO $ threadDelay 5000000 >> putText "calculating integer"
-      n <- liftIO $ randomIO :: EventLoop Int
+      n <- liftIO randomIO :: EventLoop Int
       sendToBinja . SBLogInfo
         $ "Here is your important integer: " <> show n
       

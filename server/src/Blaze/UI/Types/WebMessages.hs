@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Blaze.UI.Types.WebMessages where
 
@@ -53,7 +52,7 @@ data ServerToWeb = SWTextMessage Text
                  | SWLogInfo Text
                  | SWLogWarn Text
                  | SWLogError Text
-                 | SWPilType (WebPil.DeepSymType)
+                 | SWPilType WebPil.DeepSymType
                  | SWProblemType [(Int, Pil.Statement Ch.SymExpression)]
                  | SWNoop
                  | SWFunctionsList [Blaze.Function]
@@ -97,9 +96,9 @@ myTypes =
 
   , mkT (Proxy :: Proxy (Pil.CallDest A))
   
-  , mkT (Proxy :: Proxy (Pil.CtxIndex))
-  , mkT (Proxy :: Proxy (Pil.Ctx))
-  , mkT (Proxy :: Proxy (Pil.PilVar))
+  , mkT (Proxy :: Proxy Pil.CtxIndex)
+  , mkT (Proxy :: Proxy Pil.Ctx)
+  , mkT (Proxy :: Proxy Pil.PilVar)
 
   -- expressions
   , mkT (Proxy :: Proxy (Pil.ExprOp A))
@@ -191,7 +190,7 @@ myTypes =
   , mkT (Proxy :: Proxy (Pil.ConstBoolOp A))
   , mkT (Proxy :: Proxy (Pil.BranchCondOp A))
 
-  , mkT (Proxy :: Proxy (Pil.StackOffset))
+  , mkT (Proxy :: Proxy Pil.StackOffset)
   
 
   -- types from Web.Pil
@@ -204,14 +203,14 @@ myTypes =
   , mkT (Proxy :: Proxy (WebPil.TFunctionOp A))
 
 
-  , mkT (Proxy :: Proxy (WebPil.TypeError))
-  , mkT (Proxy :: Proxy (WebPil.TypeReport))
-  , mkT (Proxy :: Proxy (WebPil.TypedExpr))
-  , mkT (Proxy :: Proxy (WebPil.DeepSymType))
+  , mkT (Proxy :: Proxy WebPil.TypeError)
+  , mkT (Proxy :: Proxy WebPil.TypeReport)
+  , mkT (Proxy :: Proxy WebPil.TypedExpr)
+  , mkT (Proxy :: Proxy WebPil.DeepSymType)
   
-  , mkT (Proxy :: Proxy (Ch.Sym))
+  , mkT (Proxy :: Proxy Ch.Sym)
   , mkT (Proxy :: Proxy (Ch.InfoExpression A))
-  , mkT (Proxy :: Proxy (Ch.SymInfo))
+  , mkT (Proxy :: Proxy Ch.SymInfo)
 
   -- , mkT (Proxy :: Proxy BadBoy)
   -- , mkT (Proxy :: Proxy (MMaybe A))

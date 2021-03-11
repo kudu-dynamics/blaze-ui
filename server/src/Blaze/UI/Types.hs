@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE TemplateHaskell #-}
 module Blaze.UI.Types
   ( module Blaze.UI.Types
   , module WebMessages
