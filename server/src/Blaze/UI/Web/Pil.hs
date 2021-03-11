@@ -1,4 +1,3 @@
-{- HLINT ignore "Use newtype instead of data" -}
 module Blaze.UI.Web.Pil where
 
 import Blaze.UI.Prelude hiding (TypeError)
