@@ -16,9 +16,7 @@ import qualified Binja.Function as BNFunc
 import qualified Data.Aeson.Types as Aeson
 import Blaze.UI.Types.WebMessages as WebMessages
 import Blaze.Function (Function)
-import qualified Blaze.Types.CallGraph as CG
-import qualified Blaze.Types.Function as F
-import Blaze.UI.Types.BinjaMessages (Cfg, CfgId)
+import Blaze.UI.Types.BinjaMessages (Cfg)
 import Blaze.Types.Cfg (CfNode)
 
 data BinjaMessage a = BinjaMessage
@@ -179,7 +177,7 @@ data AppState = AppState
 
 -- not really empty...
 emptyAppState :: ServerConfig -> IO AppState
-emptyAppState cfg = AppState cfg <$> newTVarIO HashMap.empty
+emptyAppState cfg' = AppState cfg' <$> newTVarIO HashMap.empty
 
 lookupSessionState :: SessionId -> AppState -> STM (Maybe SessionState)
 lookupSessionState sid st = do

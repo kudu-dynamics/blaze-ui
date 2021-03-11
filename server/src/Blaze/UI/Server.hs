@@ -2,7 +2,6 @@
 
 module Blaze.UI.Server where
 
-import qualified Prelude as P
 import Blaze.UI.Prelude
 import Blaze.Import.Source.BinaryNinja (BNImporter(BNImporter))
 import qualified Blaze.Import.CallGraph
@@ -14,22 +13,16 @@ import qualified Data.ByteString.Char8 as BSC
 import Binja.Core (BNBinaryView)
 import qualified Binja.Core as BN
 import qualified Binja.Function as BNFunc
-import Blaze.UI.Types
+import Blaze.UI.Types hiding (cfg)
 import qualified Data.HashMap.Strict as HashMap
-import Blaze.Pil as Pil
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
 import qualified Blaze.Import.Source.BinaryNinja.Cfg as Cfg
 import Blaze.Pretty (prettyIndexedStmts, showHex)
-import qualified Blaze.Types.Path.AlgaPath as AP
-import qualified Blaze.Types.Pil as Pil
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
-import qualified Blaze.Types.CallGraph as CG
 import qualified Blaze.UI.Web.Pil as WebPil
-import Blaze.UI.Types.BinjaMessages (convertPilCfg, convertInterCfg)
-import qualified Text.Pretty.Simple as PP
-import qualified Data.Text.IO as TextIO
+import Blaze.UI.Types.BinjaMessages (convertPilCfg)
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -332,6 +325,8 @@ handleBinjaEvent bv = \case
             pprint . Aeson.encode . convertPilCfg $ r ^. #result
             sendToBinja . SBCfg funcAddr $ convertPilCfg $ r ^. #result
         debug "Good job"
+
+  BSExpandCall -> debug "Binja expand call"
 
   BSNoop -> debug "Binja noop"
 
