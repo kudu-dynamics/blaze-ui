@@ -6,10 +6,13 @@ import qualified Blaze.UI.Server as Server
 import Blaze.UI.Types (ServerConfig(ServerConfig))
 import Blaze.UI.Web.Server as WebServer
 import qualified System.Envy as Envy
+import System.IO ( BufferMode(LineBuffering)
+                 , hSetBuffering)
 
 
 main :: IO ()
 main = do
+  hSetBuffering stdout LineBuffering
   cfg <- getArgs >>= \case
     [] -> (Envy.decodeEnv :: IO (Either String ServerConfig)) >>= either P.error return
 
