@@ -2,7 +2,7 @@ module Blaze.UI.Web.Server where
 
 import Blaze.UI.Prelude hiding (get)
 
-import Blaze.UI.Types
+import Blaze.UI.Types hiding (cfg)
 import Web.Scotty ( ScottyM
                   , ActionM
                   , get

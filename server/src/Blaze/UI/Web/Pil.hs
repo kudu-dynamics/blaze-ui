@@ -1,3 +1,4 @@
+{- HLINT ignore "Use newtype instead of data" -}
 module Blaze.UI.Web.Pil where
 
 import Blaze.UI.Prelude hiding (TypeError)
@@ -37,8 +38,6 @@ data TypedExpr = TypedExpr
 
 instance ToJSON TypedExpr
 instance FromJSON TypedExpr
-
-
 
 toTypeError :: Ch.UnifyConstraintsError Ch.DeepSymType -> TypeError
 toTypeError x = TypeError
@@ -187,8 +186,7 @@ testCallOp :: [(Int, Pil.Statement SymExpression)]
 testCallOp =
   [ ( 5
     , Pil.Call $ Pil.CallOp
-      { dest = Pil.CallConstPtr
-        ( Pil.ConstPtrOp 777 )
+      { dest = Pil.CallAddr 777
       , name = Just "exit"
       , params =
         [ Ch.InfoExpression
