@@ -173,7 +173,7 @@ push:latest:
     GIT_CLEAN_FLAGS: none
   script:
     - local_image=${REPO_DOCKER_REGISTRY}/blaze-service/squashed
-    - aws_image=${AWS_ECR_REGISTRY}/blaze-service
+    - aws_image=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-service
 
     # Set up AWS ECR credentials
     - apk add aws-cli
