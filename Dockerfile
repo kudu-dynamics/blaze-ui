@@ -29,7 +29,7 @@ RUN shopt -s nullglob && \
         /var/apt/lists \
         /root/.local/bin/stack \
         /usr/local/bin/stack \
-        /blaze/{binary-analysis,binaryninja-haskell,blaze} \
+        /blaze/{binary-analysis,binaryninja-haskell,blaze,blaze-ui} \
         /root/.stack \
         /usr/share/binaryninja-api
 
