@@ -3,21 +3,23 @@ import json
 import os
 import os.path
 import queue
-import sys
-import traceback
 from typing import Any, Dict, Optional
 import threading
 
 import websockets
-from binaryninja import (BinaryView, PluginCommand, log_error, log_info, log_warn, log_debug)
+from binaryninja import (BinaryView, PluginCommand)
 
 from .cfg import display_icfg
 
+LOG_LEVEL = 'INFO'
 BLAZE_UI_HOST = os.environ.get('BLAZE_UI_HOST', 'localhost')
 BLAZE_UI_WS_PORT = os.environ.get('BLAZE_UI_WS_PORT', '31337')
 
 BLAZE_WS_SHUTDOWN = 'SHUTDOWN'
 
+import logging
+log = logging.getLogger(__name__)
+del logging
 
 class BlazeIO():
     def __init__(self) -> None:
@@ -26,7 +28,7 @@ class BlazeIO():
 
     def _init_thread(self) -> None:
         if not self.thread or not self.thread.is_alive():
-            log_info('Blaze: Starting or restarting websocket thread')
+            log.info('Starting or restarting websocket thread')
             self.out_queue = queue.Queue()
             t = MainWebsocketThread(self.bv_mapping, self.out_queue)
             t.name = 'Blaze websocket thread'
@@ -35,23 +37,23 @@ class BlazeIO():
 
     def shutdown(self) -> None:
         if self.thread and self.thread.is_alive():
-            log_info('Blaze: shutdown: Shutting down')
+            log.info('Shutting down')
             try:
                 self.out_queue.put(BLAZE_WS_SHUTDOWN, timeout=1)
             except queue.Full:
-                log_warn('Blaze: shutdown: websocket queue is full, cannot shutdown')
+                log.warn('websocket queue is full, cannot shutdown')
                 return
 
             self.thread.join(timeout=1)
             if self.thread.is_alive():
-                log_warn('Blaze: shutdown: websocket thread is still alive after timeout')
+                log.warn('websocket thread is still alive after timeout')
 
 
     def send(self, bv: BinaryView, msg: dict) -> None:
         self._init_thread()
         self.bv_mapping[bv.file.filename] = bv
         new_msg = {"bvFilePath": bv.file.filename, "action": msg}
-        log_debug(f'Blaze: enqueueing {new_msg}')
+        log.debug('enqueueing %s', {new_msg})
         self.out_queue.put(new_msg)
 
 
@@ -69,22 +71,22 @@ def message_handler(bv: BinaryView, msg: Dict[str, Any]) -> None:
     tag = msg['tag']
 
     if tag == 'SBLogInfo':
-        log_info(msg['message'])
+        log.info(msg['message'])
 
     elif tag == 'SBLogWarn':
-        log_warn(msg['message'])
+        log.warn(msg['message'])
 
     elif tag == 'SBLogError':
-        log_error(msg['message'])
+        log.error(msg['message'])
 
     elif tag == 'SBNoop':
-        log_info(f"got Noop")
+        log.info("got Noop")
 
     elif tag == 'SBCfg':
         display_icfg(bv, msg['cfg'])
 
     else:
-        log_error(f"Blaze: unknown message type: {tag}")
+        log.error("Blaze: unknown message type: %s", tag)
 
 
 async def recv_loop(websocket, bv_mapping) -> None:
@@ -92,21 +94,19 @@ async def recv_loop(websocket, bv_mapping) -> None:
         try:
             msg = json.loads(ws_msg)
         except json.JSONDecodeError:
-            log_error(f'Blaze: recv_loop: malformed message')
-            log_error(traceback.format_exception_only(sys.last_type, sys.last_value))
+            log.exception('malformed message')
             continue
 
         bv: Optional[BinaryView] = bv_mapping.get(msg['bvFilePath'])
         if bv is None:
-            log_error(f"Blaze: recv_loop: couldn't find bv in mapping for {msg}")
+            log.error("couldn't find bv in mapping for %s", msg)
             continue
 
-        log_debug(f'Blaze: received {msg}')
+        log.debug('Blaze: received %r', msg)
         try:
             message_handler(bv, msg['action'])
         except Exception:
-            log_warn(f"Blaze: message_handler: couldn't handle message")
-            log_error(traceback.format_exc())
+            log.exception("couldn't handle message")
             continue
 
 
@@ -118,22 +118,22 @@ async def send_loop(websocket, out_queue) -> None:
             return
 
         json_msg = json.dumps(msg)
-        log_debug(f'Blaze: sending {json_msg!r}')
+        log.debug('sending %r', json_msg)
 
         try:
             await websocket.send(json_msg)
         except:
             return
-        log_debug('Blaze: sent')
+        log.debug('sent')
         out_queue.task_done()
 
 
 async def main_websocket_loop(out_queue, bv_mapping):
     uri = "ws://" + BLAZE_UI_HOST + ":" + BLAZE_UI_WS_PORT + "/binja"
 
-    log_info('Blaze: connecting to websocket...')
+    log.info('connecting to websocket...')
     async with websockets.connect(uri) as websocket:
-        log_info('Blaze: connected')
+        log.info('connected')
         consumer_task = asyncio.ensure_future(recv_loop(websocket, bv_mapping))
         producer_task = asyncio.ensure_future(send_loop(websocket, out_queue))
         _, pending = await asyncio.wait(

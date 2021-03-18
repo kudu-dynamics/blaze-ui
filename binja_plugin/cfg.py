@@ -6,6 +6,9 @@ from binaryninja.enums import BranchType, EdgePenStyle, ThemeColor
 from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphNode
 from binaryninja.interaction import show_graph_report
 
+import logging
+log = logging.getLogger(__name__)
+del logging
 
 class CFNode(str, enum.Enum):
     BasicBlock = 'BasicBlock'
