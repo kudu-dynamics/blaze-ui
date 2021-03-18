@@ -122,7 +122,10 @@ build:detached:
       true
     - \time -v docker build --pull . -f Dockerfile --target main
       -t "${image}:merge-${CI_MERGE_REQUEST_IID}"
+    - \time -v docker build --pull . -f Dockerfile --target minimal
+      -t "${image}/squashed:merge-${CI_MERGE_REQUEST_IID}"
     - docker push "${image}:merge-${CI_MERGE_REQUEST_IID}"
+    - docker push "${image}/squashed:merge-${CI_MERGE_REQUEST_IID}"
 
 # Likewise, we need 2 test jobs. The test:branch job uses the ${image}:commit-... image,
 # and the test:detached uses the ${image}:merge-... image
