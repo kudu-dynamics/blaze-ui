@@ -53,7 +53,7 @@ class BlazeIO():
         self._init_thread()
         self.bv_mapping[bv.file.filename] = bv
         new_msg = {"bvFilePath": bv.file.filename, "action": msg}
-        log.debug('enqueueing %s', {new_msg})
+        log.debug('enqueueing %s', new_msg)
         self.out_queue.put(new_msg)
 
 
