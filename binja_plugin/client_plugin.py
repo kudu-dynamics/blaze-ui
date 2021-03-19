@@ -1,3 +1,4 @@
+import enum
 import asyncio
 import json
 import os
@@ -8,6 +9,7 @@ import threading
 
 import websockets
 from binaryninja import (BinaryView, PluginCommand)
+from websockets.client import Connect, WebSocketClientProtocol
 
 from .cfg import display_icfg
 
@@ -21,22 +23,39 @@ import logging
 log = logging.getLogger(__name__)
 del logging
 
-class BlazeIO():
+def register_for_function(action, description):
+    def wrapper(f):
+        PluginCommand.register_for_function(action, description, f)
+        return f
+    return wrapper
+
+def register(action, description):
+    def wrapper(f):
+        PluginCommand.register(action, description, f)
+        return f
+    return wrapper
+
+
+class BlazeInstance():
+    def __init__(self, bv: BinaryView):
+        self.bv: BinaryView = bv
+
+class BlazePlugin():
     def __init__(self) -> None:
-        self.thread: Optional[threading.Thread] = None
-        self.bv_mapping: Dict[str, BinaryView] = {}  # {bvFilePath -> bv}
+        self.websocket_thread: Optional[threading.Thread] = None
+        self.instances: Dict[str, BlazeInstance] = {}
 
     def _init_thread(self) -> None:
-        if not self.thread or not self.thread.is_alive():
+        if not self.websocket_thread or not self.websocket_thread.is_alive():
             log.info('Starting or restarting websocket thread')
             self.out_queue = queue.Queue()
-            t = MainWebsocketThread(self.bv_mapping, self.out_queue)
+            t = threading.Thread(target=lambda: asyncio.run(self.main_websocket_loop()))
             t.name = 'Blaze websocket thread'
             t.start()
-            self.thread = t
+            self.websocket_thread = t
 
     def shutdown(self) -> None:
-        if self.thread and self.thread.is_alive():
+        if self.websocket_thread and self.websocket_thread.is_alive():
             log.info('Shutting down')
             try:
                 self.out_queue.put(BLAZE_WS_SHUTDOWN, timeout=1)
@@ -44,109 +63,101 @@ class BlazeIO():
                 log.warn('websocket queue is full, cannot shutdown')
                 return
 
-            self.thread.join(timeout=1)
-            if self.thread.is_alive():
+            self.websocket_thread.join(timeout=1)
+            if self.websocket_thread.is_alive():
                 log.warn('websocket thread is still alive after timeout')
 
+    def ensure_instance(self, bv: BinaryView) -> BlazeInstance:
+        if (instance := self.instances.get(bv.file.filename)) is not None:
+            return instance
+
+        instance = BlazeInstance(bv)
+        self.instances[bv.file.filename] = instance
+        return instance
 
     def send(self, bv: BinaryView, msg: dict) -> None:
         self._init_thread()
-        self.bv_mapping[bv.file.filename] = bv
+        self.ensure_instance(bv)
         new_msg = {"bvFilePath": bv.file.filename, "action": msg}
         log.debug('enqueueing %s', new_msg)
         self.out_queue.put(new_msg)
 
+    async def main_websocket_loop(self):
+        uri = "ws://" + BLAZE_UI_HOST + ":" + BLAZE_UI_WS_PORT + "/binja"
 
-class MainWebsocketThread(threading.Thread):
-    def __init__(self, bv_mapping, out_queue) -> None:
-        super().__init__()
-        self.out_queue: queue.Queue = out_queue
-        self.bv_mapping = bv_mapping
+        log.info('connecting to websocket...')
+        async with websockets.connect(uri) as websocket:
+            log.info('connected')
+            consumer_task = asyncio.ensure_future(self.recv_loop(websocket))
+            producer_task = asyncio.ensure_future(self.send_loop(websocket))
+            _, pending = await asyncio.wait(
+                [consumer_task, producer_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
-    def run(self) -> None:
-        asyncio.run(main_websocket_loop(self.out_queue, self.bv_mapping))
-
-
-def message_handler(bv: BinaryView, msg: Dict[str, Any]) -> None:
-    tag = msg['tag']
-
-    if tag == 'SBLogInfo':
-        log.info(msg['message'])
-
-    elif tag == 'SBLogWarn':
-        log.warn(msg['message'])
-
-    elif tag == 'SBLogError':
-        log.error(msg['message'])
-
-    elif tag == 'SBNoop':
-        log.info("got Noop")
-
-    elif tag == 'SBCfg':
-        display_icfg(bv, msg['cfg'])
-
-    else:
-        log.error("Blaze: unknown message type: %s", tag)
-
-
-async def recv_loop(websocket, bv_mapping) -> None:
-    async for ws_msg in websocket:
-        try:
-            msg = json.loads(ws_msg)
-        except json.JSONDecodeError:
-            log.exception('malformed message')
-            continue
-
-        bv: Optional[BinaryView] = bv_mapping.get(msg['bvFilePath'])
-        if bv is None:
-            log.error("couldn't find bv in mapping for %s", msg)
-            continue
-
-        log.debug('Blaze: received %r', msg)
-        try:
-            message_handler(bv, msg['action'])
-        except Exception:
-            log.exception("couldn't handle message")
-            continue
-
-
-async def send_loop(websocket, out_queue) -> None:
-    while True:
-        msg = await asyncio.get_running_loop().run_in_executor(None, out_queue.get)
-        if msg == BLAZE_WS_SHUTDOWN:
-            out_queue.task_done()
-            return
-
-        json_msg = json.dumps(msg)
-        log.debug('sending %r', json_msg)
-
-        try:
-            await websocket.send(json_msg)
-        except:
-            return
-        log.debug('sent')
-        out_queue.task_done()
-
-
-async def main_websocket_loop(out_queue, bv_mapping):
-    uri = "ws://" + BLAZE_UI_HOST + ":" + BLAZE_UI_WS_PORT + "/binja"
-
-    log.info('connecting to websocket...')
-    async with websockets.connect(uri) as websocket:
-        log.info('connected')
-        consumer_task = asyncio.ensure_future(recv_loop(websocket, bv_mapping))
-        producer_task = asyncio.ensure_future(send_loop(websocket, out_queue))
-        _, pending = await asyncio.wait(
-            [consumer_task, producer_task],
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        for task in pending:
-            task.cancel()
+    async def recv_loop(self, websocket: WebSocketClientProtocol) -> None:
+        async for ws_msg in websocket:
             try:
-                await task
-            except asyncio.CancelledError:
-                pass
+                msg = json.loads(ws_msg)
+            except json.JSONDecodeError:
+                log.exception('malformed message')
+                continue
 
+            instance: Optional[BlazeInstance] = self.instances.get(msg['bvFilePath'])
+            if instance is None:
+                log.error("couldn't find blaze instance in mapping for %s", msg)
+                continue
+
+            log.debug('Blaze: received %r', msg)
+            try:
+                self.message_handler(instance, msg['action'])
+            except Exception:
+                log.exception("couldn't handle message")
+                continue
+
+    async def send_loop(self, websocket) -> None:
+        while True:
+            msg = await asyncio.get_running_loop().run_in_executor(None, self.out_queue.get)
+            if msg == BLAZE_WS_SHUTDOWN:
+                self.out_queue.task_done()
+                return
+
+            json_msg = json.dumps(msg)
+            log.debug('sending %r', json_msg)
+
+            try:
+                await websocket.send(json_msg)
+            except:
+                return
+            log.debug('sent')
+            self.out_queue.task_done()
+
+    def message_handler(self, instance: BlazeInstance, msg: Dict[str, Any]) -> None:
+        tag = msg['tag']
+
+        if tag == 'SBLogInfo':
+            log.info(msg['message'])
+
+        elif tag == 'SBLogWarn':
+            log.warn(msg['message'])
+
+        elif tag == 'SBLogError':
+            log.error(msg['message'])
+
+        elif tag == 'SBNoop':
+            log.info("got Noop")
+
+        elif tag == 'SBCfg':
+            display_icfg(instance.bv, msg['cfg'])
+
+        else:
+            log.error("Blaze: unknown message type: %s", tag)
 
 def _get_or_set_loop() -> asyncio.AbstractEventLoop:
     try:
@@ -166,21 +177,28 @@ except NameError:
 else:
     blaze.shutdown()  # type: ignore
 
-blaze = BlazeIO()
+blaze = BlazePlugin()
 
 
+class Action(str, enum.Enum):
+    SAY_HELLO = r'Blaze\Say Hello'
+    SEND_INSTRUCTION = r'Blaze\Send Instruction'
+    TYPE_CHECK_FUNCTION = r'Blaze\Type Check Function'
+    START_CFG = r'Blaze\Start CFG'
+
+
+@register(Action.SAY_HELLO, 'Say Hello')
 def say_hello(bv):
-    global blaze
     blaze.send(bv, {'tag': 'BSTextMessage', 'message': 'this is Bilbo'})
 
 
+@register_for_function(Action.TYPE_CHECK_FUNCTION, 'Type Check Function')
 def type_check_function(bv, func):
-    global blaze
     blaze.send(bv, {'tag': 'BSTypeCheckFunction', 'address': func.start})
 
 
+@register_for_function(Action.START_CFG, 'Start CFG')
 def start_cfg(bv, func):
-    global blaze
     blaze.send(bv, {'tag': 'BSStartCfgForFunction', 'address': func.start})
 
 
@@ -190,17 +208,6 @@ def listen_start(bv):
 
 def listen_stop(bv):
     pass
-
-
-actionSayHello = "Blaze\\Say Hello"
-actionSendInstruction = "Blaze\\Send Instruction"
-actionTypeCheckFunction = "Blaze\\Type Check Function"
-actionBlazeCfg = "Blaze\\Start CFG"
-
-PluginCommand.register(actionSayHello, "Say Hello", say_hello)
-PluginCommand.register_for_function(actionTypeCheckFunction, "Type Check Function",
-                                    type_check_function)
-PluginCommand.register_for_function(actionBlazeCfg, "Start CFG", start_cfg)
 
 # PluginCommand.register_for_medium_level_il_instruction(actionSendInstruction, "Send Instruction", send_instruction)
 
