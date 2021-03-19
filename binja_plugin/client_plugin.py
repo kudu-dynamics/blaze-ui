@@ -41,9 +41,10 @@ class BlazeInstance():
         self.bv: BinaryView = bv
 
 class BlazePlugin():
+    instances: Dict[str, BlazeInstance] = {}
+
     def __init__(self) -> None:
         self.websocket_thread: Optional[threading.Thread] = None
-        self.instances: Dict[str, BlazeInstance] = {}
 
     def _init_thread(self) -> None:
         if not self.websocket_thread or not self.websocket_thread.is_alive():
@@ -67,12 +68,13 @@ class BlazePlugin():
             if self.websocket_thread.is_alive():
                 log.warn('websocket thread is still alive after timeout')
 
-    def ensure_instance(self, bv: BinaryView) -> BlazeInstance:
-        if (instance := self.instances.get(bv.file.filename)) is not None:
+    @staticmethod
+    def ensure_instance(bv: BinaryView) -> BlazeInstance:
+        if (instance := BlazePlugin.instances.get(bv.file.filename)) is not None:
             return instance
 
         instance = BlazeInstance(bv)
-        self.instances[bv.file.filename] = instance
+        BlazePlugin.instances[bv.file.filename] = instance
         return instance
 
     def send(self, bv: BinaryView, msg: dict) -> None:
@@ -158,6 +160,7 @@ class BlazePlugin():
 
         else:
             log.error("Blaze: unknown message type: %s", tag)
+
 
 def _get_or_set_loop() -> asyncio.AbstractEventLoop:
     try:
