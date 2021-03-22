@@ -122,7 +122,7 @@ build:detached:
       true
     - \time -v docker build --pull . -f Dockerfile --target main
       -t "${image}:merge-${CI_MERGE_REQUEST_IID}"
-    - \time -v docker build --pull . -f Dockerfile --target minimal
+    - \time -v docker build --squash --pull . -f Dockerfile --target minimal
       -t "${image}/squashed:merge-${CI_MERGE_REQUEST_IID}"
     - docker push "${image}:merge-${CI_MERGE_REQUEST_IID}"
     - docker push "${image}/squashed:merge-${CI_MERGE_REQUEST_IID}"
