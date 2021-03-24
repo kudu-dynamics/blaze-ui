@@ -1,17 +1,21 @@
-import enum
 import asyncio
+import enum
 import json
+import logging as _logging
 import os
 import os.path
 import queue
-from typing import Any, Dict, Optional
 import threading
+from typing import Any, Dict, Optional
 
 import websockets
-from binaryninja import (BinaryView, PluginCommand)
-from websockets.client import Connect, WebSocketClientProtocol
+from binaryninja import BinaryView, PluginCommand
+from binaryninjaui import DockHandler, ViewFrame
+from PySide2.QtCore import Qt
+from PySide2.QtWidgets import QApplication, QWidget
+from websockets.client import WebSocketClientProtocol
 
-from .cfg import display_icfg
+from .cfg import ICFGDockWidget, ICFGFlowGraph
 
 LOG_LEVEL = 'INFO'
 BLAZE_UI_HOST = os.environ.get('BLAZE_UI_HOST', 'localhost')
@@ -19,20 +23,22 @@ BLAZE_UI_WS_PORT = os.environ.get('BLAZE_UI_WS_PORT', '31337')
 
 BLAZE_WS_SHUTDOWN = 'SHUTDOWN'
 
-import logging
-log = logging.getLogger(__name__)
-del logging
+log = _logging.getLogger(__name__)
+
 
 def register_for_function(action, description):
     def wrapper(f):
         PluginCommand.register_for_function(action, description, f)
         return f
+
     return wrapper
+
 
 def register(action, description):
     def wrapper(f):
         PluginCommand.register(action, description, f)
         return f
+
     return wrapper
 
 
@@ -40,11 +46,40 @@ class BlazeInstance():
     def __init__(self, bv: BinaryView):
         self.bv: BinaryView = bv
 
+
 class BlazePlugin():
     instances: Dict[str, BlazeInstance] = {}
 
     def __init__(self) -> None:
         self.websocket_thread: Optional[threading.Thread] = None
+
+        self.dock_handler: DockHandler
+        if hasattr(DockHandler, 'getActiveDockHandler'):
+            self.dock_handler = DockHandler.getActiveDockHandler()
+        else:
+            main_window = QApplication.allWidgets()[0].window()
+            self.dock_handler = main_window.findChild(DockHandler, '__DockHandler')
+        assert self.dock_handler
+
+        self.icfg_dock_widget: ICFGDockWidget
+
+        def create_icfg_widget(name: str, parent: ViewFrame, bv: BinaryView) -> QWidget:
+            dock_handler = DockHandler.getActiveDockHandler()
+            self.icfg_dock_widget = ICFGDockWidget(
+                name=name,
+                view_frame=dock_handler.getViewFrame(),
+                parent=parent,
+                blaze=blaze,
+                blaze_instance=blaze.ensure_instance(bv))
+            return self.icfg_dock_widget
+
+        self.dock_handler.addDockWidget( \
+            "Blaze ICFG",
+            create_icfg_widget,
+            Qt.DockWidgetArea.RightDockWidgetArea,
+            Qt.Orientation.Vertical,
+            False
+        )
 
     def _init_thread(self) -> None:
         if not self.websocket_thread or not self.websocket_thread.is_alive():
@@ -156,21 +191,11 @@ class BlazePlugin():
             log.info("got Noop")
 
         elif tag == 'SBCfg':
-            display_icfg(instance.bv, msg['cfg'])
+            self.icfg_dock_widget.icfg_widget.setGraph(
+                ICFGFlowGraph.create(instance.bv, msg['cfg']))
 
         else:
             log.error("Blaze: unknown message type: %s", tag)
-
-
-def _get_or_set_loop() -> asyncio.AbstractEventLoop:
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        loop.set_debug(True)
-        asyncio.set_event_loop(loop)
-
-    return asyncio.get_running_loop()
 
 
 try:
@@ -211,6 +236,7 @@ def listen_start(bv):
 
 def listen_stop(bv):
     pass
+
 
 # PluginCommand.register_for_medium_level_il_instruction(actionSendInstruction, "Send Instruction", send_instruction)
 
