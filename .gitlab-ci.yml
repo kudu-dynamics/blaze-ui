@@ -190,7 +190,7 @@ push:latest:
 
     # Push :latest to internal gitlab registry
     - docker tag "${local_image}:commit-${CI_COMMIT_SHA}" "${local_image}:latest"
-    - echo docker push "${local_image}:latest"
+    - docker push "${local_image}:latest"
 
     # Push :latest to AWS ECR integration registry
     - aws ecr get-login-password | docker login --username AWS --password-stdin "${AWS_ECR_REGISTRY}"
