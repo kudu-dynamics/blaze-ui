@@ -13,7 +13,7 @@ import qualified Data.ByteString.Char8 as BSC
 import Binja.Core (BNBinaryView)
 import qualified Binja.Core as BN
 import qualified Binja.Function as BNFunc
-import Blaze.UI.Types hiding (cfg)
+import Blaze.UI.Types hiding ( cfg )
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
@@ -22,7 +22,7 @@ import Blaze.Pretty (prettyIndexedStmts, showHex)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.UI.Web.Pil as WebPil
-import Blaze.UI.Types.BinjaMessages (convertPilCfg)
+import Blaze.UI.Types.Cfg (convertPilCfg)
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -311,22 +311,25 @@ handleBinjaEvent bv = \case
         sendToBinja . SBLogInfo $ "Completed checking " <> fn ^. BNFunc.name
         sendToBinja . SBLogInfo $ "See server log for results."
 
-  BSStartCfgForFunction funcAddr -> do
+  BSCfgNew funcAddr -> do
     mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
     case mfunc of
       Nothing -> sendToBinja
         . SBLogError $ "Couldn't find function at " <> showHex funcAddr
       Just func -> do
-        mr <- liftIO $ Cfg.getCfg (BNImporter bv) bv 0 func
+        mr <- liftIO $ Cfg.getCfg (BNImporter bv) bv func
         case mr of
           Nothing -> sendToBinja
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
+            cfgId' <- liftIO randomIO
             pprint . Aeson.encode . convertPilCfg $ r ^. #result
-            sendToBinja . SBCfg funcAddr $ convertPilCfg $ r ^. #result
+            sendToBinja . SBCfg cfgId' $ convertPilCfg $ r ^. #result
         debug "Good job"
 
-  BSExpandCall -> debug "Binja expand call"
+  BSCfgExpandCall _cfgId' _callNode -> debug "Binja expand call"
+
+  BSCfgRemoveBranch _cfgId' _edge -> debug "Binja remove branch"
 
   BSNoop -> debug "Binja noop"
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+
 module Blaze.UI.Types
   ( module Blaze.UI.Types
   , module WebMessages
@@ -16,8 +17,8 @@ import qualified Binja.Function as BNFunc
 import qualified Data.Aeson.Types as Aeson
 import Blaze.UI.Types.WebMessages as WebMessages
 import Blaze.Function (Function)
-import Blaze.UI.Types.BinjaMessages (Cfg)
-import Blaze.Types.Cfg (CfNode)
+import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
+import Blaze.Types.Cfg (CfNode, CallNode)
 
 data BinjaMessage a = BinjaMessage
   { bvFilePath :: Text
@@ -30,13 +31,12 @@ instance FromJSON a => FromJSON (BinjaMessage a)
 data ServerToBinja = SBLogInfo { message :: Text }
                    | SBLogWarn { message :: Text }
                    | SBLogError { message :: Text }
-                   | SBCfg { funcAddress :: Word64
+
+                   | SBCfg { cfgId :: CfgId
                            -- TODO: send cfg with text
-                           , cfg :: Cfg (CfNode [Text])
+                           , cfg :: CfgTransport [Text]
                            }
-                   | SBCfgPruningDemo { cfg :: Cfg (CfNode [Text])
-                                      , prunedCfg :: Cfg (CfNode [Text])
-                                      }
+                   
                    | SBNoop
                    deriving (Eq, Ord, Show, Generic)
 
@@ -47,9 +47,21 @@ instance FromJSON ServerToBinja
 data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
                    | BSTypeCheckFunction { address :: Word64 }
-                   | BSStartCfgForFunction { address :: Word64 }                     
-                   | BSExpandCall
+
+                   | BSCfgNew
+                     { startFuncAddress :: Word64
+                     }
+                   | BSCfgExpandCall
+                     { cfgId :: CfgId
+                     , callNode :: CallNode ()
+                     }
+                   | BSCfgRemoveBranch
+                     { cfgId :: CfgId
+                     , edge :: (CfNode (), CfNode ())
+                     }
+
                    | BSNoop
+
                    deriving (Eq, Ord, Show, Generic)
 
 instance ToJSON BinjaToServer

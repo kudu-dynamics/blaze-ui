@@ -94,7 +94,7 @@ myTypes =
 
   , mkT (Proxy :: Proxy (Pil.CallDest A))
   
-  , mkT (Proxy :: Proxy Pil.CtxIndex)
+  , mkT (Proxy :: Proxy Pil.CtxId)
   , mkT (Proxy :: Proxy Pil.Ctx)
   , mkT (Proxy :: Proxy Pil.PilVar)
 
