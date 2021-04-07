@@ -4,9 +4,9 @@ import json
 import logging as _logging
 import os
 import os.path
-import queue
 import threading
-from typing import Any, Dict, Optional
+import queue
+from typing import Dict, Literal, Optional, Union, cast
 
 import websockets
 from binaryninja import BinaryView, PluginCommand
@@ -15,7 +15,8 @@ from PySide2.QtCore import Qt
 from PySide2.QtWidgets import QApplication, QWidget
 from websockets.client import WebSocketClientProtocol
 
-from .cfg import ICFGDockWidget, ICFGFlowGraph
+from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
+from .types import BinjaMessage, BinjaToServer, ServerCfg, ServerToBinja
 
 LOG_LEVEL = 'INFO'
 BLAZE_UI_HOST = os.environ.get('BLAZE_UI_HOST', 'localhost')
@@ -49,6 +50,7 @@ class BlazeInstance():
 
 class BlazePlugin():
     instances: Dict[str, BlazeInstance] = {}
+    out_queue: "queue.Queue[Union[Literal['SHUTDOWN'], BinjaMessage]]"
 
     def __init__(self) -> None:
         self.websocket_thread: Optional[threading.Thread] = None
@@ -112,10 +114,10 @@ class BlazePlugin():
         BlazePlugin.instances[bv.file.filename] = instance
         return instance
 
-    def send(self, bv: BinaryView, msg: dict) -> None:
+    def send(self, bv: BinaryView, msg: BinjaToServer) -> None:
         self._init_thread()
         self.ensure_instance(bv)
-        new_msg = {"bvFilePath": bv.file.filename, "action": msg}
+        new_msg = BinjaMessage(bvFilePath=bv.file.filename, action=msg)
         log.debug('enqueueing %s', new_msg)
         self.out_queue.put(new_msg)
 
@@ -175,8 +177,9 @@ class BlazePlugin():
             log.debug('sent')
             self.out_queue.task_done()
 
-    def message_handler(self, instance: BlazeInstance, msg: Dict[str, Any]) -> None:
+    def message_handler(self, instance: BlazeInstance, msg: ServerToBinja) -> None:
         tag = msg['tag']
+        log.debug('Got message: %s', json.dumps(msg, indent=2))
 
         if tag == 'SBLogInfo':
             log.info(msg['message'])
@@ -191,8 +194,9 @@ class BlazePlugin():
             log.info("got Noop")
 
         elif tag == 'SBCfg':
+            cfg = cast(ServerCfg, msg['cfg'])
             self.icfg_dock_widget.icfg_widget.setGraph(
-                ICFGFlowGraph.create(instance.bv, msg['cfg']))
+                ICFGFlowGraph.create(instance.bv, cfg_from_server(cfg)))
 
         else:
             log.error("Blaze: unknown message type: %s", tag)
@@ -217,17 +221,18 @@ class Action(str, enum.Enum):
 
 @register(Action.SAY_HELLO, 'Say Hello')
 def say_hello(bv):
-    blaze.send(bv, {'tag': 'BSTextMessage', 'message': 'this is Bilbo'})
+    # blaze.send(bv, BS {'tag': 'BSTextMessage', 'message': 'this is Bilbo'})
+    blaze.send(bv, BinjaToServer(tag='BSTextMessage', message='this is Bilbo'))
 
 
 @register_for_function(Action.TYPE_CHECK_FUNCTION, 'Type Check Function')
 def type_check_function(bv, func):
-    blaze.send(bv, {'tag': 'BSTypeCheckFunction', 'address': func.start})
+    blaze.send(bv, BinjaToServer(tag='BSTypeCheckFunction', address=func.start))
 
 
 @register_for_function(Action.START_CFG, 'Start CFG')
 def start_cfg(bv, func):
-    blaze.send(bv, {'tag': 'BSStartCfgForFunction', 'address': func.start})
+    blaze.send(bv, BinjaToServer(tag='BSCfgNew', startFuncAddress=func.start))
 
 
 def listen_start(bv):

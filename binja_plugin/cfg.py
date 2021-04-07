@@ -1,15 +1,27 @@
-import enum
 import logging as _logging
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Type
+from typing import Dict, TYPE_CHECKING, Optional, Tuple, Type, cast
 
 from binaryninja import BinaryView
-import binaryninja
-from binaryninja.enums import BranchType, EdgePenStyle, InstructionTextTokenType, ThemeColor
+from binaryninja.enums import BranchType, EdgePenStyle, ThemeColor
 from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphNode
+from binaryninja.function import Function
 from binaryninjaui import DockContextHandler, FlowGraphWidget, ViewFrame
 from PySide2.QtCore import QObject, Qt
 from PySide2.QtGui import QMouseEvent
 from PySide2.QtWidgets import QMessageBox, QVBoxLayout, QWidget
+
+from .types import (
+    Address,
+    BasicBlockNode,
+    CallNode,
+    CfEdge,
+    Cfg,
+    CfNode,
+    EnterFuncNode,
+    LeaveFuncNode,
+    ServerCfg,
+    UUID,
+)
 
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance, BlazePlugin
@@ -17,24 +29,27 @@ if TYPE_CHECKING:
 log = _logging.getLogger(__name__)
 
 
-class CFNode(str, enum.Enum):
-    BasicBlock = 'BasicBlock'
-    Call = 'Call'
-    EnterFunc = 'EnterFunc'
-    LeaveFunc = 'LeaveFunc'
+def cfg_from_server(cfg: ServerCfg) -> Cfg:
+    nodes = {k['contents']['uuid']: v for k, v in cfg['nodes']}
+    return Cfg(nodes=nodes, edges=cfg['edges'], root=cfg['root']['contents']['uuid'])
 
 
-def get_edge_type(edge, nodes) -> Tuple[BranchType, Optional[EdgeStyle]]:
-    node_from = nodes[edge['src']]
-    node_to = nodes[edge['dst']]
+def cfg_to_server(cfg: Cfg) -> ServerCfg:
+    nodes = [(cfg['nodes'][k], v) for k, v in cfg['nodes'].items()]
+    return ServerCfg(nodes=nodes, edges=cfg['edges'], root=cfg['nodes'][cfg['root']])
 
-    if node_to['tag'] == CFNode.EnterFunc:
+
+def get_edge_type(edge: CfEdge, cfg: Cfg) -> Tuple[BranchType, Optional[EdgeStyle]]:
+    node_from = cfg['nodes'][edge['src']['contents']['uuid']]
+    node_to = cfg['nodes'][edge['dst']['contents']['uuid']]
+
+    if node_to['tag'] == 'EnterFunc':
         assert edge['branchType'] == 'UnconditionalBranch', 'bad assumption'
         return (BranchType.UserDefinedBranch,
                 EdgeStyle(
                     style=EdgePenStyle.DashLine, theme_color=ThemeColor.UnconditionalBranchColor))
 
-    if node_from['tag'] == CFNode.LeaveFunc:
+    if node_from['tag'] == 'LeaveFunc':
         assert edge['branchType'] == 'UnconditionalBranch', 'bad assumption'
         return (BranchType.UserDefinedBranch,
                 EdgeStyle(
@@ -47,42 +62,43 @@ def get_edge_type(edge, nodes) -> Tuple[BranchType, Optional[EdgeStyle]]:
     }[edge['branchType']]
 
 
-def format_block_header(node_id: int, node: dict) -> str:
-    tag = node['tag']
-    start_addr = node['contents'].get('start', None)
+def format_block_header(node: CfNode) -> str:
+    node_id = node['contents']['uuid']
+    node_tag = node['tag']
 
-    if tag == CFNode.BasicBlock:
-        return f'{start_addr:#x} (id {node_id}) {tag}'
+    if node_tag == 'BasicBlock':
+        node_contents = cast(BasicBlockNode, node['contents'])
+        return f'{node_contents["start"]:#x} (id {node_id}) BasicBlockNode'
 
-    if tag == CFNode.EnterFunc:
-        prevFun = node['contents']['prevCtx']['func']['name']
-        nextFun = node['contents']['nextCtx']['func']['name']
-        return f'(id {node_id}) {tag} {prevFun} -> {nextFun}'
+    if node_tag == 'Call':
+        node_contents = cast(CallNode, node['contents'])
+        return f'{node_contents["start"]:#x} (id {node_id}) CallNode'
 
-    if tag == CFNode.LeaveFunc:
-        prevFun = node['contents']['prevCtx']['func']['name']
-        nextFun = node['contents']['nextCtx']['func']['name']
-        return f'(id {node_id}) {tag} {nextFun} <- {prevFun}'
+    if node_tag == 'EnterFunc':
+        node_contents = cast(EnterFuncNode, node['contents'])
+        prevFun = node_contents['prevCtx']['func']['name']
+        nextFun = node_contents['nextCtx']['func']['name']
+        return f'(id {node_id}) EnterFuncNode {prevFun} -> {nextFun}'
 
-    if tag == CFNode.Call:
-        fun = node['contents']['function']['name']
-        return f'{start_addr:#x} (id {node_id}) {tag} {fun}'
+    if node_tag == 'LeaveFunc':
+        node_contents = cast(LeaveFuncNode, node['contents'])
+        prevFun = node_contents['prevCtx']['func']['name']
+        nextFun = node_contents['nextCtx']['func']['name']
+        return f'(id {node_id}) LeaveFuncNode {nextFun} <- {prevFun}'
 
-    assert False, f'Inexaustive match on CFNode? tag={tag}'
+    assert False, f'Inexaustive match on CFNode? tag={node["tag"]}'
 
 
 class ICFGFlowGraph(FlowGraph):
     @classmethod
-    def create(cls: Type['ICFGFlowGraph'], _bv: BinaryView, cfg: Dict[str, Any]) -> 'ICFGFlowGraph':
-        cfg = {**cfg, 'nodeMap': {k: v for [k, v] in cfg['nodeMap']}}
-
+    def create(cls: Type['ICFGFlowGraph'], _bv: BinaryView, cfg: Cfg) -> 'ICFGFlowGraph':
         graph = cls()
-        nodes = {}
+        nodes: Dict[UUID, FlowGraphNode] = {}
 
-        for (node_id, node) in cfg['nodeMap'].items():
+        for (node_id, node) in cfg['nodes'].items():
             fg_node = FlowGraphNode(graph)
 
-            fg_node.lines = [format_block_header(node_id, node)]
+            fg_node.lines = [format_block_header(node)]
             if (nodeData := node.get('contents', {}).get('nodeData', None)):
                 fg_node.lines += nodeData
 
@@ -90,8 +106,9 @@ class ICFGFlowGraph(FlowGraph):
             graph.append(fg_node)
 
         for edge in cfg['edges']:
-            branch_type, edge_style = get_edge_type(edge, cfg['nodeMap'])
-            nodes[edge['src']].add_outgoing_edge(branch_type, nodes[edge['dst']], edge_style)
+            branch_type, edge_style = get_edge_type(edge, cfg)
+            nodes[edge['src']['contents']['uuid']].add_outgoing_edge(
+                branch_type, nodes[edge['dst']['contents']['uuid']], edge_style)
 
         return graph
 
