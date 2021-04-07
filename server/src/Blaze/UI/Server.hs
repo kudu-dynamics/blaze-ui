@@ -19,6 +19,10 @@ import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
 import qualified Blaze.Import.Source.BinaryNinja.Cfg as BnCfg
 import qualified Blaze.Types.Cfg as Cfg
+import Blaze.Types.Cfg (Cfg)
+import qualified Blaze.Cfg.Analysis as CfgA
+import qualified Data.Set as Set
+import qualified Blaze.Graph as G
 import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
 import qualified Blaze.Cfg.Interprocedural as ICfg
 import Blaze.Pretty (prettyIndexedStmts, showHex)
@@ -348,14 +352,17 @@ handleBinjaEvent bv = \case
           Just (Cfg.Call fullCallNode) -> do
             let bs = ICfg.mkBuilderState (BNImporter bv)
             mCfg' <- liftIO . ICfg.build bs $ ICfg.expandCall (InterCfg cfg) fullCallNode
+            
             case mCfg' of
               Nothing ->
                 -- TODO: more specific error
                 sendToBinja . SBLogError $ "Could not expand call node."
               Just (InterCfg cfg') -> do
-                pprint . Aeson.encode . convertPilCfg $ cfg'
-                sendToBinja . SBCfg cfgId' . convertPilCfg $ cfg'
-                addCfg cfgId' cfg'
+                let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+                printPrunedStats cfg' prunedCfg
+                pprint . Aeson.encode . convertPilCfg $ prunedCfg
+                sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
+                addCfg cfgId' prunedCfg
           Just _ -> do
             sendToBinja . SBLogError $ "Node must be a CallNode"
     
@@ -363,6 +370,15 @@ handleBinjaEvent bv = \case
   BSCfgRemoveBranch _cfgId' _edge -> debug "Binja remove branch"
 
   BSNoop -> debug "Binja noop"
+
+printPrunedStats :: (Ord a, MonadIO m) => Cfg a -> Cfg a -> m ()
+printPrunedStats a b = do
+  putText "------------- Prune -----------"
+  putText $ "Before: " <> show (Set.size $ G.nodes a) <> " nodes, "
+    <> show (length $ G.edges a) <> " edges"
+  putText $ "After: " <> show (Set.size $ G.nodes b) <> " nodes, "
+    <> show (length $ G.edges b) <> " edges"
+
 
 printTypeReportToConsole :: MonadIO m => BNFunc.Function -> Ch.TypeReport -> m ()
 printTypeReportToConsole fn tr = do
