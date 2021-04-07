@@ -367,7 +367,23 @@ handleBinjaEvent bv = \case
             sendToBinja . SBLogError $ "Node must be a CallNode"
     
 
-  BSCfgRemoveBranch _cfgId' _edge -> debug "Binja remove branch"
+  BSCfgRemoveBranch cfgId' (node1, node2) -> do
+    debug "Binja remove branch"
+    mCfg <- getCfg cfgId'
+    case mCfg of
+      Nothing -> sendToBinja
+        . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
+      Just cfg -> do
+        case (,) <$> Cfg.getFullNodeMay cfg node1 <*> Cfg.getFullNodeMay cfg node2 of
+          Nothing -> sendToBinja
+            . SBLogError $ "Node(s) don't exist in Cfg"
+          Just (fullNode1, fullNode2) -> do
+            let cfg' = G.removeEdge (G.Edge fullNode1 fullNode2) $ cfg
+                (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+            printPrunedStats cfg' prunedCfg
+            pprint . Aeson.encode . convertPilCfg $ prunedCfg
+            sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
+            addCfg cfgId' prunedCfg
 
   BSNoop -> debug "Binja noop"
 
