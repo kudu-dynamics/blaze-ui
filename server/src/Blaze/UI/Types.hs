@@ -13,12 +13,13 @@ import qualified Data.HashMap.Strict as HashMap
 import Web.Scotty (Parsable(parseParam))
 import Data.Text.Encoding.Base64.URL (encodeBase64, decodeBase64)
 import qualified Blaze.Types.Pil.Checker as Ch
+import Blaze.Types.Pil (Stmt)
 import qualified Binja.Function as BNFunc
 import qualified Data.Aeson.Types as Aeson
 import Blaze.UI.Types.WebMessages as WebMessages
 import Blaze.Function (Function)
 import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
-import Blaze.Types.Cfg (CfNode, CallNode)
+import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
 
 data BinjaMessage a = BinjaMessage
   { bvFilePath :: Text
@@ -127,6 +128,7 @@ data Event = WebEvent WebToServer
 data EventLoopCtx = EventLoopCtx
   { binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
+  , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
   } deriving (Generic)
 
 data EventLoopState = EventLoopState
@@ -134,7 +136,6 @@ data EventLoopState = EventLoopState
   , webOutput :: [ServerToWeb]
   } deriving (Generic)
 
--- IO is in EventLoop only for debugging.
 newtype EventLoop a = EventLoop { _runEventLoop :: ReaderT EventLoopCtx IO a }
   deriving newtype ( Functor
                    , Applicative
@@ -164,6 +165,7 @@ debug =  putText
 data SessionState = SessionState
   { binaryPath :: Maybe Text
   , binaryView :: TMVar BNBinaryView
+  , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
   , eventHandlerThread :: TMVar ThreadId
@@ -176,9 +178,9 @@ emptySessionState binPath
     <$> newEmptyTMVar
     <*> newTVar HashMap.empty
     <*> newTVar HashMap.empty
+    <*> newTVar HashMap.empty
     <*> newEmptyTMVar
     <*> newTQueue
-
 
 -- all the changeable fields should be STM vars
 -- so this can be updated across threads
@@ -195,3 +197,24 @@ lookupSessionState :: SessionId -> AppState -> STM (Maybe SessionState)
 lookupSessionState sid st = do
   m <- readTVar $ st ^. #binarySessions
   return $ HashMap.lookup sid m
+
+
+addCfg :: CfgId -> Cfg [Stmt] -> EventLoop ()
+addCfg cid cfg' = do
+  cfgMapTVar <- view #cfgs <$> ask
+  liftIO . atomically $ do
+    m <- readTVar cfgMapTVar
+    case HashMap.lookup cid m of
+      Nothing -> do
+        cfgTVar <- newTVar cfg'
+        writeTVar cfgMapTVar $ HashMap.insert cid cfgTVar m
+      Just cfgTMVar -> do
+        writeTVar cfgTMVar cfg'
+  return ()
+
+getCfg :: CfgId -> EventLoop (Maybe (Cfg [Stmt]))
+getCfg cid = do
+  cfgMapTVar <- view #cfgs <$> ask
+  liftIO . atomically $ do
+    m <- readTVar cfgMapTVar
+    maybe (return Nothing) (fmap Just . readTVar) $ HashMap.lookup cid m

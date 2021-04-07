@@ -17,7 +17,10 @@ import Blaze.UI.Types hiding ( cfg )
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
-import qualified Blaze.Import.Source.BinaryNinja.Cfg as Cfg
+import qualified Blaze.Import.Source.BinaryNinja.Cfg as BnCfg
+import qualified Blaze.Types.Cfg as Cfg
+import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
+import qualified Blaze.Cfg.Interprocedural as ICfg
 import Blaze.Pretty (prettyIndexedStmts, showHex)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
@@ -52,9 +55,9 @@ removeSessionState sid st = atomically
   . modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
 
 createBinjaOutbox :: WS.Connection
-             -> SessionState
-             -> Text
-             -> IO ThreadId
+                  -> SessionState
+                  -> Text
+                  -> IO ThreadId
 createBinjaOutbox conn ss fp = do
   q <- newTQueueIO
   t <- forkIO . forever $ do
@@ -158,7 +161,10 @@ spawnEventHandler ss = do
       eventTid <- forkIO . forever $ do
         bv <- atomically . readTMVar $ ss ^. #binaryView
         msg <- atomically . readTQueue $ ss ^. #eventInbox
-        let ctx = EventLoopCtx (ss ^. #binjaOutboxes) (ss ^. #webOutboxes)
+        let ctx = EventLoopCtx
+                  (ss ^. #binjaOutboxes)
+                  (ss ^. #webOutboxes)
+                  (ss ^. #cfgs)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
         void . forkIO $ runEventLoop (mainEventLoop bv msg) ctx
@@ -317,7 +323,7 @@ handleBinjaEvent bv = \case
       Nothing -> sendToBinja
         . SBLogError $ "Couldn't find function at " <> showHex funcAddr
       Just func -> do
-        mr <- liftIO $ Cfg.getCfg (BNImporter bv) bv func
+        mr <- liftIO $ BnCfg.getCfg (BNImporter bv) bv func
         case mr of
           Nothing -> sendToBinja
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
@@ -325,9 +331,34 @@ handleBinjaEvent bv = \case
             cfgId' <- liftIO randomIO
             pprint . Aeson.encode . convertPilCfg $ r ^. #result
             sendToBinja . SBCfg cfgId' $ convertPilCfg $ r ^. #result
+            addCfg cfgId' $ r ^. #result 
         debug "Good job"
 
-  BSCfgExpandCall _cfgId' _callNode -> debug "Binja expand call"
+  BSCfgExpandCall cfgId' callNode -> do
+    debug $ "Binja expand call for:\n" <> cs (pshow callNode)
+    mCfg <- getCfg cfgId'
+    case mCfg of
+      Nothing -> sendToBinja
+        . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
+      Just cfg -> do
+        case Cfg.getFullNodeMay cfg (Cfg.Call callNode) of
+          Nothing ->
+            sendToBinja . SBLogError $ "Could not find call node in Cfg"
+          -- TODO: fix issue #160 so we can just send `CallNode ()` to expandCall
+          Just (Cfg.Call fullCallNode) -> do
+            let bs = ICfg.mkBuilderState (BNImporter bv)
+            mCfg' <- liftIO . ICfg.build bs $ ICfg.expandCall (InterCfg cfg) fullCallNode
+            case mCfg' of
+              Nothing ->
+                -- TODO: more specific error
+                sendToBinja . SBLogError $ "Could not expand call node."
+              Just (InterCfg cfg') -> do
+                pprint . Aeson.encode . convertPilCfg $ cfg'
+                sendToBinja . SBCfg cfgId' . convertPilCfg $ cfg'
+                addCfg cfgId' cfg'
+          Just _ -> do
+            sendToBinja . SBLogError $ "Node must be a CallNode"
+    
 
   BSCfgRemoveBranch _cfgId' _edge -> debug "Binja remove branch"
 

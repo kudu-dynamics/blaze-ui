@@ -2,12 +2,10 @@ module Blaze.UI.Types.Cfg where
 
 import Blaze.Prelude hiding (Symbol)
 
-import qualified Blaze.Types.Pil as Pil
 import Blaze.Types.Pil (Stmt)
 import Blaze.Types.Cfg ( CfNode, CfEdge, Cfg )
 import qualified Blaze.Graph as G
 import qualified Data.HashMap.Strict as HMap
-import qualified Data.Set as Set
 import Blaze.Pretty (pretty)
 import Blaze.Cfg.Interprocedural (
   InterCfg,
@@ -15,7 +13,7 @@ import Blaze.Cfg.Interprocedural (
  )
 import System.Random (Random)
 import qualified Blaze.Types.Cfg as Cfg
-import qualified Blaze.Types.Graph.Alga as Alga
+
 
 newtype CfgId = CfgId UUID
   deriving (Eq, Ord, Show, Generic)
@@ -42,7 +40,7 @@ convertPilCfg pcfg = CfgTransport
   where
     root' = void $ pcfg ^. #root
 
-    nodes' :: [(CfNode (), CfNode [Stmt])] 
+    nodes' :: [(CfNode (), CfNode [Stmt])]
     nodes' = HMap.toList $ pcfg ^. #graph . #nodeAttrMap
 
     textNodes' :: [(CfNode (), CfNode [Text])]
