@@ -1,4 +1,5 @@
 {- HLINT ignore "Use if" -}
+{- HLINT ignore "Reduce duplication" -}
 
 module Blaze.UI.Server where
 
@@ -378,7 +379,7 @@ handleBinjaEvent bv = \case
           Nothing -> sendToBinja
             . SBLogError $ "Node(s) don't exist in Cfg"
           Just (fullNode1, fullNode2) -> do
-            let cfg' = G.removeEdge (G.Edge fullNode1 fullNode2) $ cfg
+            let cfg' = G.removeEdge (G.Edge fullNode1 fullNode2) cfg
                 (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
             printPrunedStats cfg' prunedCfg
             pprint . Aeson.encode . convertPilCfg $ prunedCfg
