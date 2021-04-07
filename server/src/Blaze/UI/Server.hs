@@ -1,4 +1,5 @@
 {- HLINT ignore "Use if" -}
+{- HLINT ignore "Reduce duplication" -}
 
 module Blaze.UI.Server where
 
@@ -13,16 +14,23 @@ import qualified Data.ByteString.Char8 as BSC
 import Binja.Core (BNBinaryView)
 import qualified Binja.Core as BN
 import qualified Binja.Function as BNFunc
-import Blaze.UI.Types hiding (cfg)
+import Blaze.UI.Types hiding ( cfg, callNode )
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
-import qualified Blaze.Import.Source.BinaryNinja.Cfg as Cfg
+import qualified Blaze.Import.Source.BinaryNinja.Cfg as BnCfg
+import qualified Blaze.Types.Cfg as Cfg
+import Blaze.Types.Cfg (Cfg)
+import qualified Blaze.Cfg.Analysis as CfgA
+import qualified Data.Set as Set
+import qualified Blaze.Graph as G
+import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
+import qualified Blaze.Cfg.Interprocedural as ICfg
 import Blaze.Pretty (prettyIndexedStmts, showHex)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.UI.Web.Pil as WebPil
-import Blaze.UI.Types.BinjaMessages (convertPilCfg)
+import Blaze.UI.Types.Cfg (convertPilCfg)
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -52,9 +60,9 @@ removeSessionState sid st = atomically
   . modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
 
 createBinjaOutbox :: WS.Connection
-             -> SessionState
-             -> Text
-             -> IO ThreadId
+                  -> SessionState
+                  -> Text
+                  -> IO ThreadId
 createBinjaOutbox conn ss fp = do
   q <- newTQueueIO
   t <- forkIO . forever $ do
@@ -158,7 +166,10 @@ spawnEventHandler ss = do
       eventTid <- forkIO . forever $ do
         bv <- atomically . readTMVar $ ss ^. #binaryView
         msg <- atomically . readTQueue $ ss ^. #eventInbox
-        let ctx = EventLoopCtx (ss ^. #binjaOutboxes) (ss ^. #webOutboxes)
+        let ctx = EventLoopCtx
+                  (ss ^. #binjaOutboxes)
+                  (ss ^. #webOutboxes)
+                  (ss ^. #cfgs)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
         void . forkIO $ runEventLoop (mainEventLoop bv msg) ctx
@@ -311,24 +322,80 @@ handleBinjaEvent bv = \case
         sendToBinja . SBLogInfo $ "Completed checking " <> fn ^. BNFunc.name
         sendToBinja . SBLogInfo $ "See server log for results."
 
-  BSStartCfgForFunction funcAddr -> do
+  BSCfgNew funcAddr -> do
     mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
     case mfunc of
       Nothing -> sendToBinja
         . SBLogError $ "Couldn't find function at " <> showHex funcAddr
       Just func -> do
-        mr <- liftIO $ Cfg.getCfg (BNImporter bv) bv 0 func
+        mr <- liftIO $ BnCfg.getCfg (BNImporter bv) bv func
         case mr of
           Nothing -> sendToBinja
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
+            cfgId' <- liftIO randomIO
             pprint . Aeson.encode . convertPilCfg $ r ^. #result
-            sendToBinja . SBCfg funcAddr $ convertPilCfg $ r ^. #result
+            sendToBinja . SBCfg cfgId' $ convertPilCfg $ r ^. #result
+            addCfg cfgId' $ r ^. #result 
         debug "Good job"
 
-  BSExpandCall -> debug "Binja expand call"
+  BSCfgExpandCall cfgId' callNode -> do
+    debug $ "Binja expand call for:\n" <> cs (pshow callNode)
+    mCfg <- getCfg cfgId'
+    case mCfg of
+      Nothing -> sendToBinja
+        . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
+      Just cfg -> do
+        case Cfg.getFullNodeMay cfg (Cfg.Call callNode) of
+          Nothing ->
+            sendToBinja . SBLogError $ "Could not find call node in Cfg"
+          -- TODO: fix issue #160 so we can just send `CallNode ()` to expandCall
+          Just (Cfg.Call fullCallNode) -> do
+            let bs = ICfg.mkBuilderState (BNImporter bv)
+            mCfg' <- liftIO . ICfg.build bs $ ICfg.expandCall (InterCfg cfg) fullCallNode
+            
+            case mCfg' of
+              Nothing ->
+                -- TODO: more specific error
+                sendToBinja . SBLogError $ "Could not expand call node."
+              Just (InterCfg cfg') -> do
+                let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+                printPrunedStats cfg' prunedCfg
+                pprint . Aeson.encode . convertPilCfg $ prunedCfg
+                sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
+                addCfg cfgId' prunedCfg
+          Just _ -> do
+            sendToBinja . SBLogError $ "Node must be a CallNode"
+    
+
+  BSCfgRemoveBranch cfgId' (node1, node2) -> do
+    debug "Binja remove branch"
+    mCfg <- getCfg cfgId'
+    case mCfg of
+      Nothing -> sendToBinja
+        . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
+      Just cfg -> do
+        case (,) <$> Cfg.getFullNodeMay cfg node1 <*> Cfg.getFullNodeMay cfg node2 of
+          Nothing -> sendToBinja
+            . SBLogError $ "Node(s) don't exist in Cfg"
+          Just (fullNode1, fullNode2) -> do
+            let cfg' = G.removeEdge (G.Edge fullNode1 fullNode2) cfg
+                (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+            printPrunedStats cfg' prunedCfg
+            pprint . Aeson.encode . convertPilCfg $ prunedCfg
+            sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
+            addCfg cfgId' prunedCfg
 
   BSNoop -> debug "Binja noop"
+
+printPrunedStats :: (Ord a, MonadIO m) => Cfg a -> Cfg a -> m ()
+printPrunedStats a b = do
+  putText "------------- Prune -----------"
+  putText $ "Before: " <> show (Set.size $ G.nodes a) <> " nodes, "
+    <> show (length $ G.edges a) <> " edges"
+  putText $ "After: " <> show (Set.size $ G.nodes b) <> " nodes, "
+    <> show (length $ G.edges b) <> " edges"
+
 
 printTypeReportToConsole :: MonadIO m => BNFunc.Function -> Ch.TypeReport -> m ()
 printTypeReportToConsole fn tr = do
