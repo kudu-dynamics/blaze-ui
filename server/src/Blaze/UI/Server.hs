@@ -13,7 +13,7 @@ import qualified Data.ByteString.Char8 as BSC
 import Binja.Core (BNBinaryView)
 import qualified Binja.Core as BN
 import qualified Binja.Function as BNFunc
-import Blaze.UI.Types hiding ( cfg )
+import Blaze.UI.Types hiding ( cfg, callNode )
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
