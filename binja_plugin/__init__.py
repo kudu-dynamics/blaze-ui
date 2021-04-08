@@ -26,15 +26,16 @@ class BinaryNinjaUILoggingHandler(logging.Handler):
 
 
 def setup_logging():
-    for handler in list(logging.root.handlers):
-        if any(t.__name__ == BinaryNinjaUILoggingHandler.__name__
-               for t in handler.__class__.__mro__):
-            logging.root.removeHandler(handler)
+    # for handler in list(logging.root.handlers):
+    #     if any(t.__name__ == BinaryNinjaUILoggingHandler.__name__
+    #            for t in handler.__class__.__mro__):
+    #         logging.root.removeHandler(handler)
 
     handler = BinaryNinjaUILoggingHandler(level=LOG_LEVEL)
     formatter = logging.Formatter('Blaze: {message} [{name}:{funcName}:{lineno}]', style='{')
     handler.setFormatter(formatter)
-    logging.root.addHandler(handler)
+    logging.getLogger(__name__).handlers = [handler]
+    logging.root.level = min(LOG_LEVEL, logging.root.level)
 
 
 setup_logging()

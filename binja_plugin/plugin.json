@@ -1,6 +1,6 @@
 {
     "plugin": {
-        "name": "Blaze"
+        "name": "Blaze",
         "type": ["core", "ui", "architecture", "binaryview"],
         "api": "python3",
         "description": "Blaze",
@@ -17,4 +17,3 @@
         }
     }
 }
-        
