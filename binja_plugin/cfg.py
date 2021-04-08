@@ -1,17 +1,19 @@
+from copy import deepcopy
+import json
 import logging as _logging
-from typing import Dict, TYPE_CHECKING, Optional, Tuple, Type, cast
+import re
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, Type, cast
 
 from binaryninja import BinaryView
-from binaryninja.enums import BranchType, EdgePenStyle, ThemeColor
+from binaryninja.enums import BranchType, EdgePenStyle, InstructionTextTokenType, ThemeColor
 from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphNode
-from binaryninja.function import Function
 from binaryninjaui import DockContextHandler, FlowGraphWidget, ViewFrame
 from PySide2.QtCore import QObject, Qt
 from PySide2.QtGui import QMouseEvent
 from PySide2.QtWidgets import QMessageBox, QVBoxLayout, QWidget
 
 from .types import (
-    Address,
+    BinjaToServer, CfgId, UUID,
     BasicBlockNode,
     CallNode,
     CfEdge,
@@ -20,7 +22,6 @@ from .types import (
     EnterFuncNode,
     LeaveFuncNode,
     ServerCfg,
-    UUID,
 )
 
 if TYPE_CHECKING:
@@ -44,13 +45,17 @@ def get_edge_type(edge: CfEdge, cfg: Cfg) -> Tuple[BranchType, Optional[EdgeStyl
     node_to = cfg['nodes'][edge['dst']['contents']['uuid']]
 
     if node_to['tag'] == 'EnterFunc':
-        assert edge['branchType'] == 'UnconditionalBranch', 'bad assumption'
+        if edge['branchType'] != 'UnconditionalBranch':
+            log.error('Bad assumption: edge was actually a %s', edge['branchType'])
+
         return (BranchType.UserDefinedBranch,
                 EdgeStyle(
                     style=EdgePenStyle.DashLine, theme_color=ThemeColor.UnconditionalBranchColor))
 
     if node_from['tag'] == 'LeaveFunc':
-        assert edge['branchType'] == 'UnconditionalBranch', 'bad assumption'
+        if edge['branchType'] != 'UnconditionalBranch':
+            log.error('Bad assumption: edge was actually a %s', edge['branchType'])
+
         return (BranchType.UserDefinedBranch,
                 EdgeStyle(
                     style=EdgePenStyle.DotLine, theme_color=ThemeColor.UnconditionalBranchColor))
@@ -90,56 +95,121 @@ def format_block_header(node: CfNode) -> str:
 
 
 class ICFGFlowGraph(FlowGraph):
-    @classmethod
-    def create(cls: Type['ICFGFlowGraph'], _bv: BinaryView, cfg: Cfg) -> 'ICFGFlowGraph':
-        graph = cls()
+    pil_icfg: Cfg
+    pil_icfg_id: CfgId
+
+    def __init__(self, _bv: BinaryView, cfg: Cfg, cfg_id: CfgId):
+        super().__init__()
+        self.pil_icfg = cfg
+        self.pil_icfg_id = cfg_id
+
         nodes: Dict[UUID, FlowGraphNode] = {}
 
         for (node_id, node) in cfg['nodes'].items():
-            fg_node = FlowGraphNode(graph)
+            fg_node = FlowGraphNode(self)
 
             fg_node.lines = [format_block_header(node)]
             if (nodeData := node.get('contents', {}).get('nodeData', None)):
                 fg_node.lines += nodeData
 
             nodes[node_id] = fg_node
-            graph.append(fg_node)
+            self.append(fg_node)
 
         for edge in cfg['edges']:
             branch_type, edge_style = get_edge_type(edge, cfg)
             nodes[edge['src']['contents']['uuid']].add_outgoing_edge(
                 branch_type, nodes[edge['dst']['contents']['uuid']], edge_style)
 
-        return graph
-
-
-class Window(QMessageBox):
-    def __init__(self, parent=None, text=None):
-        super(Window, self).__init__(parent)
-
-        self.setText(text or '')
-
 
 class ICFGWidget(FlowGraphWidget, QObject):
     def __init__(self, parent: QWidget, view_frame: ViewFrame, blaze_instance: 'BlazeInstance'):
         FlowGraphWidget.__init__(self, parent, blaze_instance.bv, None)
         self._view_frame: ViewFrame = view_frame
-        self.blaze_instance = blaze_instance
+        self.blaze_instance: 'BlazeInstance' = blaze_instance
         self.graph: Optional[ICFGFlowGraph] = None
 
-    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-        parent = super()
-        if event.button() != Qt.LeftButton:
-            return parent.mousePressEvent(event)
-        Window(None, 'Double!').exec_()
+    def set_icfg(self, cfg_id: CfgId, cfg: Cfg):
+        self.graph = ICFGFlowGraph(self.blaze_instance.bv, cfg, cfg_id)
+        self.setGraph(self.graph)
 
-        # highlight_state = parent.getTokenForMouseEvent(event)
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        parent = super(ICFGWidget, self)
+        # if event.button() != Qt.LeftButton or self.graph is None:
+        if self.graph is None:
+            return parent.mousePressEvent(event)
+
+        # node = FlowGraphNode(self.graph)
+        # res = parent.getNodeForMouseEvent(event, node)
+        # res = self.getNodeForMouseEvent(event, node)
+        # log.error(f'{res = }')
+        # log.error(f'({node.x}, {node.y}): {node.lines}')
+
+        highlight_state = parent.getTokenForMouseEvent(event)
         # if highlight_state.addrValid and highlight_state.type == InstructionTextTokenType.CodeSymbolToken:
-        #     function = self.blaze_instance.binary_view.get_function_at(
-        #         highlight_state.addr, highlight_state.arch)
-        #     Window(function.name).exec_()
-        # else:
-        #     Window(None, 'Double!').exec_()
+        if highlight_state.type != InstructionTextTokenType.TextToken:
+            log.error('unexpected highlight token type: %s. Trying anyway', highlight_state.type)
+
+        line: str = highlight_state.token.text
+
+        # Quick cheap hack until FlowGraphWidget.getNodeForMouseEvent works
+        if not (m := re.search(r'\(id ([a-f0-9-]+)\)', line)):
+            log.warn('Not a block header: %r', line)
+            return
+
+        uuid = m[1]
+        node = self.graph.pil_icfg['nodes'][uuid]
+
+        if line.endswith('CallNode'):
+            call_node = cast(CallNode, node['contents']).copy()
+            call_node['nodeData'] = []
+            log.info(json.dumps(call_node, indent=2))
+            self.blaze_instance.send(
+                BinjaToServer(
+                    tag='BSCfgExpandCall',
+                    cfgId=self.graph.pil_icfg_id,
+                    callNode=call_node
+                ))
+
+        elif event.button() == Qt.MouseButton.LeftButton:  # prune true branch
+            for edge in self.graph.pil_icfg['edges']:
+                if edge['src']['contents']['uuid'] == uuid and edge['branchType'] == 'TrueBranch':
+                    break
+            else:
+                log.error('No True conditional branch from this node!')
+                return
+
+            from_node = deepcopy(edge['src'])
+            to_node = deepcopy(edge['dst'])
+            from_node['contents']['nodeData'] = []
+            to_node['contents']['nodeData'] = []
+
+            self.blaze_instance.send(
+                BinjaToServer(
+                    tag='BSCfgRemoveBranch',
+                    cfgId=self.graph.pil_icfg_id,
+                    edge=(from_node, to_node)
+                ))
+        else:  # prune false branch
+            for edge in self.graph.pil_icfg['edges']:
+                if edge['src']['contents']['uuid'] == uuid and edge['branchType'] == 'FalseBranch':
+                    break
+            else:
+                log.error('No False conditional branch from this node!')
+                return
+
+            from_node = deepcopy(edge['src'])
+            to_node = deepcopy(edge['dst'])
+            from_node['contents']['nodeData'] = []
+            to_node['contents']['nodeData'] = []
+
+            self.blaze_instance.send(
+                BinjaToServer(
+                    tag='BSCfgRemoveBranch',
+                    cfgId=self.graph.pil_icfg_id,
+                    edge=(from_node, to_node)
+                ))
+
+
 
     def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', view_frame: ViewFrame):
         self.blaze_instance = blaze_instance
@@ -150,14 +220,12 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
 
 class ICFGDockWidget(QWidget, DockContextHandler):
-    def __init__(self, name: str, view_frame: ViewFrame, parent: QWidget, blaze: 'BlazePlugin',
-                 blaze_instance: 'BlazeInstance'):
+    def __init__(self, name: str, view_frame: ViewFrame, parent: QWidget, blaze_instance: 'BlazeInstance'):
         QWidget.__init__(self, parent)
         DockContextHandler.__init__(self, self, name)
 
         self._view_frame: ViewFrame = view_frame
         self.blaze_instance: Optional['BlazeInstance'] = blaze_instance
-        self.blaze: 'BlazePlugin' = blaze
         self.icfg_widget: ICFGWidget = ICFGWidget(self, view_frame, self.blaze_instance)
 
         layout = QVBoxLayout()
@@ -172,7 +240,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
             self.blaze_instance = None
         else:
             view = view_frame.getCurrentViewInterface()
-            self.blaze_instance = self.blaze.ensure_instance(view.getData())
+            self.blaze_instance = self.blaze_instance.blaze.ensure_instance(view.getData())
             self.icfg_widget.notifyInstanceChanged(self.blaze_instance, view_frame)
 
     def notifyOffsetChanged(self, offset: int) -> None:
