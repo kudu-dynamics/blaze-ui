@@ -5,7 +5,7 @@ import re
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Type, cast
 
 from binaryninja import BinaryView
-from binaryninja.enums import BranchType, EdgePenStyle, InstructionTextTokenType, ThemeColor
+from binaryninja.enums import BranchType, EdgePenStyle, HighlightStandardColor, InstructionTextTokenType, ThemeColor
 from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphNode
 from binaryninjaui import DockContextHandler, FlowGraphWidget, ViewFrame
 from PySide2.QtCore import QObject, Qt
@@ -111,6 +111,13 @@ class ICFGFlowGraph(FlowGraph):
             fg_node.lines = [format_block_header(node)]
             if (nodeData := node.get('contents', {}).get('nodeData', None)):
                 fg_node.lines += nodeData
+
+            if node['tag'] == 'Call':
+                fg_node.highlight = HighlightStandardColor.YellowHighlightColor
+            elif node['tag'] == 'EnterFunc':
+                fg_node.highlight = HighlightStandardColor.GreenHighlightColor
+            elif node['tag'] == 'LeaveFunc':
+                fg_node.highlight = HighlightStandardColor.BlueHighlightColor
 
             nodes[node_id] = fg_node
             self.append(fg_node)
