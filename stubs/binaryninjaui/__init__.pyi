@@ -3,7 +3,7 @@
 # of relevant headers in binaryninja-api/ui/, so if you're getting a type error
 # and you don't think you should be, a type sig in this file might be the culprit
 
-from typing import Callable, List, Type, overload
+from typing import Callable, List, Optional, Type, overload
 
 from binaryninja import (
     AddressRange,
@@ -15,8 +15,31 @@ from binaryninja import (
     Function,
     FunctionGraphType,
 )
+from binaryninja.architecture import Architecture
+from binaryninja.enums import InstructionTextTokenType
+from binaryninja.function import InstructionTextToken, Variable
 from PySide2.QtCore import QObject, Qt
+from PySide2.QtGui import QMouseEvent
 from PySide2.QtWidgets import QAbstractScrollArea, QDockWidget, QWidget
+
+# action.h
+
+class HighlightTokenState:
+    valid: bool
+    secondaryHighlight: bool
+    type: InstructionTextTokenType
+    token: InstructionTextToken
+    arch: Optional[Architecture]
+    addrValid: bool
+    localVarValid: bool
+    isDest: bool
+    addr: int
+    localVar: Variable
+    tokenIndex: int
+    characterIndex: int
+
+    def __init__(self) -> None: ...
+
 
 # dockhandler.h
 
@@ -87,6 +110,10 @@ TagReference: Type
 
 class FlowGraphWidget(QAbstractScrollArea, View, PreviewScrollHandler, BinaryDataNotification):
     def __init__(self, parent: QWidget, view: BinaryView, graph: FlowGraph = None): ...
+    # def getNodeForMouseEvent(self, event: QMouseEvent, node: FlowGraphNode) -> bool: ...
+    # def getLineForMouseEvent(self, event: QMouseEvent, node: CursorPosition) -> bool: ...
+    # def getLineForMouseEvent(self, event: QMouseEvent, node: CursorPosition) -> bool: ...
+    def getTokenForMouseEvent(self, event: QMouseEvent) -> HighlightTokenState: ...
     def OnAnalysisFunctionUpdated(self, data: BinaryView, func: Function) -> None: ...
     def OnAnalysisFunctionUpdateRequested(self, data: BinaryView, func: Function) -> None: ...
     def OnDataMetadataUpdated(self, data: BinaryView, offset: int) -> None: ...
