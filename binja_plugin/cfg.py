@@ -133,19 +133,18 @@ class ICFGWidget(FlowGraphWidget, QObject):
         FlowGraphWidget.__init__(self, parent, blaze_instance.bv, None)
         self._view_frame: ViewFrame = view_frame
         self.blaze_instance: 'BlazeInstance' = blaze_instance
-        self.graph: Optional[ICFGFlowGraph] = None
 
     def set_icfg(self, cfg_id: CfgId, cfg: Cfg):
-        self.graph = ICFGFlowGraph(self.blaze_instance.bv, cfg, cfg_id)
-        self.setGraph(self.graph)
+        self.blaze_instance.graph = ICFGFlowGraph(self.blaze_instance.bv, cfg, cfg_id)
+        self.setGraph(self.blaze_instance.graph)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         parent = super(ICFGWidget, self)
-        # if event.button() != Qt.LeftButton or self.graph is None:
-        if self.graph is None:
+        # if event.button() != Qt.LeftButton or self.blaze_instance.graph is None:
+        if self.blaze_instance.graph is None:
             return parent.mousePressEvent(event)
 
-        # node = FlowGraphNode(self.graph)
+        # node = FlowGraphNode(self.blaze_instance.graph)
         # res = parent.getNodeForMouseEvent(event, node)
         # res = self.getNodeForMouseEvent(event, node)
         # log.error(f'{res = }')
@@ -164,7 +163,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             return
 
         uuid = m[1]
-        node = self.graph.pil_icfg['nodes'][uuid]
+        node = self.blaze_instance.graph.pil_icfg['nodes'][uuid]
 
         if line.endswith('CallNode'):
             call_node = cast(CallNode, node['contents']).copy()
@@ -173,12 +172,12 @@ class ICFGWidget(FlowGraphWidget, QObject):
             self.blaze_instance.send(
                 BinjaToServer(
                     tag='BSCfgExpandCall',
-                    cfgId=self.graph.pil_icfg_id,
+                    cfgId=self.blaze_instance.graph.pil_icfg_id,
                     callNode=call_node
                 ))
 
         elif event.button() == Qt.MouseButton.LeftButton:  # prune true branch
-            for edge in self.graph.pil_icfg['edges']:
+            for edge in self.blaze_instance.graph.pil_icfg['edges']:
                 if edge['src']['contents']['uuid'] == uuid and edge['branchType'] == 'TrueBranch':
                     break
             else:
@@ -193,11 +192,11 @@ class ICFGWidget(FlowGraphWidget, QObject):
             self.blaze_instance.send(
                 BinjaToServer(
                     tag='BSCfgRemoveBranch',
-                    cfgId=self.graph.pil_icfg_id,
+                    cfgId=self.blaze_instance.graph.pil_icfg_id,
                     edge=(from_node, to_node)
                 ))
         else:  # prune false branch
-            for edge in self.graph.pil_icfg['edges']:
+            for edge in self.blaze_instance.graph.pil_icfg['edges']:
                 if edge['src']['contents']['uuid'] == uuid and edge['branchType'] == 'FalseBranch':
                     break
             else:
@@ -212,7 +211,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             self.blaze_instance.send(
                 BinjaToServer(
                     tag='BSCfgRemoveBranch',
-                    cfgId=self.graph.pil_icfg_id,
+                    cfgId=self.blaze_instance.graph.pil_icfg_id,
                     edge=(from_node, to_node)
                 ))
 

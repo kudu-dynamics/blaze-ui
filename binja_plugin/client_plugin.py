@@ -15,7 +15,7 @@ from PySide2.QtCore import Qt
 from PySide2.QtWidgets import QApplication, QWidget
 from websockets.client import WebSocketClientProtocol
 
-from .cfg import ICFGDockWidget, cfg_from_server
+from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
 from .types import BinjaMessage, BinjaToServer, CfgId, ServerCfg, ServerToBinja
 
 LOG_LEVEL = 'INFO'
@@ -47,6 +47,7 @@ class BlazeInstance():
     def __init__(self, bv: BinaryView, blaze: 'BlazePlugin'):
         self.bv: BinaryView = bv
         self.blaze: 'BlazePlugin' = blaze
+        self.graph: Optional[ICFGFlowGraph] = None
 
     def send(self, msg: BinjaToServer):
         self.blaze.send(self.bv, msg)
