@@ -1,23 +1,25 @@
-from copy import deepcopy
+import ctypes
 import json
 import logging as _logging
-import re
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, Type, cast
+from copy import deepcopy
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, cast
 
 from binaryninja import BinaryView
-from binaryninja.enums import BranchType, EdgePenStyle, HighlightStandardColor, InstructionTextTokenType, ThemeColor
+from binaryninja.enums import BranchType, EdgePenStyle, HighlightStandardColor, ThemeColor
 from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphNode
 from binaryninjaui import DockContextHandler, FlowGraphWidget, ViewFrame
-from PySide2.QtCore import QObject, Qt
+from PySide2.QtCore import QObject
 from PySide2.QtGui import QMouseEvent
-from PySide2.QtWidgets import QMessageBox, QVBoxLayout, QWidget
+from PySide2.QtWidgets import QVBoxLayout, QWidget
 
 from .types import (
-    BinjaToServer, CfgId, UUID,
+    UUID,
     BasicBlockNode,
+    BinjaToServer,
     CallNode,
     CfEdge,
     Cfg,
+    CfgId,
     CfNode,
     EnterFuncNode,
     LeaveFuncNode,
@@ -25,7 +27,7 @@ from .types import (
 )
 
 if TYPE_CHECKING:
-    from .client_plugin import BlazeInstance, BlazePlugin
+    from .client_plugin import BlazeInstance
 
 log = _logging.getLogger(__name__)
 
@@ -95,18 +97,23 @@ def format_block_header(node: CfNode) -> str:
 
 
 class ICFGFlowGraph(FlowGraph):
-    pil_icfg: Cfg
-    pil_icfg_id: CfgId
-
     def __init__(self, _bv: BinaryView, cfg: Cfg, cfg_id: CfgId):
         super().__init__()
-        self.pil_icfg = cfg
-        self.pil_icfg_id = cfg_id
+        self.pil_icfg: Cfg = cfg
+        self.pil_icfg_id: CfgId = cfg_id
+        # FIXME change this to a Dict[FlowGraphNode, CfNode] once FlowGraphNode is hashable
+        # (cf. https://github.com//binaryninja-api/pull/2376)
+        self.node_mapping: Dict[int, CfNode] = {}
 
         nodes: Dict[UUID, FlowGraphNode] = {}
 
         for (node_id, node) in cfg['nodes'].items():
             fg_node = FlowGraphNode(self)
+            # FIXME remove this once FlowGraphNode is hashable
+            if not fg_node.handle:
+                raise RuntimeError('FlowGraphNode has NULL .handle')
+
+            self.node_mapping[ctypes.addressof(fg_node.handle.contents)] = node
 
             fg_node.lines = [format_block_header(node)]
             if (nodeData := node.get('contents', {}).get('nodeData', None)):
@@ -127,6 +134,18 @@ class ICFGFlowGraph(FlowGraph):
             nodes[edge['src']['contents']['uuid']].add_outgoing_edge(
                 branch_type, nodes[edge['dst']['contents']['uuid']], edge_style)
 
+    @property
+    def nodes(self):
+        return self.pil_icfg['nodes']
+
+    def get_edge(self, source_id: str = None, dest_id: str = None) -> Optional[CfEdge]:
+        for edge in self.pil_icfg['edges']:
+            if (source_id is None or edge['src']['contents']['uuid'] == source_id) and \
+               (dest_id is None or edge['dst']['contents']['uuid'] == dest_id):
+                return edge
+
+        return None
+
 
 class ICFGWidget(FlowGraphWidget, QObject):
     def __init__(self, parent: QWidget, view_frame: ViewFrame, blaze_instance: 'BlazeInstance'):
@@ -144,78 +163,67 @@ class ICFGWidget(FlowGraphWidget, QObject):
         if self.blaze_instance.graph is None:
             return parent.mousePressEvent(event)
 
-        # node = FlowGraphNode(self.blaze_instance.graph)
-        # res = parent.getNodeForMouseEvent(event, node)
-        # res = self.getNodeForMouseEvent(event, node)
-        # log.error(f'{res = }')
-        # log.error(f'({node.x}, {node.y}): {node.lines}')
+        if (fg_node := self.getNodeForMouseEvent(event)):
+            self.handle_node_double_click_event(event, fg_node)
 
-        highlight_state = parent.getTokenForMouseEvent(event)
-        # if highlight_state.addrValid and highlight_state.type == InstructionTextTokenType.CodeSymbolToken:
-        if highlight_state.type != InstructionTextTokenType.TextToken:
-            log.error('unexpected highlight token type: %s. Trying anyway', highlight_state.type)
+        if (fg_edge := self.getEdgeForMouseEvent(event)):
+            fg_edge, swapped = fg_edge
+            if swapped:
+                source, dest = fg_edge.target, fg_edge.source
+            else:
+                source, dest = fg_edge.source, fg_edge.target
+            self.handle_edge_double_click_event(event, source, dest)
 
-        line: str = highlight_state.token.text
+    def handle_node_double_click_event(self, event: QMouseEvent, fg_node: FlowGraphNode) -> None:
+        fg_node_addr = ctypes.addressof(fg_node.handle.contents)
+        node = self.blaze_instance.graph.node_mapping.get(fg_node_addr)
 
-        # Quick cheap hack until FlowGraphWidget.getNodeForMouseEvent works
-        if not (m := re.search(r'\(id ([a-f0-9-]+)\)', line)):
-            log.warn('Not a block header: %r', line)
+        if not node:
+            log.warning(f'Couldn\'t find node_mapping[{fg_node_addr}]')
             return
 
-        uuid = m[1]
-        node = self.blaze_instance.graph.pil_icfg['nodes'][uuid]
+        if node['tag'] != 'Call':
+            log.warning('Did not double-click on a node')
+            return
 
-        if line.endswith('CallNode'):
-            call_node = cast(CallNode, node['contents']).copy()
-            call_node['nodeData'] = []
-            log.info(json.dumps(call_node, indent=2))
-            self.blaze_instance.send(
-                BinjaToServer(
-                    tag='BSCfgExpandCall',
-                    cfgId=self.blaze_instance.graph.pil_icfg_id,
-                    callNode=call_node
-                ))
+        call_node = cast(CallNode, node['contents']).copy()
+        call_node['nodeData'] = []
+        log.info(json.dumps(call_node, indent=2))
+        self.blaze_instance.send(
+            BinjaToServer(
+                tag='BSCfgExpandCall',
+                cfgId=self.blaze_instance.graph.pil_icfg_id,
+                callNode=call_node))
 
-        elif event.button() == Qt.MouseButton.LeftButton:  # prune true branch
-            for edge in self.blaze_instance.graph.pil_icfg['edges']:
-                if edge['src']['contents']['uuid'] == uuid and edge['branchType'] == 'TrueBranch':
-                    break
-            else:
-                log.error('No True conditional branch from this node!')
-                return
+    def handle_edge_double_click_event(
+            self,
+            event: QMouseEvent,
+            source_fg_node: FlowGraphNode,
+            dest_fg_node: FlowGraphNode) \
+            -> None:
 
-            from_node = deepcopy(edge['src'])
-            to_node = deepcopy(edge['dst'])
-            from_node['contents']['nodeData'] = []
-            to_node['contents']['nodeData'] = []
+        source_node = self.blaze_instance.graph.node_mapping.get(ctypes.addressof(source_fg_node.handle.contents))
+        dest_node = self.blaze_instance.graph.node_mapping.get(ctypes.addressof(dest_fg_node.handle.contents))
+        if source_node is None or dest_node is None:
+            raise RuntimeError('Missing node in node_mapping!')
 
-            self.blaze_instance.send(
-                BinjaToServer(
-                    tag='BSCfgRemoveBranch',
-                    cfgId=self.blaze_instance.graph.pil_icfg_id,
-                    edge=(from_node, to_node)
-                ))
-        else:  # prune false branch
-            for edge in self.blaze_instance.graph.pil_icfg['edges']:
-                if edge['src']['contents']['uuid'] == uuid and edge['branchType'] == 'FalseBranch':
-                    break
-            else:
-                log.error('No False conditional branch from this node!')
-                return
+        edge = self.blaze_instance.graph.get_edge(source_node['contents']['uuid'], dest_node['contents']['uuid'])
+        if not edge:
+            raise RuntimeError('Missing edge!')
 
-            from_node = deepcopy(edge['src'])
-            to_node = deepcopy(edge['dst'])
-            from_node['contents']['nodeData'] = []
-            to_node['contents']['nodeData'] = []
+        if edge['branchType'] not in ('TrueBranch', 'FalseBranch'):
+            raise ValueError('Not a conditional branch')
 
-            self.blaze_instance.send(
-                BinjaToServer(
-                    tag='BSCfgRemoveBranch',
-                    cfgId=self.blaze_instance.graph.pil_icfg_id,
-                    edge=(from_node, to_node)
-                ))
+        from_node = deepcopy(edge['src'])
+        to_node = deepcopy(edge['dst'])
+        from_node['contents']['nodeData'] = []
+        to_node['contents']['nodeData'] = []
 
-
+        self.blaze_instance.send(
+            BinjaToServer(
+                tag='BSCfgRemoveBranch',
+                cfgId=self.blaze_instance.graph.pil_icfg_id,
+                edge=(from_node, to_node)))
 
     def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', view_frame: ViewFrame):
         self.blaze_instance = blaze_instance
@@ -226,7 +234,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
 
 class ICFGDockWidget(QWidget, DockContextHandler):
-    def __init__(self, name: str, view_frame: ViewFrame, parent: QWidget, blaze_instance: 'BlazeInstance'):
+    def __init__(self, name: str, view_frame: ViewFrame, parent: QWidget,
+                 blaze_instance: 'BlazeInstance'):
         QWidget.__init__(self, parent)
         DockContextHandler.__init__(self, self, name)
 
