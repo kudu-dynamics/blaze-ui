@@ -44,20 +44,8 @@ def cfg_to_server(cfg: Cfg) -> ServerCfg:
 
 def get_edge_type(edge: CfEdge, cfg: Cfg) -> Tuple[BranchType, Optional[EdgeStyle]]:
     node_from = cfg['nodes'][edge['src']['contents']['uuid']]
-    node_to = cfg['nodes'][edge['dst']['contents']['uuid']]
 
-    if node_to['tag'] == 'EnterFunc':
-        if edge['branchType'] != 'UnconditionalBranch':
-            log.error('Bad assumption: edge was actually a %s', edge['branchType'])
-
-        return (BranchType.UserDefinedBranch,
-                EdgeStyle(
-                    style=EdgePenStyle.DashLine, theme_color=ThemeColor.UnconditionalBranchColor))
-
-    if node_from['tag'] == 'LeaveFunc':
-        if edge['branchType'] != 'UnconditionalBranch':
-            log.error('Bad assumption: edge was actually a %s', edge['branchType'])
-
+    if node_from['tag'] == 'Call':
         return (BranchType.UserDefinedBranch,
                 EdgeStyle(
                     style=EdgePenStyle.DotLine, theme_color=ThemeColor.UnconditionalBranchColor))
