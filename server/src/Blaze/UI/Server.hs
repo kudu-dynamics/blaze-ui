@@ -355,10 +355,10 @@ handleBinjaEvent bv = \case
             mCfg' <- liftIO . ICfg.build bs $ ICfg.expandCall (InterCfg cfg) fullCallNode
             
             case mCfg' of
-              Nothing ->
+              Left err ->
                 -- TODO: more specific error
-                sendToBinja . SBLogError $ "Could not expand call node."
-              Just (InterCfg cfg') -> do
+                sendToBinja . SBLogError . show $ err
+              Right (InterCfg cfg') -> do
                 let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
                 printPrunedStats cfg' prunedCfg
                 pprint . Aeson.encode . convertPilCfg $ prunedCfg
