@@ -1,4 +1,3 @@
-import ctypes
 import json
 import logging as _logging
 from copy import deepcopy
@@ -89,19 +88,13 @@ class ICFGFlowGraph(FlowGraph):
         super().__init__()
         self.pil_icfg: Cfg = cfg
         self.pil_icfg_id: CfgId = cfg_id
-        # FIXME change this to a Dict[FlowGraphNode, CfNode] once FlowGraphNode is hashable
-        # (cf. https://github.com//binaryninja-api/pull/2376)
-        self.node_mapping: Dict[int, CfNode] = {}
+        self.node_mapping: Dict[FlowGraphNode, CfNode] = {}
 
         nodes: Dict[UUID, FlowGraphNode] = {}
 
         for (node_id, node) in cfg['nodes'].items():
             fg_node = FlowGraphNode(self)
-            # FIXME remove this once FlowGraphNode is hashable
-            if not fg_node.handle:
-                raise RuntimeError('FlowGraphNode has NULL .handle')
-
-            self.node_mapping[ctypes.addressof(fg_node.handle.contents)] = node
+            self.node_mapping[fg_node] = node
 
             fg_node.lines = [format_block_header(node)]
             if (nodeData := node.get('contents', {}).get('nodeData', None)):
@@ -163,11 +156,10 @@ class ICFGWidget(FlowGraphWidget, QObject):
             self.handle_edge_double_click_event(event, source, dest)
 
     def handle_node_double_click_event(self, event: QMouseEvent, fg_node: FlowGraphNode) -> None:
-        fg_node_addr = ctypes.addressof(fg_node.handle.contents)
-        node = self.blaze_instance.graph.node_mapping.get(fg_node_addr)
+        node = self.blaze_instance.graph.node_mapping.get(fg_node)
 
         if not node:
-            log.warning(f'Couldn\'t find node_mapping[{fg_node_addr}]')
+            log.error(f'Couldn\'t find node_mapping[{fg_node}]')
             return
 
         if node['tag'] != 'Call':
@@ -190,8 +182,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
             dest_fg_node: FlowGraphNode) \
             -> None:
 
-        source_node = self.blaze_instance.graph.node_mapping.get(ctypes.addressof(source_fg_node.handle.contents))
-        dest_node = self.blaze_instance.graph.node_mapping.get(ctypes.addressof(dest_fg_node.handle.contents))
+        source_node = self.blaze_instance.graph.node_mapping.get(source_fg_node)
+        dest_node = self.blaze_instance.graph.node_mapping.get(dest_fg_node)
         if source_node is None or dest_node is None:
             raise RuntimeError('Missing node in node_mapping!')
 
