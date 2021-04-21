@@ -3,7 +3,7 @@
 # of relevant headers in binaryninja-api/ui/, so if you're getting a type error
 # and you don't think you should be, a type sig in this file might be the culprit
 
-from typing import Callable, List, Type, overload
+from typing import Any, Callable, List, Optional, Tuple, Type, overload
 
 from binaryninja import (
     AddressRange,
@@ -15,8 +15,32 @@ from binaryninja import (
     Function,
     FunctionGraphType,
 )
+from binaryninja.architecture import Architecture
+from binaryninja.enums import InstructionTextTokenType
+from binaryninja.flowgraph import FlowGraphEdge, FlowGraphNode
+from binaryninja.function import InstructionTextToken, Variable
 from PySide2.QtCore import QObject, Qt
+from PySide2.QtGui import QMouseEvent
 from PySide2.QtWidgets import QAbstractScrollArea, QDockWidget, QWidget
+
+# action.h
+
+class HighlightTokenState:
+    valid: bool
+    secondaryHighlight: bool
+    type: InstructionTextTokenType
+    token: InstructionTextToken
+    arch: Optional[Architecture]
+    addrValid: bool
+    localVarValid: bool
+    isDest: bool
+    addr: int
+    localVar: Variable
+    tokenIndex: int
+    characterIndex: int
+
+    def __init__(self) -> None: ...
+
 
 # dockhandler.h
 
@@ -87,6 +111,13 @@ TagReference: Type
 
 class FlowGraphWidget(QAbstractScrollArea, View, PreviewScrollHandler, BinaryDataNotification):
     def __init__(self, parent: QWidget, view: BinaryView, graph: FlowGraph = None): ...
+    def getNodeForMouseEvent(self, event: QMouseEvent) -> Optional[FlowGraphNode]: ...
+    def getEdgeForMouseEvent(self, event: QMouseEvent) -> Optional[Tuple[FlowGraphEdge, bool]]:
+        '''Returns `None` if no edge was clicked, or `(edge, is_incoming)` if an edge was
+        clicked. `is_incoming` is `True` if the edge was clicked near the target of the
+        edge, and `False` if it was clicked neat the source of the edge.'''
+    # def getLineForMouseEvent(self, event: QMouseEvent) -> Optional[Any]: ...
+    def getTokenForMouseEvent(self, event: QMouseEvent) -> Optional[HighlightTokenState]: ...
     def OnAnalysisFunctionUpdated(self, data: BinaryView, func: Function) -> None: ...
     def OnAnalysisFunctionUpdateRequested(self, data: BinaryView, func: Function) -> None: ...
     def OnDataMetadataUpdated(self, data: BinaryView, offset: int) -> None: ...
