@@ -359,9 +359,9 @@ handleBinjaEvent bv = \case
                 -- TODO: more specific error
                 sendToBinja . SBLogError . show $ err
               Right (InterCfg cfg') -> do
-                let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
-                printPrunedStats cfg' prunedCfg
+                let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'               
                 pprint . Aeson.encode . convertPilCfg $ prunedCfg
+                printPrunedStats cfg' prunedCfg
                 sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
                 addCfg cfgId' prunedCfg
           Just _ -> do
@@ -381,8 +381,8 @@ handleBinjaEvent bv = \case
           Just (fullNode1, fullNode2) -> do
             let cfg' = G.removeEdge (G.Edge fullNode1 fullNode2) cfg
                 (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
-            printPrunedStats cfg' prunedCfg
             pprint . Aeson.encode . convertPilCfg $ prunedCfg
+            printPrunedStats cfg' prunedCfg
             sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
             addCfg cfgId' prunedCfg
 
