@@ -31,6 +31,8 @@ import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.UI.Web.Pil as WebPil
 import Blaze.UI.Types.Cfg (convertPilCfg)
+import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
+import Blaze.Pretty (pretty)
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -353,12 +355,12 @@ handleBinjaEvent bv = \case
           Just (Cfg.Call fullCallNode) -> do
             let bs = ICfg.mkBuilderState (BNImporter bv)
             mCfg' <- liftIO . ICfg.build bs $ ICfg.expandCall (InterCfg cfg) fullCallNode
-            
+
             case mCfg' of
-              Nothing ->
+              Left err ->
                 -- TODO: more specific error
-                sendToBinja . SBLogError $ "Could not expand call node."
-              Just (InterCfg cfg') -> do
+                sendToBinja . SBLogError . show $ err
+              Right (InterCfg cfg') -> do
                 let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
                 printPrunedStats cfg' prunedCfg
                 pprint . Aeson.encode . convertPilCfg $ prunedCfg
@@ -367,7 +369,6 @@ handleBinjaEvent bv = \case
           Just _ -> do
             sendToBinja . SBLogError $ "Node must be a CallNode"
     
-
   BSCfgRemoveBranch cfgId' (node1, node2) -> do
     debug "Binja remove branch"
     mCfg <- getCfg cfgId'
@@ -387,6 +388,30 @@ handleBinjaEvent bv = \case
             addCfg cfgId' prunedCfg
 
   BSNoop -> debug "Binja noop"
+
+  BSCfgSnapshot snapMsg -> case snapMsg of
+    Snapshot.New funcAddr -> do
+      mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
+      case mfunc of
+        Nothing -> sendToBinja
+          . SBLogError $ "Couldn't find function at " <> showHex funcAddr
+        Just func -> do
+          mr <- liftIO $ BnCfg.getCfg (BNImporter bv) bv func
+          case mr of
+            Nothing -> sendToBinja
+              . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
+            Just r -> do
+              cfgId' <- liftIO randomIO
+              putText . pretty $ r ^. #result
+              sendToBinja . SBCfg cfgId' $ convertPilCfg $ r ^. #result
+              addCfg cfgId' $ r ^. #result 
+          debug "Good job"
+
+    Snapshot.Load cid -> undefined
+
+    Snapshot.Save cid mname -> undefined
+
+    Snapshot.Rename cid name -> undefined
 
 printPrunedStats :: (Ord a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printPrunedStats a b = do

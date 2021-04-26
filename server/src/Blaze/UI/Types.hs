@@ -20,6 +20,7 @@ import Blaze.UI.Types.WebMessages as WebMessages
 import Blaze.Function (Function)
 import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
 import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
+import Blaze.UI.Types.Cfg.Snapshot (SnapshotMsg, SnapState)
 
 data BinjaMessage a = BinjaMessage
   { bvFilePath :: Text
@@ -49,6 +50,8 @@ data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
                    | BSTypeCheckFunction { address :: Word64 }
 
+                   | BSCfgSnapshot SnapshotMsg
+
                    | BSCfgNew
                      { startFuncAddress :: Word64
                      }
@@ -60,6 +63,8 @@ data BinjaToServer = BSConnect
                      { cfgId :: CfgId
                      , edge :: (CfNode (), CfNode ())
                      }
+
+                   | BSSnapshot SnapshotMsg
 
                    | BSNoop
 
@@ -128,7 +133,7 @@ data Event = WebEvent WebToServer
 data EventLoopCtx = EventLoopCtx
   { binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
-  , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
+  , cfgs :: TVar SnapState
   } deriving (Generic)
 
 data EventLoopState = EventLoopState
