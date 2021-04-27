@@ -204,22 +204,22 @@ lookupSessionState sid st = do
   return $ HashMap.lookup sid m
 
 
-addCfg :: CfgId -> Cfg [Stmt] -> EventLoop ()
-addCfg cid cfg' = do
-  cfgMapTVar <- view #cfgs <$> ask
-  liftIO . atomically $ do
-    m <- readTVar cfgMapTVar
-    case HashMap.lookup cid m of
-      Nothing -> do
-        cfgTVar <- newTVar cfg'
-        writeTVar cfgMapTVar $ HashMap.insert cid cfgTVar m
-      Just cfgTMVar -> do
-        writeTVar cfgTMVar cfg'
-  return ()
+-- addCfg :: CfgId -> Cfg [Stmt] -> EventLoop ()
+-- addCfg cid cfg' = do
+--   cfgMapTVar <- view #cfgs <$> ask
+--   liftIO . atomically $ do
+--     m <- readTVar cfgMapTVar
+--     case HashMap.lookup cid m of
+--       Nothing -> do
+--         cfgTVar <- newTVar cfg'
+--         writeTVar cfgMapTVar $ HashMap.insert cid cfgTVar m
+--       Just cfgTMVar -> do
+--         writeTVar cfgTMVar cfg'
+--   return ()
 
-getCfg :: CfgId -> EventLoop (Maybe (Cfg [Stmt]))
-getCfg cid = do
-  cfgMapTVar <- view #cfgs <$> ask
-  liftIO . atomically $ do
-    m <- readTVar cfgMapTVar
-    maybe (return Nothing) (fmap Just . readTVar) $ HashMap.lookup cid m
+-- getCfg :: CfgId -> EventLoop (Maybe (Cfg [Stmt]))
+-- getCfg cid = do
+--   cfgMapTVar <- view #cfgs <$> ask
+--   liftIO . atomically $ do
+--     m <- readTVar cfgMapTVar
+--     maybe (return Nothing) (fmap Just . readTVar) $ HashMap.lookup cid m

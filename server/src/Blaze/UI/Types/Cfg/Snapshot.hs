@@ -21,6 +21,7 @@ import qualified Blaze.Types.Graph as G
 import Blaze.Types.Graph.Alga (AlgaGraph)
 import Data.Time.Clock (UTCTime)
 import Control.Concurrent.STM.TVar (TVar)
+import Control.Concurrent.STM.TMVar (TMVar, takeTMVar, putTMVar)
 
 type Name = Text
 
@@ -43,12 +44,13 @@ newtype SavedCfgId = SavedCfgId CfgId
 -- ACTIVE cfgs are mutable, AUTO saved
 data ActiveCfg = ActiveCfg
   { branchId :: BranchId
-  , cfg :: TVar PilCfg
+  , cfg :: TMVar PilCfg
   } deriving (Eq, Generic)
 
 -- one SnapState per binary (and user? eventually)
 data SnapState = SnapState
   { branches :: HashMap BranchId SnapshotBranch
+  -- active cfg's are unsaved/snapped and can be mutated
   , activeCfgs :: HashMap ActiveCfgId ActiveCfg
   -- immutable Cfgs
   , savedCfgs :: HashMap SavedCfgId PilCfg
