@@ -30,6 +30,9 @@ server cfg = do
   get (capture "/:sid") $ showUI cfg
 
 
+-- curl to upload example file:
+-- curl -X POST -F 'binaryName=exampleBin' -F 'binaryHash=1234' -F 'bndb=@/tmp/example.bndb' http://localhost:31338/upload
+
 uploadBinary :: ServerConfig -> ActionM ()
 uploadBinary cfg = do
   (binaryName :: FilePath) <- param "binaryName"
@@ -40,7 +43,9 @@ uploadBinary cfg = do
     saveBndb :: FilePath -> Int -> File -> ActionM ()
     saveBndb bname bhash ("bndb", finfo) = liftIO (doesFileExist fpath) >>= \case
       True -> return ()
-      False -> liftIO . BS.writeFile fpath . cs $ Wai.fileContent finfo
+      False -> do
+        print $ Wai.fileContent finfo
+        liftIO . BS.writeFile fpath . cs $ Wai.fileContent finfo
       where
         fname :: FilePath
         fname = cs bname <> "_" <> show bhash <> ".bndb"
