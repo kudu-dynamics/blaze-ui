@@ -93,6 +93,7 @@ data ServerConfig = ServerConfig
   { serverHost :: Text
   , serverWsPort :: Int
   , serverHttpPort :: Int
+  , bndbDir :: FilePath
   } deriving (Eq, Ord, Show, Generic)
 
 instance FromEnv ServerConfig where
@@ -100,6 +101,7 @@ instance FromEnv ServerConfig where
     <$> Envy.env "BLAZE_UI_HOST"
     <*> Envy.env "BLAZE_UI_WS_PORT"
     <*> Envy.env "BLAZE_UI_HTTP_PORT"
+    <*> Envy.env "BLAZE_UI_BNDB_DIR"
 
 newtype SessionId = SessionId Text
   deriving (Eq, Ord, Show, Generic)

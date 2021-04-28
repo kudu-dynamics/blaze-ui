@@ -51,6 +51,7 @@ dependencies:
   - transformers
   - unordered-containers
   - uuid
+  - wai-extra
   - websockets
 
 default-extensions:
