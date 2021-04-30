@@ -21,13 +21,8 @@ It consists of three components:
 
 ## Installation
 
-```sh
-$ ln -s <THIS_REPO>/binja_plugin ~/.binaryninja/plugins/blaze
-# activate your virtualenv which you use for Binary Ninja, or otherwise use the
-# `pip` that corresponds to the python installation which Binary Ninja is configured
-# to use
-$ pip install websockets
-```
+Follow the installation instructions for the binja plugin [here](./binja_plugin/README.md)
+
 
 ## Running server
 
