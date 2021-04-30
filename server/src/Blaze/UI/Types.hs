@@ -98,6 +98,7 @@ data ServerConfig = ServerConfig
   { serverHost :: Text
   , serverWsPort :: Int
   , serverHttpPort :: Int
+  , sqliteFilePath :: FilePath
   } deriving (Eq, Ord, Show, Generic)
 
 instance FromEnv ServerConfig where
@@ -105,6 +106,7 @@ instance FromEnv ServerConfig where
     <$> Envy.env "BLAZE_UI_HOST"
     <*> Envy.env "BLAZE_UI_WS_PORT"
     <*> Envy.env "BLAZE_UI_HTTP_PORT"
+    <*> Envy.env "BLAZE_UI_SQLITE_FILEPATH"
 
 newtype SessionId = SessionId Text
   deriving (Eq, Ord, Show, Generic)
@@ -134,6 +136,7 @@ data EventLoopCtx = EventLoopCtx
   { binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
   , cfgs :: TVar SnapState
+  , sqliteFilePath :: FilePath
   } deriving (Generic)
 
 data EventLoopState = EventLoopState
@@ -147,6 +150,9 @@ newtype EventLoop a = EventLoop { _runEventLoop :: ReaderT EventLoopCtx IO a }
                    , Monad
                    , MonadReader EventLoopCtx
                    , MonadIO
+                   , MonadThrow
+                   , MonadCatch
+                   , MonadMask
                    )
 
 runEventLoop :: EventLoop a -> EventLoopCtx -> IO a

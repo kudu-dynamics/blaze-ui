@@ -25,9 +25,10 @@ module Blaze.UI.Prelude
   , twaddleUUID
   , unfoldWhileJustM
   , writeManyTQueue
+  , unsafeFromRight
   ) where
 
---import qualified Prelude as P
+import qualified Prelude as P
 
 --import Data.Typeable as Exports
 
@@ -63,6 +64,7 @@ import Control.Lens as Exports
     _4,
     _5,
   )
+import Control.Monad.Catch as Exports (MonadMask, MonadCatch, MonadThrow)
 import Control.Monad.Trans.Class as Exports (MonadTrans)
 import Control.Monad.Trans.Maybe as Exports (MaybeT, runMaybeT)
 import Data.Aeson as Exports (FromJSON, ToJSON)
@@ -102,7 +104,6 @@ import Prelude as Exports
     head,
     error,
   )
-import qualified GHC.Show
 import Control.Concurrent.STM.TQueue as Exports
 import Control.Concurrent.STM.TVar as Exports
 import Control.Concurrent.STM.TMVar as Exports
@@ -188,3 +189,8 @@ instance Show a => Show (PPrint a) where
 
 writeManyTQueue :: TQueue a -> [a] -> STM ()
 writeManyTQueue q = mapM_ $ writeTQueue q
+
+unsafeFromRight :: Either a b -> b
+unsafeFromRight = \case
+  Left _ -> P.error "unsafeFromRight: got Left"
+  Right x -> x

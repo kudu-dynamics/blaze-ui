@@ -5,7 +5,7 @@ import Blaze.Prelude hiding (Symbol)
 import Blaze.Types.Pil (Stmt)
 import Blaze.Types.Cfg ( CfNode, CfEdge, Cfg )
 import qualified Blaze.Graph as G
-import qualified Data.HashMap.Strict as HMap
+import qualified Data.HashMap.Strict as HashMap
 import Blaze.Pretty (pretty)
 import Blaze.Cfg.Interprocedural (
   InterCfg,
@@ -55,6 +55,13 @@ data SnapState = SnapState
   -- immutable Cfgs
   , savedCfgs :: HashMap SavedCfgId PilCfg
   } deriving (Eq, Generic)
+
+emptySnapState :: SnapState
+emptySnapState = SnapState
+  { branches = HashMap.empty
+  , activeCfgs = HashMap.empty
+  , savedCfgs = HashMap.empty
+  }
 
 -- Persistence :
 -- eventually, store working cfg map and snapshots in db
