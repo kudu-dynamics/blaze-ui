@@ -386,6 +386,25 @@ handleBinjaEvent bv = \case
             sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
             addCfg cfgId' prunedCfg
 
+  BSCfgRemoveNode cfgId' node' -> do
+    debug "Binja remove node"
+    mCfg <- getCfg cfgId'
+    case mCfg of
+      Nothing -> sendToBinja
+        . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
+      Just cfg -> do
+        case Cfg.getFullNodeMay cfg node' of
+          Nothing -> sendToBinja
+            . SBLogError $ "Node doesn't exist in Cfg"
+          Just fullNode -> do
+            let cfg' = G.removeNode fullNode cfg
+                (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+            -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
+            printPrunedStats cfg' prunedCfg
+            sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
+            addCfg cfgId' prunedCfg
+
+
   BSNoop -> debug "Binja noop"
 
 printPrunedStats :: (Ord a, MonadIO m) => Cfg a -> Cfg a -> m ()
