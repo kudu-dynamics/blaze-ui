@@ -36,3 +36,23 @@ For a quick and dirty test of 3rd party repository usage in Binja:
 
 If it doesn't show up, try restarting binja. The python server should get a hit for `/plugins.json`.
 
+Alternately, to serve from a docker image:
+
+```sh
+docker build . -t blaze-plugin-server
+
+docker run --rm -p 8000:3000 blaze-plugin-server
+```
+
+To tie this all together, assuming a built server image:
+
+```sh
+SERVE_PLUGIN_PORT=8000
+./package_plugin.sh http://localhost:$SERVE_PLUGIN_PORT
+docker run --rm -d -p $SERVE_PLUGIN_PORT:3000 blaze-plugin-server
+```
+
+#### Troubleshooting
+
+One problem I ran into was binja retaining local copies of 3rd party repositories when renaming the 3rd party repo being used in the settings, leading to duplicate entries in the plugin manager. If renaming the 3rd party repo (or to be safe, changing server location), make sure to delete the local directory in `.binaryninja/repositories/<repo_name>` and remove the entry from
+`.binaryninja/repositories/plugin_status.json`.
