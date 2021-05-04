@@ -9,10 +9,10 @@
             "python3"
         ],
         "description": "Blaze",
-        "longdescription": "find paths",
+        "longdescription": "A plugin for interacting with the Blaze service to construct interprocedural CFGs and program models.",
         "license": {
             "name": "LICENSE",
-            "text": "proprietary"
+            "text": "Proprietary"
         },
         "platforms": [
             "Darwin",
