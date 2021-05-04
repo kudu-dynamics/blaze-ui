@@ -5,6 +5,8 @@ import Blaze.Prelude hiding (Symbol)
 import Blaze.Types.Pil (Stmt)
 import Blaze.Types.Cfg ( CfNode, CfEdge, Cfg )
 import qualified Blaze.Graph as G
+import Blaze.Graph (Graph)
+import qualified Data.Set as Set
 import qualified Data.HashMap.Strict as HashMap
 import Blaze.Pretty (pretty)
 import Blaze.Cfg.Interprocedural (
@@ -22,6 +24,12 @@ import Blaze.Types.Graph.Alga (AlgaGraph)
 import Data.Time.Clock (UTCTime)
 import Control.Concurrent.STM.TVar (TVar)
 import Control.Concurrent.STM.TMVar (TMVar, takeTMVar, putTMVar)
+import Database.Selda.SqlType ( Lit(LCustom)
+                              , SqlTypeRep(TBlob)
+                              , SqlType
+                              )
+import qualified Database.Selda.SqlType as Sql
+
 
 type Name = Text
 
@@ -30,15 +38,22 @@ newtype BranchId = BranchId UUID
   deriving newtype (Random)
   deriving anyclass (Hashable, ToJSON, FromJSON)
 
-newtype ActiveCfgId = ActiveCfgId CfgId
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Random)
-  deriving anyclass (Hashable, ToJSON, FromJSON)
+instance SqlType BranchId where
+   mkLit (BranchId x) = LCustom TBlob $ Sql.mkLit x
+   sqlType _ = TBlob
+   fromSql x = BranchId $ Sql.fromSql x
+   defaultValue = LCustom TBlob (Sql.defaultValue :: Lit UUID)
 
-newtype SavedCfgId = SavedCfgId CfgId
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Random)
-  deriving anyclass (Hashable, ToJSON, FromJSON)
+
+-- newtype ActiveCfgId = ActiveCfgId CfgId
+--   deriving (Eq, Ord, Show, Generic)
+--   deriving newtype (Random)
+--   deriving anyclass (Hashable, ToJSON, FromJSON)
+
+-- newtype SavedCfgId = SavedCfgId CfgId
+--   deriving (Eq, Ord, Show, Generic)
+--   deriving newtype (Random)
+--   deriving anyclass (Hashable, ToJSON, FromJSON)
 
 
 -- ACTIVE cfgs are mutable, AUTO saved
@@ -49,11 +64,11 @@ data ActiveCfg = ActiveCfg
 
 -- one SnapState per binary (and user? eventually)
 data SnapState = SnapState
-  { branches :: HashMap BranchId SnapshotBranch
+  { branches :: HashMap BranchId Branch
   -- active cfg's are unsaved/snapped and can be mutated
-  , activeCfgs :: HashMap ActiveCfgId ActiveCfg
+  , activeCfgs :: HashMap CfgId ActiveCfg
   -- immutable Cfgs
-  , savedCfgs :: HashMap SavedCfgId PilCfg
+  , savedCfgs :: HashMap CfgId PilCfg
   } deriving (Eq, Generic)
 
 emptySnapState :: SnapState
@@ -96,26 +111,22 @@ data SnapshotMsg
 instance ToJSON SnapshotMsg
 instance FromJSON SnapshotMsg
 
-
+data SnapshotType
+  = AutoSave
+  | Immutable
+  deriving (Eq, Ord, Show, Generic, Bounded, ToJSON, FromJSON)
 
 data SnapshotInfo = SnapshotInfo
-  { name :: Name
+  { name :: Maybe Text
   , date :: UTCTime
-  } deriving (Eq, Ord, Show, Generic)
+  , snapshotType :: SnapshotType
+  } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
+type BranchTree = AlgaGraph () SnapshotInfo CfgId
 
--- data ActiveNode = ActiveNode
---   { activeId :: CfgId -- points to mutable cfg in active map
---   , parentId :: CfgId -- points to immutable snapshot in branch
---   } deriving (Eq, Ord, Show, Generic)
-
-data SnapshotBranch = SnapshotBranch
-  { originNode :: SavedCfgId
-  , originFunc :: Function
-  , activeParentMap :: HashMap ActiveCfgId SavedCfgId -- activeId -> parentId
-  , tree :: AlgaGraph () SnapshotInfo SavedCfgId
+data Branch = Branch
+  { originFunc :: Function
+  , rootNode :: CfgId
+  , tree :: BranchTree
   } deriving (Eq, Show, Generic)
-  
-  
-  
-  
+
 

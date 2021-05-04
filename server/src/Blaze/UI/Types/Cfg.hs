@@ -24,7 +24,6 @@ newtype CfgId = CfgId UUID
   deriving newtype (Random)
   deriving anyclass (Hashable, ToJSON, FromJSON)
 
--- orphan...
 instance SqlType CfgId where
    mkLit (CfgId x) = LCustom TBlob $ Sql.mkLit x
    sqlType _ = TBlob

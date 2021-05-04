@@ -26,15 +26,15 @@ import Blaze.UI.Types (EventLoop)
 import Control.Concurrent.STM.TMVar (TMVar, takeTMVar, putTMVar, readTMVar)
 import qualified Data.HashMap.Strict as HashMap
 
-addSnapshotToBranch :: SavedCfgId -> SavedCfgId -> SnapshotInfo -> SnapshotBranch -> SnapshotBranch
+addSnapshotToBranch :: CfgId -> CfgId -> SnapshotInfo -> Branch -> Branch
 addSnapshotToBranch parentId' id info snap =
   snap & #tree %~
     ( G.setNodeAttr info id
     . G.addEdge (G.LEdge () $ G.Edge parentId' id) )
 
-renameSnapshot :: SavedCfgId -> Name -> SnapshotBranch -> SnapshotBranch
+renameSnapshot :: CfgId -> Name -> Branch -> Branch
 renameSnapshot id name' snap =
-  snap & #tree %~ G.updateNodeAttr (over #name $ const name') id
+  snap & #tree %~ G.updateNodeAttr (over #name $ const (Just name')) id
 
 
 -- handleNew :: MonadIO m => BNBinaryView -> Function -> SnapshotState -> m (Function, SnapshotState)
@@ -53,7 +53,7 @@ updateTMVar f v = do
 -- | Mutates active cfg (in TMVvar) if it can be found.
 -- returns modified cfg
 updateActiveCfg :: MonadIO m
-                => ActiveCfgId
+                => CfgId
                 -> (PilCfg -> m PilCfg)
                 -> SnapState
                 -> m (Maybe PilCfg)
@@ -62,28 +62,28 @@ updateActiveCfg cid f snap =
     Nothing -> return Nothing
     Just acfg -> fmap Just . updateTMVar f $ acfg ^. #cfg
 
-newSavedCfgId :: MonadIO m => m SavedCfgId
+newSavedCfgId :: MonadIO m => m CfgId
 newSavedCfgId = liftIO randomIO
 
-data SnapshotActiveCfgError = ActiveCfgNotFound ActiveCfgId
+data SnapshotActiveCfgError = ActiveCfgNotFound CfgId
                             | SnapshotBranchNotFound BranchId
                             deriving (Eq, Ord, Show, Generic)
 
--- | Saves active cfg into tree of saved snapshots.
--- returns Nothing if ActiveCfgId not found
-snapshotActiveCfg :: MonadIO m => ActiveCfgId -> SnapState -> m (Either SnapshotActiveCfgError SnapState)
-snapshotActiveCfg acid snap = runExceptT $ do
-  acfg <- liftMaybe (ActiveCfgNotFound acid)
-    . HashMap.lookup acid
-    $ snap ^. #activeCfgs
-  snapBranch <- liftMaybe (SnapshotBranchNotFound $ acfg ^. #branchId)
-    . HashMap.lookup (acfg ^. #branchId)
-    $ snap ^. #branches
-  cfg' <- liftIO . atomically . readTMVar $ acfg ^. #cfg
+-- -- | Saves active cfg into tree of saved snapshots.
+-- -- returns Nothing if ActiveCfgId not found
+-- snapshotActiveCfg :: MonadIO m => ActiveCfgId -> SnapState -> m (Either SnapshotActiveCfgError SnapState)
+-- snapshotActiveCfg acid snap = runExceptT $ do
+--   acfg <- liftMaybe (ActiveCfgNotFound acid)
+--     . HashMap.lookup acid
+--     $ snap ^. #activeCfgs
+--   snapBranch <- liftMaybe (SnapshotBranchNotFound $ acfg ^. #branchId)
+--     . HashMap.lookup (acfg ^. #branchId)
+--     $ snap ^. #branches
+--   cfg' <- liftIO . atomically . readTMVar $ acfg ^. #cfg
   
-    msnapBranch <- HashMap.lookup (acfg ^. #branchId) $ snap ^. #branches
-    case mSnapBranch of
-    scid <- newSavedCfgId
-    return . Just $ snap
-      & #savedCfgs %~ saveActiveCfg (acfg ^. #branchId) scid cfg'
+--     msnapBranch <- HashMap.lookup (acfg ^. #branchId) $ snap ^. #branches
+--     case mSnapBranch of
+--     scid <- newSavedCfgId
+--     return . Just $ snap
+--       & #savedCfgs %~ saveActiveCfg (acfg ^. #branchId) scid cfg'
 
