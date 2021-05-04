@@ -404,7 +404,6 @@ handleBinjaEvent bv = \case
             sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
             addCfg cfgId' prunedCfg
 
-
   BSNoop -> debug "Binja noop"
 
 printPrunedStats :: (Ord a, MonadIO m) => Cfg a -> Cfg a -> m ()
