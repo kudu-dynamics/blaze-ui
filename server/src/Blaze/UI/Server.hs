@@ -334,7 +334,7 @@ handleBinjaEvent bv = \case
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
             cfgId' <- liftIO randomIO
-            pprint . Aeson.encode . convertPilCfg $ r ^. #result
+            -- pprint . Aeson.encode . convertPilCfg $ r ^. #result
             sendToBinja . SBCfg cfgId' $ convertPilCfg $ r ^. #result
             addCfg cfgId' $ r ^. #result 
         debug "Good job"
@@ -360,7 +360,7 @@ handleBinjaEvent bv = \case
                 sendToBinja . SBLogError . show $ err
               Right (InterCfg cfg') -> do
                 let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'               
-                pprint . Aeson.encode . convertPilCfg $ prunedCfg
+                -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
                 printPrunedStats cfg' prunedCfg
                 sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
                 addCfg cfgId' prunedCfg
@@ -381,10 +381,30 @@ handleBinjaEvent bv = \case
           Just (fullNode1, fullNode2) -> do
             let cfg' = G.removeEdge (G.Edge fullNode1 fullNode2) cfg
                 (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
-            pprint . Aeson.encode . convertPilCfg $ prunedCfg
+            -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
             printPrunedStats cfg' prunedCfg
             sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
             addCfg cfgId' prunedCfg
+
+  BSCfgRemoveNode cfgId' node' -> do
+    debug "Binja remove node"
+    mCfg <- getCfg cfgId'
+    case mCfg of
+      Nothing -> sendToBinja
+        . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
+      Just cfg -> do
+        case Cfg.getFullNodeMay cfg node' of
+          Nothing -> sendToBinja
+            . SBLogError $ "Node doesn't exist in Cfg"
+          Just fullNode -> if fullNode == cfg ^. #root
+            then sendToBinja $ SBLogError "Cannot remove root node"
+            else do
+              let cfg' = G.removeNode fullNode cfg
+                  (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+              -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
+              printPrunedStats cfg' prunedCfg
+              sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
+              addCfg cfgId' prunedCfg
 
   BSNoop -> debug "Binja noop"
 
