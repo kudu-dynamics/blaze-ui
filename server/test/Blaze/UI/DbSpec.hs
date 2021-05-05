@@ -17,6 +17,8 @@ import Control.Concurrent.STM.TVar (newTVarIO)
 import qualified Data.HashMap.Strict as HashMap
 import System.Directory (removeFile)
 import System.IO.Temp (emptySystemTempFile)
+import Blaze.Types.Cfg as Cfg
+import qualified Data.Set as Set
 import Test.Hspec
 
 
@@ -34,7 +36,7 @@ mockEventLoopCtx :: IO EventLoopCtx
 mockEventLoopCtx = EventLoopCtx
   <$> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
-  <*> newTVarIO emptySnapState
+  <*> newTVarIO HashMap.empty
   <*> emptySystemTempFile "blazeTest"
 
 mockEventLoop :: EventLoop a -> IO a
@@ -57,9 +59,20 @@ spec = describe "Blaze.UI.Db" $ do
     selectDive <- runIO $ fromJust <$> CG.getFunction imp 0x804e080
     (ImportResult _ originalCfg _) <- runIO $ fromJust <$> getCfg imp selectDive
     cid <- runIO $ randomIO
-    mRetrievedCfg <- runIO $ mockEventLoop $ do
-      Db.saveCfg cid originalCfg
+    mRetrievedCfg <- runIO . mockEventLoop $ do
+      Db.saveCfg cid Nothing originalCfg
       Db.getCfg cid
 
     it "Should save and retrieve a pil cfg" $ do
       mRetrievedCfg `shouldBe` Just originalCfg
+
+    mRetrievedCfg2 <- runIO . mockEventLoop $ do
+      let firstCfg = Cfg.removeEdges
+            (Set.toList $ Cfg.succEdges (originalCfg ^. #root) originalCfg)
+            $ originalCfg
+      Db.saveCfg cid Nothing firstCfg
+      Db.saveCfg cid Nothing originalCfg
+      Db.getCfg cid
+
+    it "Should overwrite first save with second save" $ do
+      mRetrievedCfg2 `shouldBe` Just originalCfg

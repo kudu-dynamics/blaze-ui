@@ -50,8 +50,6 @@ data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
                    | BSTypeCheckFunction { address :: Word64 }
 
-                   | BSCfgSnapshot SnapshotMsg
-
                    | BSCfgNew
                      { startFuncAddress :: Word64
                      }
@@ -135,7 +133,7 @@ data Event = WebEvent WebToServer
 data EventLoopCtx = EventLoopCtx
   { binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
-  , cfgs :: TVar SnapState
+  , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
   , sqliteFilePath :: FilePath
   } deriving (Generic)
 
@@ -209,23 +207,3 @@ lookupSessionState sid st = do
   m <- readTVar $ st ^. #binarySessions
   return $ HashMap.lookup sid m
 
-
--- addCfg :: CfgId -> Cfg [Stmt] -> EventLoop ()
--- addCfg cid cfg' = do
---   cfgMapTVar <- view #cfgs <$> ask
---   liftIO . atomically $ do
---     m <- readTVar cfgMapTVar
---     case HashMap.lookup cid m of
---       Nothing -> do
---         cfgTVar <- newTVar cfg'
---         writeTVar cfgMapTVar $ HashMap.insert cid cfgTVar m
---       Just cfgTMVar -> do
---         writeTVar cfgTMVar cfg'
---   return ()
-
--- getCfg :: CfgId -> EventLoop (Maybe (Cfg [Stmt]))
--- getCfg cid = do
---   cfgMapTVar <- view #cfgs <$> ask
---   liftIO . atomically $ do
---     m <- readTVar cfgMapTVar
---     maybe (return Nothing) (fmap Just . readTVar) $ HashMap.lookup cid m

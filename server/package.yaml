@@ -97,10 +97,18 @@ library:
   source-dirs:
   - src
   exposed-modules:
+  - Blaze.UI.Cfg
+  - Blaze.UI.Cfg.Snapshot
+  - Blaze.UI.Db
   - Blaze.UI.Prelude
   - Blaze.UI.Server
   - Blaze.UI.Types
+  - Blaze.UI.Types.Cfg
+  - Blaze.UI.Types.Cfg.Snapshot
   - Blaze.UI.Web.Server
+
+  
+  
 
 include-dirs:
   - "src"

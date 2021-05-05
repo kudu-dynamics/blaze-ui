@@ -22,6 +22,7 @@ import qualified Blaze.Import.Source.BinaryNinja.Cfg as BnCfg
 import qualified Blaze.Types.Cfg as Cfg
 import Blaze.Types.Cfg (Cfg)
 import qualified Blaze.Cfg.Analysis as CfgA
+import qualified Blaze.UI.Cfg as CfgUI
 import qualified Data.Set as Set
 import qualified Blaze.Graph as G
 import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
@@ -32,6 +33,9 @@ import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.UI.Web.Pil as WebPil
 import Blaze.UI.Types.Cfg (convertPilCfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
+import qualified Blaze.UI.Db as Db
+import Blaze.Types.Cfg (PilCfg)
+import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.Pretty (pretty)
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
@@ -152,13 +156,13 @@ binjaApp localOutboxThreads st conn = do
               logInfo "For web plugin, go here:"
               logInfo $ webUri (st ^. #serverConfig) sid
               atomically $ putTMVar (ss ^. #binaryView) bv
-              spawnEventHandler ss
+              spawnEventHandler st ss
               outboxThread <- createBinjaOutbox conn ss fp
               pushEvent
               binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
 
-spawnEventHandler :: SessionState -> IO ()
-spawnEventHandler ss = do
+spawnEventHandler :: AppState -> SessionState -> IO ()
+spawnEventHandler st ss = do
   b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
   case b of
     False -> putText "Warning: spawnEventHandler -- event handler already spawned"
@@ -172,6 +176,7 @@ spawnEventHandler ss = do
                   (ss ^. #binjaOutboxes)
                   (ss ^. #webOutboxes)
                   (ss ^. #cfgs)
+                  (st ^. #serverConfig . #sqliteFilePath)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
         void . forkIO $ runEventLoop (mainEventLoop bv msg) ctx
@@ -207,7 +212,7 @@ webApp st sid conn = do
               BN.updateAnalysisAndWait bv
               logInfo $ "Loaded binary: " <> fp
               atomically $ putTMVar (ss ^. #binaryView) bv
-              spawnEventHandler ss
+              spawnEventHandler st ss
     False -> return ()
       
   -- TODO: pass outboxThread in with event
@@ -252,6 +257,13 @@ testClient msg conn = do
 
 runClient :: ServerConfig -> (WS.Connection -> IO a) -> IO a
 runClient cfg = WS.runClient (cs $ serverHost cfg) (serverWsPort cfg) ""
+
+saveCfg :: CfgId -> Maybe Text -> PilCfg -> EventLoop ()
+saveCfg cid mname pcfg = do
+  Db.saveCfg cid mname pcfg
+  CfgUI.addCfg cid pcfg
+
+updateCfg :: CfgId -> PilCfg -> EventLoop ()
 
 
 ------------------------------------------
@@ -336,14 +348,14 @@ handleBinjaEvent bv = \case
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
             cfgId' <- liftIO randomIO
-            pprint . Aeson.encode . convertPilCfg $ r ^. #result
+            -- pprint . Aeson.encode . convertPilCfg $ r ^. #result
             sendToBinja . SBCfg cfgId' $ convertPilCfg $ r ^. #result
-            addCfg cfgId' $ r ^. #result 
+            saveCfg cfgId' Nothing $ r ^. #result
         debug "Good job"
 
   BSCfgExpandCall cfgId' callNode -> do
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
-    mCfg <- getCfg cfgId'
+    mCfg <- CfgUI.getCfg cfgId'
     case mCfg of
       Nothing -> sendToBinja
         . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
@@ -365,13 +377,13 @@ handleBinjaEvent bv = \case
                 printPrunedStats cfg' prunedCfg
                 pprint . Aeson.encode . convertPilCfg $ prunedCfg
                 sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
-                addCfg cfgId' prunedCfg
+                saveCfg cfgId' Nothing prunedCfg
           Just _ -> do
             sendToBinja . SBLogError $ "Node must be a CallNode"
     
   BSCfgRemoveBranch cfgId' (node1, node2) -> do
     debug "Binja remove branch"
-    mCfg <- getCfg cfgId'
+    mCfg <- CfgUI.getCfg cfgId'
     case mCfg of
       Nothing -> sendToBinja
         . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
@@ -385,11 +397,11 @@ handleBinjaEvent bv = \case
             printPrunedStats cfg' prunedCfg
             pprint . Aeson.encode . convertPilCfg $ prunedCfg
             sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
-            addCfg cfgId' prunedCfg
+            saveCfg cfgId' Nothing prunedCfg
 
   BSNoop -> debug "Binja noop"
 
-  BSCfgSnapshot snapMsg -> case snapMsg of
+  BSSnapshot snapMsg -> case snapMsg of
     Snapshot.New funcAddr -> do
       mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
       case mfunc of
@@ -404,7 +416,7 @@ handleBinjaEvent bv = \case
               cfgId' <- liftIO randomIO
               putText . pretty $ r ^. #result
               sendToBinja . SBCfg cfgId' $ convertPilCfg $ r ^. #result
-              addCfg cfgId' $ r ^. #result 
+              saveCfg cfgId' Nothing $ r ^. #result 
           debug "Good job"
 
     Snapshot.Load cid -> undefined
