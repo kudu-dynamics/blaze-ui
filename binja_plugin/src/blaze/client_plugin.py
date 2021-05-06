@@ -4,8 +4,8 @@ import json
 import logging as _logging
 import os
 import os.path
-import threading
 import queue
+import threading
 from typing import Dict, Literal, Optional, Union, cast
 
 import websockets
@@ -16,7 +16,7 @@ from PySide2.QtWidgets import QApplication, QWidget
 from websockets.client import WebSocketClientProtocol
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
-from .types import BinjaMessage, BinjaToServer, ServerCfg, ServerToBinja
+from .types import BinjaMessage, BinjaToServer, CfgId, ServerCfg, ServerToBinja
 
 LOG_LEVEL = 'INFO'
 BLAZE_UI_HOST = os.environ.get('BLAZE_UI_HOST', 'localhost')
@@ -44,8 +44,13 @@ def register(action, description):
 
 
 class BlazeInstance():
-    def __init__(self, bv: BinaryView):
+    def __init__(self, bv: BinaryView, blaze: 'BlazePlugin'):
         self.bv: BinaryView = bv
+        self.blaze: 'BlazePlugin' = blaze
+        self.graph: Optional[ICFGFlowGraph] = None
+
+    def send(self, msg: BinjaToServer):
+        self.blaze.send(self.bv, msg)
 
 
 class BlazePlugin():
@@ -71,8 +76,7 @@ class BlazePlugin():
                 name=name,
                 view_frame=dock_handler.getViewFrame(),
                 parent=parent,
-                blaze=blaze,
-                blaze_instance=blaze.ensure_instance(bv))
+                blaze_instance=self.ensure_instance(bv))
             return self.icfg_dock_widget
 
         self.dock_handler.addDockWidget( \
@@ -105,12 +109,11 @@ class BlazePlugin():
             if self.websocket_thread.is_alive():
                 log.warn('websocket thread is still alive after timeout')
 
-    @staticmethod
-    def ensure_instance(bv: BinaryView) -> BlazeInstance:
+    def ensure_instance(self, bv: BinaryView) -> BlazeInstance:
         if (instance := BlazePlugin.instances.get(bv.file.filename)) is not None:
             return instance
 
-        instance = BlazeInstance(bv)
+        instance = BlazeInstance(bv, self)
         BlazePlugin.instances[bv.file.filename] = instance
         return instance
 
@@ -194,9 +197,9 @@ class BlazePlugin():
             log.info("got Noop")
 
         elif tag == 'SBCfg':
+            cfg_id = cast(CfgId, msg['cfgId'])
             cfg = cast(ServerCfg, msg['cfg'])
-            self.icfg_dock_widget.icfg_widget.setGraph(
-                ICFGFlowGraph.create(instance.bv, cfg_from_server(cfg)))
+            self.icfg_dock_widget.icfg_widget.set_icfg(cfg_id, cfg_from_server(cfg))
 
         else:
             log.error("Blaze: unknown message type: %s", tag)

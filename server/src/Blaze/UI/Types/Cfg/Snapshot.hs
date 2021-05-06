@@ -93,11 +93,14 @@ data SnapshotMsg
   -- Create new Cfg
   -- store cfg as new origin snapshot
   -- returns Cfg with name/date
-  = New { startFuncAddress :: Word64 }
+  -- New { startFuncAddress :: Word64, cid ::  }
+  -- Actually, new cfg is created with BSCfgNew message.
 
   -- Loads new Cfg based off of parent (CfgId arg)
   -- copies parent CFG as a new working cfg
   -- returns Cfg
+  = LoadAllForFunction Function
+
   | Load CfgId
 
   -- Copies current CFG into snapshot tree (new CfgId)
@@ -124,7 +127,9 @@ data SnapshotInfo = SnapshotInfo
 type BranchTree = AlgaGraph () SnapshotInfo CfgId
 
 data Branch = Branch
-  { originFunc :: Function
+  { branchId :: BranchId
+  , originFuncAddr :: Address
+  , branchName :: Maybe Text
   , rootNode :: CfgId
   , tree :: BranchTree
   } deriving (Eq, Show, Generic)

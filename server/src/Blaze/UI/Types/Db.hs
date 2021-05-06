@@ -14,9 +14,9 @@ import Blaze.Function (Function)
 import qualified Data.Aeson as Aeson
 import Unsafe.Coerce (unsafeCoerce)
 import qualified Database.Selda.SqlType as SqlT
-import Database.Selda.SqlType ( Lit(LBlob, LCustom)
-                              , SqlTypeRep(TBlob)
-                              , SqlValue(SqlBlob)
+import Database.Selda.SqlType ( Lit(LBlob, LText, LCustom)
+                              , SqlTypeRep(TBlob, TText)
+                              , SqlValue(SqlBlob, SqlString)
                               )
 import System.Directory (doesFileExist)
 import Blaze.UI.Types (EventLoop)
@@ -38,8 +38,19 @@ instance (ToJSON a, FromJSON a, Typeable (Blob a)) => SqlType (Blob a) where
 
    defaultValue = LCustom TBlob (LBlob "")
 
--- Maybe these should be named something else since the name is mutable
--- or the name could go in a separate table
+-- oh no, it's an orphan!
+instance SqlType Address where
+   mkLit (Address (Bytes x)) = LCustom TBlob . LText . show $ x
+
+   sqlType _ = TText
+
+   fromSql (SqlString s) = case readMaybe (cs s) of
+     Nothing -> P.error $ "Cannot convert " <> cs s <> " to Address"
+     Just n -> Address . Bytes $ n
+   fromSql x = P.error $ "Unexpected sql field type: " <> show x
+
+   defaultValue = LCustom TText (LText "")
+
 data SavedCfg = SavedCfg
   { cfgId :: CfgId
   , name :: Maybe Text
@@ -49,16 +60,10 @@ data SavedCfg = SavedCfg
   } deriving Generic
 instance SqlRow SavedCfg
 
--- data AutoCfg = AutoCfg
---   { cfgId :: CfgId
---   , dateModified :: UTCTime
---   , cfg :: Blob (CfgTransport [Stmt])
---   } deriving Generic
--- instance SqlRow AutoCfg
-
 data SnapshotBranch = SnapshotBranch
   { branchId :: BranchId
-  , originFunc :: Blob Function
+  , originFuncAddr :: Address
+  , branchName :: Maybe Text
   , rootNode :: CfgId
   , tree :: Blob (GraphTransport () SnapshotInfo CfgId)
   } deriving Generic

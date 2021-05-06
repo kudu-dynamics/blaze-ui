@@ -12,8 +12,6 @@ import Blaze.UI.Types
   , EventLoop
   , runEventLoop
   )
-import Blaze.UI.Types.Cfg.Snapshot (emptySnapState)
-import Control.Concurrent.STM.TVar (newTVarIO)
 import qualified Data.HashMap.Strict as HashMap
 import System.Directory (removeFile)
 import System.IO.Temp (emptySystemTempFile)
@@ -41,10 +39,10 @@ mockEventLoopCtx = EventLoopCtx
 
 mockEventLoop :: EventLoop a -> IO a
 mockEventLoop m = do
-  ctx <- mockEventLoopCtx
-  Db.init $ ctx ^. #sqliteFilePath
-  r <- runEventLoop m ctx
-  clean ctx
+  ctx' <- mockEventLoopCtx
+  Db.init $ ctx' ^. #sqliteFilePath
+  r <- runEventLoop m ctx'
+  clean ctx'
   return r
 
 clean :: EventLoopCtx -> IO ()
@@ -58,9 +56,8 @@ spec = describe "Blaze.UI.Db" $ do
     let imp = BNImporter bv
     selectDive <- runIO $ fromJust <$> CG.getFunction imp 0x804e080
     (ImportResult _ originalCfg _) <- runIO $ fromJust <$> getCfg imp selectDive
-    cid <- runIO $ randomIO
     mRetrievedCfg <- runIO . mockEventLoop $ do
-      Db.saveCfg cid Nothing originalCfg
+      cid <- Db.saveNewCfg originalCfg
       Db.getCfg cid
 
     it "Should save and retrieve a pil cfg" $ do
@@ -70,9 +67,9 @@ spec = describe "Blaze.UI.Db" $ do
       let firstCfg = Cfg.removeEdges
             (Set.toList $ Cfg.succEdges (originalCfg ^. #root) originalCfg)
             $ originalCfg
-      Db.saveCfg cid Nothing firstCfg
-      Db.saveCfg cid Nothing originalCfg
+      cid <- Db.saveNewCfg firstCfg
+      Db.setCfg cid originalCfg
       Db.getCfg cid
 
-    it "Should overwrite first save with second save" $ do
+    it "Should overwrite first cfg using setCfg" $ do
       mRetrievedCfg2 `shouldBe` Just originalCfg

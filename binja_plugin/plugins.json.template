@@ -1,0 +1,40 @@
+[
+    {
+        "pluginmetadataversion": 2,
+        "name": "Blaze",
+        "type": [
+            "helper"
+        ],
+        "api": [
+            "python3"
+        ],
+        "description": "Blaze",
+        "longdescription": "A plugin for interacting with the Blaze service to construct interprocedural CFGs and program models.",
+        "license": {
+            "name": "LICENSE",
+            "text": "Proprietary"
+        },
+        "platforms": [
+            "Darwin",
+            "Linux",
+            "Windows"
+        ],
+        "installinstructions": {
+            "Darwin": "",
+            "Linux": "",
+            "Windows": ""
+        },
+        "dependencies": "%DEPENDENCIES%",
+        "version": "0.1",
+        "author": "Kudu",
+        "minimumbinaryninjaversion": 2660,
+        "lastUpdated": 1614960437,
+        "projectUrl": "",
+        "projectData": {
+        },
+        "authorUrl": "",
+        "packageUrl": "%PACKAGEURL%",
+        "path": "blaze",
+        "commit": ""
+    }
+]

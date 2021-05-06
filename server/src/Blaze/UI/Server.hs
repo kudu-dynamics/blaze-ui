@@ -258,13 +258,27 @@ testClient msg conn = do
 runClient :: ServerConfig -> (WS.Connection -> IO a) -> IO a
 runClient cfg = WS.runClient (cs $ serverHost cfg) (serverWsPort cfg) ""
 
-saveCfg :: CfgId -> Maybe Text -> PilCfg -> EventLoop ()
-saveCfg cid mname pcfg = do
-  Db.saveCfg cid mname pcfg
+saveNewCfg :: PilCfg -> EventLoop CfgId
+saveNewCfg pcfg = do
+  cid <- Db.saveNewCfg pcfg
   CfgUI.addCfg cid pcfg
+  return cid
 
-updateCfg :: CfgId -> PilCfg -> EventLoop ()
+setCfg :: CfgId -> PilCfg -> EventLoop ()
+setCfg cid pcfg = do
+  CfgUI.addCfg cid pcfg
+  Db.setCfg cid pcfg
 
+-- | Tries to getCfg from in-memory state. If that fails, try db.
+-- if db has it, add it to cache
+getCfg :: CfgId -> EventLoop (Maybe PilCfg)
+getCfg cid = CfgUI.getCfg cid >>= \case
+  Just pcfg -> return $ Just pcfg
+  Nothing -> Db.getCfg cid >>= \case
+    Nothing -> return Nothing
+    Just pcfg -> do
+      CfgUI.addCfg cid pcfg
+      return $ Just pcfg
 
 ------------------------------------------
 --- main event handler
@@ -336,6 +350,9 @@ handleBinjaEvent bv = \case
         sendToBinja . SBLogInfo $ "Completed checking " <> fn ^. BNFunc.name
         sendToBinja . SBLogInfo $ "See server log for results."
 
+  -- Creates new CFG from function. Also create a new snapshot
+  -- where the root node is the auto-cfg
+  -- Sends back two messages: one auto-cfg, one new snapshot tree
   BSCfgNew funcAddr -> do
     mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
     case mfunc of
@@ -347,15 +364,15 @@ handleBinjaEvent bv = \case
           Nothing -> sendToBinja
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
-            cfgId' <- liftIO randomIO
-            -- pprint . Aeson.encode . convertPilCfg $ r ^. #result
-            sendToBinja . SBCfg cfgId' $ convertPilCfg $ r ^. #result
-            saveCfg cfgId' Nothing $ r ^. #result
+            cid <- saveNewCfg $ r ^. #result
+            -- TODO: this calls convertPilCfg to save the db as well
+            -- instead, do it once and pass converted cfg to db saving func
+            sendToBinja . SBCfg cid $ convertPilCfg $ r ^. #result
         debug "Good job"
 
   BSCfgExpandCall cfgId' callNode -> do
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
-    mCfg <- CfgUI.getCfg cfgId'
+    mCfg <- getCfg cfgId'
     case mCfg of
       Nothing -> sendToBinja
         . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
@@ -373,17 +390,17 @@ handleBinjaEvent bv = \case
                 -- TODO: more specific error
                 sendToBinja . SBLogError . show $ err
               Right (InterCfg cfg') -> do
-                let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+                let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'               
+                -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
                 printPrunedStats cfg' prunedCfg
-                pprint . Aeson.encode . convertPilCfg $ prunedCfg
                 sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
-                saveCfg cfgId' Nothing prunedCfg
+                setCfg cfgId' prunedCfg
           Just _ -> do
             sendToBinja . SBLogError $ "Node must be a CallNode"
     
   BSCfgRemoveBranch cfgId' (node1, node2) -> do
     debug "Binja remove branch"
-    mCfg <- CfgUI.getCfg cfgId'
+    mCfg <- getCfg cfgId'
     case mCfg of
       Nothing -> sendToBinja
         . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
@@ -394,10 +411,30 @@ handleBinjaEvent bv = \case
           Just (fullNode1, fullNode2) -> do
             let cfg' = G.removeEdge (G.Edge fullNode1 fullNode2) cfg
                 (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+            -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
             printPrunedStats cfg' prunedCfg
-            pprint . Aeson.encode . convertPilCfg $ prunedCfg
             sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
-            saveCfg cfgId' Nothing prunedCfg
+            setCfg cfgId' prunedCfg
+
+  BSCfgRemoveNode cfgId' node' -> do
+    debug "Binja remove node"
+    mCfg <- getCfg cfgId'
+    case mCfg of
+      Nothing -> sendToBinja
+        . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
+      Just cfg -> do
+        case Cfg.getFullNodeMay cfg node' of
+          Nothing -> sendToBinja
+            . SBLogError $ "Node doesn't exist in Cfg"
+          Just fullNode -> if fullNode == cfg ^. #root
+            then sendToBinja $ SBLogError "Cannot remove root node"
+            else do
+              let cfg' = G.removeNode fullNode cfg
+                  (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+              -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
+              printPrunedStats cfg' prunedCfg
+              sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
+              setCfg cfgId' prunedCfg
 
   BSNoop -> debug "Binja noop"
 
@@ -416,13 +453,16 @@ handleBinjaEvent bv = \case
               cfgId' <- liftIO randomIO
               putText . pretty $ r ^. #result
               sendToBinja . SBCfg cfgId' $ convertPilCfg $ r ^. #result
-              saveCfg cfgId' Nothing $ r ^. #result 
+              setCfg cfgId' $ r ^. #result 
           debug "Good job"
 
+    -- Loads new auto-cfg from an immutable snapshot cid
     Snapshot.Load cid -> undefined
 
+    -- Saves auto-cfg cid as an immutable snapshot
     Snapshot.Save cid mname -> undefined
 
+    -- Renames previously saved immutable cfg
     Snapshot.Rename cid name -> undefined
 
 printPrunedStats :: (Ord a, MonadIO m) => Cfg a -> Cfg a -> m ()

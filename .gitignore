@@ -10,6 +10,9 @@
 
 # production
 ./build
+binja_plugin/build
+binja_plugin/dist
+*.egg-info
 
 # misc
 .DS_Store

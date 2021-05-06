@@ -62,6 +62,11 @@ data BinjaToServer = BSConnect
                      , edge :: (CfNode (), CfNode ())
                      }
 
+                   | BSCfgRemoveNode
+                     { cfgId :: CfgId
+                     , node :: CfNode ()
+                     }
+
                    | BSSnapshot SnapshotMsg
 
                    | BSNoop

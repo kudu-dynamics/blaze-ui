@@ -27,7 +27,7 @@ import Data.Time.Clock (getCurrentTime)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, BranchTree)
 import qualified Blaze.UI.Types.Graph as Graph
-import Blaze.UI.Types.Graph (graphFromTransport)
+import Blaze.UI.Types.Graph (graphFromTransport, graphToTransport)
 
 
 init :: FilePath -> IO ()
@@ -40,20 +40,23 @@ withDb m = do
   ctx <- ask
   withSQLite (ctx ^. #sqliteFilePath) m
 
-saveCfg :: CfgId -> Maybe Text -> PilCfg -> EventLoop ()
-saveCfg cid mname cfg' = withDb $ do
+saveNewCfg :: PilCfg -> EventLoop CfgId
+saveNewCfg cfg' = withDb $ do
+  -- maybe we should make sure cid isn't already in table
+  cid <- liftIO randomIO
   utc <- liftIO getCurrentTime
   insert_ cfgTable
-    [ SavedCfg cid mname utc utc . Blob $ Cfg.toTransport identity cfg' ]
+    [ SavedCfg cid Nothing utc utc . Blob $ Cfg.toTransport identity cfg' ]
+  return cid
 
-setCfgName :: Text -> CfgId -> EventLoop ()
-setCfgName name' cid = withDb $ do
+setCfgName :: CfgId -> Text -> EventLoop ()
+setCfgName cid name' = withDb $ do
   update_ cfgTable
-    (\immCfg -> immCfg ! #cfgId .== literal cid)
-    (\immCfg -> immCfg `with` [ #name := just (literal name')])
+    (\cfg' -> cfg' ! #cfgId .== literal cid)
+    (\cfg' -> cfg' `with` [ #name := just (literal name')])
 
-updateCfg :: CfgId -> PilCfg -> EventLoop ()
-updateCfg cid pcfg = withDb $ do
+setCfg :: CfgId -> PilCfg -> EventLoop ()
+setCfg cid pcfg = withDb $ do
   utc <- liftIO getCurrentTime
   update_ cfgTable
     (\immCfg -> immCfg ! #cfgId .== literal cid)
@@ -75,18 +78,23 @@ getCfg cid = (fmap $ view #cfg) <$> getSavedCfg cid >>= \case
   _ -> -- hopefully impossible
     P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show cid
 
--- | Saves snapshot branch, overwriting previous branch with same id.
--- This means atm that co-editing snapshot branches won't really work
-saveBranch :: BranchId
-           -> Function
-           -> CfgId
-           -> BranchTree
-           -> EventLoop ()
-saveBranch bid originFunc' rootNode' branchTree = withDb $ do
+saveNewBranch :: Function
+              -> CfgId
+              -> BranchTree
+              -> EventLoop BranchId
+saveNewBranch originFunc rootNode' branchTree = withDb $ do
+  bid <- liftIO randomIO
   insert_ snapshotBranchTable
-    [ SnapshotBranch bid (Blob originFunc') rootNode'
+    [ SnapshotBranch bid (originFunc ^. #address) Nothing rootNode'
       . Blob $ Graph.graphToTransport branchTree
     ]
+  return bid
+
+setBranchTree :: BranchId -> BranchTree -> EventLoop ()
+setBranchTree bid branchTree = withDb $ do
+  update_ snapshotBranchTable
+    (\b -> b ! #branchId .== literal bid)
+    (\b -> b `with` [ #tree := literal (Blob . graphToTransport $ branchTree) ])
 
 getBranch :: BranchId -> EventLoop (Maybe Snapshot.Branch)
 getBranch bid = withDb $ do
@@ -96,11 +104,22 @@ getBranch bid = withDb $ do
     return branch
   case xs of
     [] -> return Nothing
-    [SnapshotBranch _ (Blob originFunc') rootNode' (Blob tree')] -> return
+    [SnapshotBranch _ originFuncAddr' mname rootNode' (Blob tree')] -> return
       . Just 
-      . Snapshot.Branch originFunc' rootNode'
+      . Snapshot.Branch bid originFuncAddr' mname rootNode'
       . graphFromTransport
       $ tree'
     _ -> -- hopefully impossible
       P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show bid
+
+
+getBranchesForFunction :: Address -> EventLoop [Snapshot.Branch]
+getBranchesForFunction funcAddr = fmap (fmap f) . withDb . query $ do
+  branch <- select snapshotBranchTable
+  restrict (branch ! #originFuncAddr .== literal funcAddr)
+  return branch
+  where
+    f :: SnapshotBranch -> Snapshot.Branch
+    f (SnapshotBranch bid faddr mname root (Blob tree')) =
+      Snapshot.Branch bid faddr mname root $ graphFromTransport tree'
 

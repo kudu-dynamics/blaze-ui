@@ -9,7 +9,7 @@ T = List[str]
 
 Address = int
 Word64 = int
-UUID = int
+UUID = str
 CfgId = UUID
 
 
