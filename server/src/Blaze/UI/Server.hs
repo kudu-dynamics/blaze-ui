@@ -33,10 +33,13 @@ import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.UI.Web.Pil as WebPil
 import Blaze.UI.Types.Cfg (convertPilCfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
+import Blaze.UI.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Db as Db
 import Blaze.Types.Cfg (PilCfg)
 import Blaze.UI.Types.Cfg (CfgId)
+import Data.Time.Clock (getCurrentTime)
 import Blaze.Pretty (pretty)
+
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -365,8 +368,16 @@ handleBinjaEvent bv = \case
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
             cid <- saveNewCfg $ r ^. #result
-            -- TODO: this calls convertPilCfg to save the db as well
+            utc <- liftIO getCurrentTime
+            let snapBranch = Snapshot.singletonBranch
+                             (func ^. #address)
+                             Nothing
+                             cid
+                             (Snapshot.SnapshotInfo Nothing utc Snapshot.AutoSave)
+            bid <- Db.saveNewBranch snapBranch
+            -- TODO: this calls convertPilCfg twice
             -- instead, do it once and pass converted cfg to db saving func
+            sendToBinja . SBSnapshotBranch bid $ Snapshot.toTransport snapBranch
             sendToBinja . SBCfg cid $ convertPilCfg $ r ^. #result
         debug "Good job"
 
@@ -439,27 +450,17 @@ handleBinjaEvent bv = \case
   BSNoop -> debug "Binja noop"
 
   BSSnapshot snapMsg -> case snapMsg of
-    Snapshot.New funcAddr -> do
-      mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
-      case mfunc of
-        Nothing -> sendToBinja
-          . SBLogError $ "Couldn't find function at " <> showHex funcAddr
-        Just func -> do
-          mr <- liftIO $ BnCfg.getCfg (BNImporter bv) bv func
-          case mr of
-            Nothing -> sendToBinja
-              . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
-            Just r -> do
-              cfgId' <- liftIO randomIO
-              putText . pretty $ r ^. #result
-              sendToBinja . SBCfg cfgId' $ convertPilCfg $ r ^. #result
-              setCfg cfgId' $ r ^. #result 
-          debug "Good job"
 
     -- Loads new auto-cfg from an immutable snapshot cid
+    -- creates new cid for it
+    -- returns new cfg and new snapshot tree with auto-cfg added
     Snapshot.Load cid -> undefined
 
     -- Saves auto-cfg cid as an immutable snapshot
+    -- assumes cfg has already been loaded
+    -- copies cfg to db with a different cid
+    -- modifies snapshot tree
+    -- sends back new snapshot tree
     Snapshot.Save cid mname -> undefined
 
     -- Renames previously saved immutable cfg

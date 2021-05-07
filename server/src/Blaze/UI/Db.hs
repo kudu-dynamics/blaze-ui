@@ -25,7 +25,8 @@ import System.Directory (doesFileExist)
 import Blaze.UI.Types (EventLoop)
 import Data.Time.Clock (getCurrentTime)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
-import Blaze.UI.Types.Cfg.Snapshot (BranchId, BranchTree)
+import Blaze.UI.Types.Cfg.Snapshot (BranchId, BranchTree, SnapshotInfo(SnapshotInfo))
+import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Graph as Graph
 import Blaze.UI.Types.Graph (graphFromTransport, graphToTransport)
 
@@ -40,14 +41,26 @@ withDb m = do
   ctx <- ask
   withSQLite (ctx ^. #sqliteFilePath) m
 
-saveNewCfg :: PilCfg -> EventLoop CfgId
-saveNewCfg cfg' = withDb $ do
-  -- maybe we should make sure cid isn't already in table
+-- | Only called when creating a fresh CFG from a function
+saveNewCfgAndBranch :: Address -> PilCfg -> EventLoop (BranchId, CfgId)
+saveNewCfgAndBranch originFuncAddr' pcfg = do
   cid <- liftIO randomIO
+  bid <- liftIO randomIO
+  utc <- liftIO getCurrentTime
+  saveNewCfg_ bid cid pcfg
+  let b = Snapshot.singletonBranch originFuncAddr' Nothing cid
+          $ SnapshotInfo Nothing utc Snapshot.AutoSave
+  saveNewBranch_ bid b
+  return (bid, cid)
+    
+
+-- | use `saveNewCfgAndBranch` instead
+saveNewCfg_ :: BranchId -> CfgId -> PilCfg -> EventLoop ()
+saveNewCfg_ bid cid cfg' = withDb $ do
   utc <- liftIO getCurrentTime
   insert_ cfgTable
-    [ SavedCfg cid Nothing utc utc . Blob $ Cfg.toTransport identity cfg' ]
-  return cid
+    [ SavedCfg cid Nothing utc utc bid . Blob $ Cfg.toTransport identity cfg' ]
+
 
 setCfgName :: CfgId -> Text -> EventLoop ()
 setCfgName cid name' = withDb $ do
@@ -78,17 +91,21 @@ getCfg cid = (fmap $ view #cfg) <$> getSavedCfg cid >>= \case
   _ -> -- hopefully impossible
     P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show cid
 
-saveNewBranch :: Function
-              -> CfgId
-              -> BranchTree
-              -> EventLoop BranchId
-saveNewBranch originFunc rootNode' branchTree = withDb $ do
-  bid <- liftIO randomIO
+-- | use `saveNewCfgAndBranch`
+saveNewBranch_ :: BranchId
+              -> Snapshot.Branch BranchTree
+              -> EventLoop ()
+saveNewBranch_ bid b = withDb $
   insert_ snapshotBranchTable
-    [ SnapshotBranch bid (originFunc ^. #address) Nothing rootNode'
-      . Blob $ Graph.graphToTransport branchTree
+    [ SnapshotBranch
+      bid
+      (b ^. #originFuncAddr)
+      (b ^. #branchName)
+      (b ^. #rootNode)
+      . Blob
+      . Graph.graphToTransport
+      $ b ^. #tree
     ]
-  return bid
 
 setBranchTree :: BranchId -> BranchTree -> EventLoop ()
 setBranchTree bid branchTree = withDb $ do
@@ -96,7 +113,7 @@ setBranchTree bid branchTree = withDb $ do
     (\b -> b ! #branchId .== literal bid)
     (\b -> b `with` [ #tree := literal (Blob . graphToTransport $ branchTree) ])
 
-getBranch :: BranchId -> EventLoop (Maybe Snapshot.Branch)
+getBranch :: BranchId -> EventLoop (Maybe (Snapshot.Branch BranchTree))
 getBranch bid = withDb $ do
   xs <- query $ do
     branch <- select snapshotBranchTable
@@ -106,20 +123,22 @@ getBranch bid = withDb $ do
     [] -> return Nothing
     [SnapshotBranch _ originFuncAddr' mname rootNode' (Blob tree')] -> return
       . Just 
-      . Snapshot.Branch bid originFuncAddr' mname rootNode'
+      . Snapshot.Branch originFuncAddr' mname rootNode'
       . graphFromTransport
       $ tree'
     _ -> -- hopefully impossible
       P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show bid
 
 
-getBranchesForFunction :: Address -> EventLoop [Snapshot.Branch]
+getBranchesForFunction :: Address -> EventLoop [(BranchId, Snapshot.Branch BranchTree)]
 getBranchesForFunction funcAddr = fmap (fmap f) . withDb . query $ do
   branch <- select snapshotBranchTable
   restrict (branch ! #originFuncAddr .== literal funcAddr)
   return branch
   where
-    f :: SnapshotBranch -> Snapshot.Branch
+    f :: SnapshotBranch -> (BranchId, Snapshot.Branch BranchTree)
     f (SnapshotBranch bid faddr mname root (Blob tree')) =
-      Snapshot.Branch bid faddr mname root $ graphFromTransport tree'
+      ( bid
+      , Snapshot.Branch faddr mname root $ graphFromTransport tree'
+      )
 

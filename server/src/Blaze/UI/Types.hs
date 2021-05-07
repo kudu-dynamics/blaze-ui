@@ -20,7 +20,8 @@ import Blaze.UI.Types.WebMessages as WebMessages
 import Blaze.Function (Function)
 import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
 import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
-import Blaze.UI.Types.Cfg.Snapshot (SnapshotMsg, SnapState)
+import Blaze.UI.Types.Cfg.Snapshot (SnapshotMsg, BranchId, BranchTransport)
+import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 
 data BinjaMessage a = BinjaMessage
   { bvFilePath :: Text
@@ -38,7 +39,17 @@ data ServerToBinja = SBLogInfo { message :: Text }
                            -- TODO: send cfg with text
                            , cfg :: CfgTransport [Text]
                            }
-                   
+
+                   | SBSnapshotBranch
+                     { branchId :: BranchId
+                     , branch :: Snapshot.Branch BranchTransport
+                     }
+                     
+                   | SBSnapshotBranchesForFunction
+                     { funcAddress :: Word64
+                     , branches :: [Snapshot.Branch BranchTransport]
+                     }
+                     
                    | SBNoop
                    deriving (Eq, Ord, Show, Generic)
 

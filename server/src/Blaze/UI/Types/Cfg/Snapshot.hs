@@ -29,6 +29,7 @@ import Database.Selda.SqlType ( Lit(LCustom)
                               , SqlType
                               )
 import qualified Database.Selda.SqlType as Sql
+import Blaze.UI.Types.Graph (GraphTransport)
 
 
 type Name = Text
@@ -64,7 +65,7 @@ data ActiveCfg = ActiveCfg
 
 -- one SnapState per binary (and user? eventually)
 data SnapState = SnapState
-  { branches :: HashMap BranchId Branch
+  { branches :: HashMap BranchId (Branch BranchTree)
   -- active cfg's are unsaved/snapped and can be mutated
   , activeCfgs :: HashMap CfgId ActiveCfg
   -- immutable Cfgs
@@ -99,7 +100,7 @@ data SnapshotMsg
   -- Loads new Cfg based off of parent (CfgId arg)
   -- copies parent CFG as a new working cfg
   -- returns Cfg
-  = LoadAllForFunction Function
+  = AllBranchesForFunction {originFuncAddr :: Word64}
 
   | Load CfgId
 
@@ -126,12 +127,13 @@ data SnapshotInfo = SnapshotInfo
   } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 type BranchTree = AlgaGraph () SnapshotInfo CfgId
 
-data Branch = Branch
-  { branchId :: BranchId
-  , originFuncAddr :: Address
+type BranchTransport = GraphTransport () SnapshotInfo CfgId
+
+data Branch a = Branch
+  { originFuncAddr :: Address
   , branchName :: Maybe Text
   , rootNode :: CfgId
-  , tree :: BranchTree
-  } deriving (Eq, Show, Generic)
+  , tree :: a
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Functor, Foldable, Traversable)
 
 

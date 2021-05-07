@@ -25,22 +25,36 @@ import Blaze.UI.Types.Cfg.Snapshot
 import Blaze.UI.Types (EventLoop)
 import Control.Concurrent.STM.TMVar (TMVar, takeTMVar, putTMVar, readTMVar)
 import qualified Data.HashMap.Strict as HashMap
+import qualified Blaze.UI.Types.Graph as Graph
 
-addSnapshotToBranch :: CfgId -> CfgId -> SnapshotInfo -> Branch -> Branch
+
+addSnapshotToBranch :: CfgId -> CfgId -> SnapshotInfo -> Branch BranchTree -> Branch BranchTree
 addSnapshotToBranch parentId' id info snap =
   snap & #tree %~
     ( G.setNodeAttr info id
     . G.addEdge (G.LEdge () $ G.Edge parentId' id) )
 
-renameSnapshot :: CfgId -> Name -> Branch -> Branch
+renameSnapshot :: CfgId -> Name -> Branch BranchTree -> Branch BranchTree
 renameSnapshot id name' snap =
   snap & #tree %~ G.updateNodeAttr (over #name $ const (Just name')) id
 
+singletonBranch :: Address -> Maybe Text -> CfgId -> SnapshotInfo -> Branch BranchTree
+singletonBranch originFuncAddr' mname rootNode' rootNodeInfo = Branch
+  { originFuncAddr = originFuncAddr'
+  , branchName = mname
+  , rootNode = rootNode'
+  , tree = G.setNodeAttr rootNodeInfo rootNode'
+           $ G.fromNode rootNode'
+  }
 
 -- handleNew :: MonadIO m => BNBinaryView -> Function -> SnapshotState -> m (Function, SnapshotState)
 -- handleNew bv fn ss = do
 --   mr <- liftIO $ BnCfg.getCfg (BNImporter bv) bv func
 --   case mr of
+
+-- newBranchFromAutoCfg :: Address -> CfgId -> Branch
+-- newBranchFromAutoCfg originFuncAddr cid =
+--   Branch originFuncAddr 
 
 -- | locks TMVar while performing some effectual operation on contents
 updateTMVar :: MonadIO m => (a -> m a) -> TMVar a -> m a
@@ -68,6 +82,13 @@ newSavedCfgId = liftIO randomIO
 data SnapshotActiveCfgError = ActiveCfgNotFound CfgId
                             | SnapshotBranchNotFound BranchId
                             deriving (Eq, Ord, Show, Generic)
+
+
+toTransport :: Branch BranchTree -> Branch BranchTransport
+toTransport = fmap Graph.graphToTransport
+
+fromTransport :: Branch BranchTransport -> Branch BranchTree
+fromTransport = fmap Graph.graphFromTransport
 
 -- -- | Saves active cfg into tree of saved snapshots.
 -- -- returns Nothing if ActiveCfgId not found

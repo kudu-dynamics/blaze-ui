@@ -56,6 +56,7 @@ data SavedCfg = SavedCfg
   , name :: Maybe Text
   , created :: UTCTime
   , modified :: UTCTime
+  , branchId :: BranchId
   , cfg :: Blob (CfgTransport [Stmt])
   } deriving Generic
 instance SqlRow SavedCfg
