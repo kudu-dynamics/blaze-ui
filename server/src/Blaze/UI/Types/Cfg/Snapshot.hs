@@ -45,18 +45,6 @@ instance SqlType BranchId where
    fromSql x = BranchId $ Sql.fromSql x
    defaultValue = LCustom TBlob (Sql.defaultValue :: Lit UUID)
 
-
--- newtype ActiveCfgId = ActiveCfgId CfgId
---   deriving (Eq, Ord, Show, Generic)
---   deriving newtype (Random)
---   deriving anyclass (Hashable, ToJSON, FromJSON)
-
--- newtype SavedCfgId = SavedCfgId CfgId
---   deriving (Eq, Ord, Show, Generic)
---   deriving newtype (Random)
---   deriving anyclass (Hashable, ToJSON, FromJSON)
-
-
 -- ACTIVE cfgs are mutable, AUTO saved
 data ActiveCfg = ActiveCfg
   { branchId :: BranchId
@@ -90,30 +78,44 @@ emptySnapState = SnapState
 -- Active CFGs map has CfgId -> WorkingCfg
 -- ActiveCfg = parentId, branchId
 
-data SnapshotMsg
-  -- Create new Cfg
-  -- store cfg as new origin snapshot
-  -- returns Cfg with name/date
-  -- New { startFuncAddress :: Word64, cid ::  }
-  -- Actually, new cfg is created with BSCfgNew message.
+data OutgoingMsg
+  = SnapshotBranch
+    { branchId :: BranchId
+    , branch :: Branch BranchTransport
+    }
+                     
+  | BranchesOfFunction
+    { funcAddress :: Word64
+    , branches :: [Branch BranchTransport]
+    }
+  deriving (Eq, Ord, Show, Generic)
+instance ToJSON OutgoingMsg
+instance FromJSON OutgoingMsg
 
+
+data IncomingMsg
   -- Loads new Cfg based off of parent (CfgId arg)
   -- copies parent CFG as a new working cfg
   -- returns Cfg
-  = AllBranchesForFunction {originFuncAddr :: Word64}
+  = GetAllBranches
 
-  | Load CfgId
+  | GetBranchesOfFunction {originFuncAddr :: Word64}
+
+  | RenameBranch { branchId :: BranchId, name :: Text }
+
+  | LoadSnapshot { branchId :: BranchId, cfgId :: CfgId }
 
   -- Copies current CFG into snapshot tree (new CfgId)
   -- returns updated snapshot tree
-  | Save CfgId (Maybe Name)
+  | SaveSnapshot CfgId (Maybe Name)
 
   -- renames cfg snapshot
-  -- returns updated snapshot tree
-  | Rename CfgId Name
+  -- returns updated snapshot tree containing Cfg
+  | RenameSnapshot CfgId Name
+
   deriving (Eq, Ord, Show, Generic)
-instance ToJSON SnapshotMsg
-instance FromJSON SnapshotMsg
+instance ToJSON IncomingMsg
+instance FromJSON IncomingMsg
 
 data SnapshotType
   = AutoSave

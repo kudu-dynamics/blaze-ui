@@ -34,6 +34,7 @@ import qualified Blaze.UI.Web.Pil as WebPil
 import Blaze.UI.Types.Cfg (convertPilCfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Cfg.Snapshot as Snapshot
+import Blaze.UI.Types.BinaryHash (getBinaryHash)
 import qualified Blaze.UI.Db as Db
 import Blaze.Types.Cfg (PilCfg)
 import Blaze.UI.Types.Cfg (CfgId)
@@ -159,23 +160,26 @@ binjaApp localOutboxThreads st conn = do
               logInfo "For web plugin, go here:"
               logInfo $ webUri (st ^. #serverConfig) sid
               atomically $ putTMVar (ss ^. #binaryView) bv
-              spawnEventHandler st ss
+              spawnEventHandler (cs fp) st ss
               outboxThread <- createBinjaOutbox conn ss fp
               pushEvent
               binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
 
-spawnEventHandler :: AppState -> SessionState -> IO ()
-spawnEventHandler st ss = do
+spawnEventHandler :: FilePath -> AppState -> SessionState -> IO ()
+spawnEventHandler binPath st ss = do
   b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
   case b of
     False -> putText "Warning: spawnEventHandler -- event handler already spawned"
     True -> do
-
+      binHash <- getBinaryHash binPath
       -- spawns event handler workers for new messages
       eventTid <- forkIO . forever $ do
         bv <- atomically . readTMVar $ ss ^. #binaryView
         msg <- atomically . readTQueue $ ss ^. #eventInbox
         let ctx = EventLoopCtx
+                  binHash
+                  binPath
+                  bv
                   (ss ^. #binjaOutboxes)
                   (ss ^. #webOutboxes)
                   (ss ^. #cfgs)
@@ -215,7 +219,7 @@ webApp st sid conn = do
               BN.updateAnalysisAndWait bv
               logInfo $ "Loaded binary: " <> fp
               atomically $ putTMVar (ss ^. #binaryView) bv
-              spawnEventHandler st ss
+              spawnEventHandler (cs fp) st ss
     False -> return ()
       
   -- TODO: pass outboxThread in with event
@@ -261,11 +265,11 @@ testClient msg conn = do
 runClient :: ServerConfig -> (WS.Connection -> IO a) -> IO a
 runClient cfg = WS.runClient (cs $ serverHost cfg) (serverWsPort cfg) ""
 
-saveNewCfg :: PilCfg -> EventLoop CfgId
-saveNewCfg pcfg = do
-  cid <- Db.saveNewCfg pcfg
-  CfgUI.addCfg cid pcfg
-  return cid
+-- saveNewCfg :: PilCfg -> EventLoop CfgId
+-- saveNewCfg pcfg = do
+--   cid <- Db.saveNewCfg pcfg
+--   CfgUI.addCfg cid pcfg
+--   return cid
 
 setCfg :: CfgId -> PilCfg -> EventLoop ()
 setCfg cid pcfg = do
@@ -367,19 +371,15 @@ handleBinjaEvent bv = \case
           Nothing -> sendToBinja
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
-            cid <- saveNewCfg $ r ^. #result
-            utc <- liftIO getCurrentTime
-            let snapBranch = Snapshot.singletonBranch
-                             (func ^. #address)
-                             Nothing
-                             cid
-                             (Snapshot.SnapshotInfo Nothing utc Snapshot.AutoSave)
-            bid <- Db.saveNewBranch snapBranch
-            -- TODO: this calls convertPilCfg twice
+            let pcfg = r ^. #result
+            (bid, cid, snapBranch) <- Db.saveNewCfgAndBranch (func ^. #address) pcfg
+            CfgUI.addCfg cid pcfg 
+            -- TODO: this calls convertPilCfg and Snapshot.toTransport twice
             -- instead, do it once and pass converted cfg to db saving func
-            sendToBinja . SBSnapshotBranch bid $ Snapshot.toTransport snapBranch
-            sendToBinja . SBCfg cid $ convertPilCfg $ r ^. #result
-        debug "Good job"
+            sendToBinja . SBSnapshotMsg . Snapshot.SnapshotBranch bid
+              $ Snapshot.toTransport snapBranch
+            sendToBinja . SBCfg cid $ convertPilCfg pcfg
+        debug "Created new branch and added auto-cfg."
 
   BSCfgExpandCall cfgId' callNode -> do
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
@@ -450,8 +450,11 @@ handleBinjaEvent bv = \case
   BSNoop -> debug "Binja noop"
 
   BSSnapshot snapMsg -> case snapMsg of
+    -- returns all branches for function
+    BranchesOfFunction funcAddr -> undefined
 
-    -- Loads new auto-cfg from an immutable snapshot cid
+    -- Loads cfg from snapshot tree
+    -- 
     -- creates new cid for it
     -- returns new cfg and new snapshot tree with auto-cfg added
     Snapshot.Load cid -> undefined

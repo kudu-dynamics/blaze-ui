@@ -29,6 +29,7 @@ dependencies:
   - blaze
   - bytestring
   - containers
+  - cryptohash-md5
   - directory
   - envy
   - exceptions

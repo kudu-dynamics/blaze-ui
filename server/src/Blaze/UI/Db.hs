@@ -42,7 +42,11 @@ withDb m = do
   withSQLite (ctx ^. #sqliteFilePath) m
 
 -- | Only called when creating a fresh CFG from a function
-saveNewCfgAndBranch :: Address -> PilCfg -> EventLoop (BranchId, CfgId)
+saveNewCfgAndBranch :: Address
+                    -> PilCfg
+                    -> EventLoop ( BranchId
+                                 , CfgId
+                                 , Snapshot.Branch BranchTree)
 saveNewCfgAndBranch originFuncAddr' pcfg = do
   cid <- liftIO randomIO
   bid <- liftIO randomIO
@@ -51,7 +55,7 @@ saveNewCfgAndBranch originFuncAddr' pcfg = do
   let b = Snapshot.singletonBranch originFuncAddr' Nothing cid
           $ SnapshotInfo Nothing utc Snapshot.AutoSave
   saveNewBranch_ bid b
-  return (bid, cid)
+  return (bid, cid, b)
     
 
 -- | use `saveNewCfgAndBranch` instead
@@ -93,12 +97,13 @@ getCfg cid = (fmap $ view #cfg) <$> getSavedCfg cid >>= \case
 
 -- | use `saveNewCfgAndBranch`
 saveNewBranch_ :: BranchId
-              -> Snapshot.Branch BranchTree
-              -> EventLoop ()
-saveNewBranch_ bid b = withDb $
+               -> Snapshot.Branch BranchTree
+               -> EventLoop ()
+saveNewBranch_ bid b = ask >>= \ctx -> withDb $
   insert_ snapshotBranchTable
     [ SnapshotBranch
       bid
+      (ctx ^. #binaryHash)
       (b ^. #originFuncAddr)
       (b ^. #branchName)
       (b ^. #rootNode)
@@ -121,14 +126,13 @@ getBranch bid = withDb $ do
     return branch
   case xs of
     [] -> return Nothing
-    [SnapshotBranch _ originFuncAddr' mname rootNode' (Blob tree')] -> return
+    [SnapshotBranch _ _ originFuncAddr' mname rootNode' (Blob tree')] -> return
       . Just 
       . Snapshot.Branch originFuncAddr' mname rootNode'
       . graphFromTransport
       $ tree'
     _ -> -- hopefully impossible
       P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show bid
-
 
 getBranchesForFunction :: Address -> EventLoop [(BranchId, Snapshot.Branch BranchTree)]
 getBranchesForFunction funcAddr = fmap (fmap f) . withDb . query $ do
@@ -137,8 +141,20 @@ getBranchesForFunction funcAddr = fmap (fmap f) . withDb . query $ do
   return branch
   where
     f :: SnapshotBranch -> (BranchId, Snapshot.Branch BranchTree)
-    f (SnapshotBranch bid faddr mname root (Blob tree')) =
+    f (SnapshotBranch bid _ faddr mname root (Blob tree')) =
       ( bid
       , Snapshot.Branch faddr mname root $ graphFromTransport tree'
       )
+
+-- getAllBranches :: EventLoop [(BranchId, Snapshot.Branch BranchTree)]
+-- getAllBranches funcAddr = fmap (fmap f) . withDb . query $ do
+--   branch <- select snapshotBranchTable
+--   restrict (branch ! #originFuncAddr .== literal funcAddr)
+--   return branch
+--   where
+--     f :: SnapshotBranch -> (BranchId, Snapshot.Branch BranchTree)
+--     f (SnapshotBranch bid faddr mname root (Blob tree')) =
+--       ( bid
+--       , Snapshot.Branch faddr mname root $ graphFromTransport tree'
+--       )
 

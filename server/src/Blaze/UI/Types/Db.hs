@@ -22,6 +22,8 @@ import System.Directory (doesFileExist)
 import Blaze.UI.Types (EventLoop)
 import Blaze.UI.Types.Graph (GraphTransport, graphToTransport, graphFromTransport)
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, SnapshotInfo)
+import Blaze.UI.Types.BinaryHash (BinaryHash)
+
 
 newtype Blob a = Blob a
   deriving (Eq, Ord, Show, Generic, Typeable)
@@ -63,6 +65,7 @@ instance SqlRow SavedCfg
 
 data SnapshotBranch = SnapshotBranch
   { branchId :: BranchId
+  , binaryHash :: BinaryHash
   , originFuncAddr :: Address
   , branchName :: Maybe Text
   , rootNode :: CfgId
