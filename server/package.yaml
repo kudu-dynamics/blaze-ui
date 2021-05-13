@@ -98,6 +98,7 @@ library:
   source-dirs:
   - src
   exposed-modules:
+  - Blaze.UI.BinaryManager
   - Blaze.UI.Cfg
   - Blaze.UI.Cfg.Snapshot
   - Blaze.UI.Db
@@ -106,6 +107,7 @@ library:
   - Blaze.UI.Types
   - Blaze.UI.Types.Cfg
   - Blaze.UI.Types.Cfg.Snapshot
+  - Blaze.UI.Types.BinaryManager
   - Blaze.UI.Web.Server
 
   

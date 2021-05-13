@@ -6,21 +6,14 @@ import Blaze.UI.Prelude hiding ((:*:))
 import qualified Prelude as P
 import Database.Selda
 import Database.Selda.SQLite
-import Blaze.UI.Types.Cfg (CfgId(CfgId), CfgTransport)
-import Blaze.Types.Cfg (PilCfg)
-import qualified Blaze.UI.Types.Cfg as Cfg
+import Blaze.UI.Types.Cfg (CfgId, CfgTransport)
 import Blaze.Types.Pil (Stmt)
-import Blaze.Function (Function)
 import qualified Data.Aeson as Aeson
-import Unsafe.Coerce (unsafeCoerce)
-import qualified Database.Selda.SqlType as SqlT
 import Database.Selda.SqlType ( Lit(LBlob, LText, LCustom)
                               , SqlTypeRep(TBlob, TText)
                               , SqlValue(SqlBlob, SqlString)
                               )
-import System.Directory (doesFileExist)
-import Blaze.UI.Types (EventLoop)
-import Blaze.UI.Types.Graph (GraphTransport, graphToTransport, graphFromTransport)
+import Blaze.UI.Types.Graph (GraphTransport)
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, SnapshotInfo)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 
@@ -78,3 +71,6 @@ cfgTable = table "cfg" [#cfgId :- primary]
 
 snapshotBranchTable :: Table SnapshotBranch
 snapshotBranchTable = table "snapshotBranch" [#branchId :- primary]
+
+class MonadDb m where
+  withDb :: SeldaT SQLite m a -> m a

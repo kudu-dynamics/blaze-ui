@@ -9,9 +9,21 @@ import Database.Selda.SqlType ( Lit(LCustom)
 import qualified Database.Selda.SqlType as Sql
 import qualified Crypto.Hash.MD5 as MD5
 import qualified Data.ByteString as BS
+import qualified Data.Aeson as Aeson
 
 newtype BinaryHash = BinaryHash ByteString
   deriving (Eq, Ord, Show, Generic)
+  deriving newtype (Hashable)
+
+instance FromJSON BinaryHash where
+  parseJSON x = BinaryHash . f <$> Aeson.parseJSON x
+    where
+      f :: Text -> ByteString
+      f = cs
+
+instance ToJSON BinaryHash where
+  toJSON (BinaryHash x) = Aeson.toJSON (cs x :: Text)
+
 
 instance SqlType BinaryHash where
    mkLit (BinaryHash x) = LCustom TBlob $ Sql.mkLit x
@@ -19,5 +31,6 @@ instance SqlType BinaryHash where
    fromSql x = BinaryHash $ Sql.fromSql x
    defaultValue = LCustom TBlob (Sql.defaultValue :: Lit ByteString)
 
-getBinaryHash :: FilePath -> IO BinaryHash
-getBinaryHash = fmap (BinaryHash . MD5.hash) . BS.readFile
+-- TODO: crashes if file does not exist
+getBinaryHash :: MonadIO m => FilePath -> m BinaryHash
+getBinaryHash = liftIO . fmap (BinaryHash . MD5.hash) . BS.readFile

@@ -36,17 +36,13 @@ init blazeSqliteFilePath = withSQLite blazeSqliteFilePath $ do
   tryCreateTable cfgTable
   tryCreateTable snapshotBranchTable
 
-withDb :: SeldaT SQLite EventLoop a -> EventLoop a
-withDb m = do
-  ctx <- ask
-  withSQLite (ctx ^. #sqliteFilePath) m
-
 -- | Only called when creating a fresh CFG from a function
-saveNewCfgAndBranch :: Address
+saveNewCfgAndBranch :: MonadDb m
+                    => Address
                     -> PilCfg
-                    -> EventLoop ( BranchId
-                                 , CfgId
-                                 , Snapshot.Branch BranchTree)
+                    -> m ( BranchId
+                         , CfgId
+                         , Snapshot.Branch BranchTree)
 saveNewCfgAndBranch originFuncAddr' pcfg = do
   cid <- liftIO randomIO
   bid <- liftIO randomIO

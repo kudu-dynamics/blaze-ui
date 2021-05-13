@@ -1,0 +1,63 @@
+module Blaze.UI.BinaryManager where
+
+import Blaze.UI.Prelude
+import Binja.Core (BNBinaryView)
+import Blaze.UI.Types.BinaryHash (BinaryHash(BinaryHash), getBinaryHash)
+import Blaze.UI.Types.BinaryManager
+import System.Directory (copyFile, removeFile, doesFileExist)
+import qualified Binja.Core as BN
+import qualified Data.HashMap.Strict as HashMap
+
+
+-- | Saves a new version of the bndb to the filesystem
+-- | updates `latestVersion` in BinaryManager
+saveNewVersion :: MonadIO m => BinaryManager -> FilePath -> m ()
+saveNewVersion bm binPath = do
+  h <- getBinaryHash binPath
+  liftIO $ do
+    copyFile binPath (bndbVersionPath bm h)
+    removeFile binPath
+    atomically . writeTVar (bm ^. #latestVersion) $ h
+
+cacheBinaryView :: MonadIO m => BinaryManager -> BinaryHash -> BNBinaryView -> m ()
+cacheBinaryView bm h bv = liftIO . atomically $ do
+  m <- readTVar $ bm ^. #binaryViews
+  writeTVar (bm ^. #binaryViews) $ HashMap.insert h bv m
+
+-- | Loads a BV from a file if it exists
+-- Doesn't check BinaryManager cache or populate it with result
+loadVersionFromFile :: MonadIO m => BinaryManager -> BinaryHash -> m (Either BinaryManagerError BNBinaryView)
+loadVersionFromFile bm h = do
+  let fp = bndbVersionPath bm h
+  liftIO $ doesFileExist fp >>= \case
+    False -> return . Left $ FileDoesNotExist fp
+    True -> do
+      ebv <- BN.getBinaryView fp
+      case ebv of
+        Left err -> do
+          return . Left . OpenBndbError $ err
+        Right bv -> do
+          BN.updateAnalysisAndWait bv
+          return . Right $ bv
+
+loadVersionFromCache :: MonadIO m => BinaryManager -> BinaryHash -> m (Maybe BNBinaryView)
+loadVersionFromCache bm h = liftIO . atomically $ do
+  m <- readTVar $ bm ^. #binaryViews
+  return $ HashMap.lookup h m
+
+-- | Gets a version of bndb; checks `binaryViews` first, then filesystem
+loadVersion :: MonadIO m => BinaryManager -> BinaryHash -> m (Either BinaryManagerError BNBinaryView)
+loadVersion bm h = loadVersionFromCache bm h >>= \case
+  Just bv -> return $ Right bv
+  Nothing -> loadVersionFromFile bm h >>= \case
+    Left err -> return $ Left err
+    Right bv -> do
+      cacheBinaryView bm h bv
+      return $ Right bv
+
+loadLatest :: MonadIO m => BinaryManager -> m (Either BinaryManagerError BNBinaryView)
+loadLatest bm = do
+  h <- liftIO . atomically . readTVar $ bm ^. #latestVersion
+  loadVersion bm h
+
+  

@@ -23,10 +23,12 @@ import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, BranchTransport)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.BinaryHash (BinaryHash)
-
+import Blaze.UI.Types.Db (MonadDb(withDb))
+import Database.Selda.SQLite (withSQLite)
+import Blaze.UI.Types.BinaryManager (BinaryManager)
 
 data BinjaMessage a = BinjaMessage
-  { bvFilePath :: Text
+  { bvFilePath :: FilePath
   , action :: a
   } deriving (Eq, Ord, Show, Generic)
 
@@ -107,6 +109,7 @@ data ServerConfig = ServerConfig
   , serverWsPort :: Int
   , serverHttpPort :: Int
   , sqliteFilePath :: FilePath
+  , bndbStorageDir :: FilePath
   } deriving (Eq, Ord, Show, Generic)
 
 instance FromEnv ServerConfig where
@@ -115,6 +118,7 @@ instance FromEnv ServerConfig where
     <*> Envy.env "BLAZE_UI_WS_PORT"
     <*> Envy.env "BLAZE_UI_HTTP_PORT"
     <*> Envy.env "BLAZE_UI_SQLITE_FILEPATH"
+    <*> Envy.env "BLAZE_UI_BNDB_STORAGE_DIR"
 
 newtype SessionId = SessionId Text
   deriving (Eq, Ord, Show, Generic)
@@ -123,11 +127,11 @@ instance Hashable SessionId
 instance Parsable SessionId where
   parseParam = Right . SessionId . cs
 
-binaryPathToSessionId :: Text -> SessionId
-binaryPathToSessionId = SessionId . encodeBase64
+binaryPathToSessionId :: FilePath -> SessionId
+binaryPathToSessionId = SessionId . encodeBase64 . cs
 
-sessionIdToBinaryPath :: SessionId -> Either Text Text
-sessionIdToBinaryPath (SessionId x) = decodeBase64 x
+sessionIdToBinaryPath :: SessionId -> Either Text FilePath
+sessionIdToBinaryPath (SessionId x) = cs <$> decodeBase64 x
 
 data BlazeToServer = BZNoop
                    | BZImportantInteger Int
@@ -165,6 +169,12 @@ newtype EventLoop a = EventLoop { _runEventLoop :: ReaderT EventLoopCtx IO a }
                    , MonadMask
                    )
 
+instance MonadDb EventLoop where
+  withDb m = do
+    ctx <- ask
+    withSQLite (ctx ^. #sqliteFilePath) m
+
+
 runEventLoop :: EventLoop a -> EventLoopCtx -> IO a
 runEventLoop m ctx = flip runReaderT ctx $ _runEventLoop m
 
@@ -184,8 +194,8 @@ debug =  putText
 
 -- there are multiple outboxes in case there are multiple conns to same binary
 data SessionState = SessionState
-  { binaryPath :: Maybe Text
-  , binaryView :: TMVar BNBinaryView
+  { binaryPath :: FilePath
+  , binaryManager :: BinaryManager
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
@@ -193,11 +203,10 @@ data SessionState = SessionState
   , eventInbox :: TQueue Event
   } deriving (Generic)
 
-emptySessionState :: Maybe Text -> STM SessionState
-emptySessionState binPath
-  = SessionState binPath
-    <$> newEmptyTMVar
-    <*> newTVar HashMap.empty
+emptySessionState :: FilePath -> BinaryManager -> STM SessionState
+emptySessionState binPath bm
+  = SessionState binPath bm
+    <$> newTVar HashMap.empty
     <*> newTVar HashMap.empty
     <*> newTVar HashMap.empty
     <*> newEmptyTMVar
@@ -218,4 +227,3 @@ lookupSessionState :: SessionId -> AppState -> STM (Maybe SessionState)
 lookupSessionState sid st = do
   m <- readTVar $ st ^. #binarySessions
   return $ HashMap.lookup sid m
-

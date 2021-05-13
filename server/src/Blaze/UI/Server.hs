@@ -52,18 +52,26 @@ sendJSON conn x =
   WS.sendTextData conn (Aeson.encode x :: LBS.ByteString)
 
 
+data SessionError
+  = InvalidSessionId Text
+  deriving (Eq, Ord, Show, Generic)
+
 -- | returns session state or creates it.
 -- bool indicates whether or not it was just now created
-getSessionState :: Maybe Text -> SessionId -> AppState ->  IO (Bool, SessionState)
-getSessionState binPath sid st = do
-  atomically $ do
+getSessionState :: SessionId
+                -> AppState
+                -> IO (Either SessionError (Bool, SessionState))
+getSessionState sid st = atomically $ do
     m <- readTVar $ st ^. #binarySessions
     case HashMap.lookup sid m of
-      Just ss -> return (False, ss)
+      Just ss -> return $ Right (False, ss)
       Nothing -> do
-        ss <- emptySessionState binPath
-        modifyTVar (st ^. #binarySessions) $ HashMap.insert sid ss
-        return (True, ss)
+        case sessionIdToBinaryPath sid of
+          Left e -> return . Left $ InvalidSessionId e
+          Right binPath -> do
+            ss <- emptySessionState binPath
+            modifyTVar (st ^. #binarySessions) $ HashMap.insert sid ss
+            return $ Right (True, ss)
 
 removeSessionState :: SessionId -> AppState -> IO ()
 removeSessionState sid st = atomically
@@ -71,7 +79,7 @@ removeSessionState sid st = atomically
 
 createBinjaOutbox :: WS.Connection
                   -> SessionState
-                  -> Text
+                  -> FilePath
                   -> IO ThreadId
 createBinjaOutbox conn ss fp = do
   q <- newTQueueIO
@@ -127,43 +135,45 @@ binjaApp localOutboxThreads st conn = do
           logInfo txt = do
             reply . SBLogInfo $ txt
             putText txt
-      (justCreated, ss) <- getSessionState (Just fp) sid st
-      let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
-                      . BinjaEvent $ x ^. #action
-      case justCreated of
-        False -> do
-          -- check to see if this conn has registered outbox thread
-          case HashMap.member sid localOutboxThreads of
+      getSessionState sid st >>= \case
+        Left serr -> putText $ "Session Error: " <> show serr
+        Right (justCreated, ss) -> do
+          let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
+                          . BinjaEvent $ x ^. #action
+          case justCreated of
             False -> do
-              outboxThread <- createBinjaOutbox conn ss fp
-              pushEvent
-              logInfo $ "Blaze Connected. Attached to existing session for binary: " <> fp
-              logInfo "For web plugin, go here:"
-              logInfo $ webUri (st ^. #serverConfig) sid
-              binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
-            True -> do
-              pushEvent >> binjaApp localOutboxThreads st conn
+              -- check to see if this conn has registered outbox thread
+              case HashMap.member sid localOutboxThreads of
+                False -> do
+                  outboxThread <- createBinjaOutbox conn ss fp
+                  pushEvent
+                  logInfo $ "Blaze Connected. Attached to existing session for binary: " <> cs fp
+                  logInfo "For web plugin, go here:"
+                  logInfo $ webUri (st ^. #serverConfig) sid
+                  binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
+                True -> do
+                  pushEvent >> binjaApp localOutboxThreads st conn
 
-        True -> do
-          logInfo $ "Connected. Loading binary: " <> fp
-          ebv <- BN.getBinaryView . cs $ fp
-          case ebv of
-            Left err -> do
-              reply . SBLogError $ "Blaze cannot open binary: " <> err -- 
-              putText $ "Cannot open binary: " <> err
-              atomically . modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
+            True -> do
+              logInfo $ "Connected. Loading binary: " <> cs fp
+              ebv <- BN.getBinaryView fp
+              case ebv of
+                Left err -> do
+                  reply . SBLogError $ "Blaze cannot open binary: " <> err -- 
+                  putText $ "Cannot open binary: " <> err
+                  atomically . modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
               -- TODO: maybe send explicit disconnect?
-              return ()
-            Right bv -> do
-              BN.updateAnalysisAndWait bv
-              logInfo $ "Loaded binary: " <> fp
-              logInfo "For web plugin, go here:"
-              logInfo $ webUri (st ^. #serverConfig) sid
-              atomically $ putTMVar (ss ^. #binaryView) bv
-              spawnEventHandler (cs fp) st ss
-              outboxThread <- createBinjaOutbox conn ss fp
-              pushEvent
-              binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
+                  return ()
+                Right bv -> do
+                  BN.updateAnalysisAndWait bv
+                  logInfo $ "Loaded binary: " <> cs fp
+                  logInfo "For web plugin, go here:"
+                  logInfo $ webUri (st ^. #serverConfig) sid
+                  atomically $ putTMVar (ss ^. #binaryView) bv
+                  spawnEventHandler (cs fp) st ss
+                  outboxThread <- createBinjaOutbox conn ss fp
+                  pushEvent
+                  binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
 
 spawnEventHandler :: FilePath -> AppState -> SessionState -> IO ()
 spawnEventHandler binPath st ss = do
@@ -204,34 +214,36 @@ webApp st sid conn = do
         removeSessionState sid st
         WS.sendClose conn t
       logInfo = sendJSON conn . SWLogInfo
-  (justCreated, ss) <- getSessionState Nothing sid st
-  case justCreated of
-    True -> do
-      let efp = sessionIdToBinaryPath sid
-      case efp of
-        Left err -> fatalError err
-        Right fp -> do
-          logInfo $ "Fresh Web client connected sans binja. Loading binary: " <> fp
-          ebv <- BN.getBinaryView . cs $ fp
-          case ebv of
+  getSessionState sid st >>= \case
+    Left serr -> putText $ "Session Error: " <> show serr
+    Right (justCreated, ss) -> do
+      case justCreated of
+        True -> do
+          let efp = sessionIdToBinaryPath sid
+          case efp of
             Left err -> fatalError err
-            Right bv -> do
-              BN.updateAnalysisAndWait bv
-              logInfo $ "Loaded binary: " <> fp
-              atomically $ putTMVar (ss ^. #binaryView) bv
-              spawnEventHandler (cs fp) st ss
-    False -> return ()
+            Right fp -> do
+              logInfo $ "Fresh Web client connected sans binja. Loading binary: " <> cs fp
+              ebv <- BN.getBinaryView fp
+              case ebv of
+                Left err -> fatalError err
+                Right bv -> do
+                  BN.updateAnalysisAndWait bv
+                  logInfo $ "Loaded binary: " <> cs fp
+                  atomically $ putTMVar (ss ^. #binaryView) bv
+                  spawnEventHandler (cs fp) st ss
+        False -> return ()
       
-  -- TODO: pass outboxThread in with event
-  _outboxThread <- createWebOutbox conn ss
+      -- TODO: pass outboxThread in with event
+      _outboxThread <- createWebOutbox conn ss
 
-  forever $ do
-    er <- receiveJSON conn :: IO (Either Text WebToServer)
-    case er of
-      Left err -> do
-        putText $ "Error parsing JSON: " <> show err
-      Right x -> do
-        atomically . writeTQueue (ss ^. #eventInbox) . WebEvent $ x
+      forever $ do
+        er <- receiveJSON conn :: IO (Either Text WebToServer)
+        case er of
+          Left err -> do
+            putText $ "Error parsing JSON: " <> show err
+          Right x -> do
+            atomically . writeTQueue (ss ^. #eventInbox) . WebEvent $ x
 
   
 
@@ -450,24 +462,26 @@ handleBinjaEvent bv = \case
   BSNoop -> debug "Binja noop"
 
   BSSnapshot snapMsg -> case snapMsg of
-    -- returns all branches for function
-    BranchesOfFunction funcAddr -> undefined
+    _ -> undefined
 
-    -- Loads cfg from snapshot tree
-    -- 
-    -- creates new cid for it
-    -- returns new cfg and new snapshot tree with auto-cfg added
-    Snapshot.Load cid -> undefined
+    -- -- returns all branches for function
+    -- BranchesOfFunction funcAddr -> undefined
 
-    -- Saves auto-cfg cid as an immutable snapshot
-    -- assumes cfg has already been loaded
-    -- copies cfg to db with a different cid
-    -- modifies snapshot tree
-    -- sends back new snapshot tree
-    Snapshot.Save cid mname -> undefined
+    -- -- Loads cfg from snapshot tree
+    -- -- 
+    -- -- creates new cid for it
+    -- -- returns new cfg and new snapshot tree with auto-cfg added
+    -- Snapshot.Load cid -> undefined
 
-    -- Renames previously saved immutable cfg
-    Snapshot.Rename cid name -> undefined
+    -- -- Saves auto-cfg cid as an immutable snapshot
+    -- -- assumes cfg has already been loaded
+    -- -- copies cfg to db with a different cid
+    -- -- modifies snapshot tree
+    -- -- sends back new snapshot tree
+    -- Snapshot.Save cid mname -> undefined
+
+    -- -- Renames previously saved immutable cfg
+    -- Snapshot.Rename cid name -> undefined
 
 printPrunedStats :: (Ord a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printPrunedStats a b = do

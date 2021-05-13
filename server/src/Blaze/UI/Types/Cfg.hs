@@ -1,6 +1,6 @@
 module Blaze.UI.Types.Cfg where
 
-import Blaze.Prelude hiding (Symbol)
+import Blaze.UI.Prelude hiding (Symbol)
 
 import Blaze.Types.Pil (Stmt)
 import Blaze.Types.Cfg ( CfNode, CfEdge(CfEdge), Cfg )
