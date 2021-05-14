@@ -29,6 +29,7 @@ import Blaze.UI.Types.BinaryManager (BinaryManager)
 
 data BinjaMessage a = BinjaMessage
   { bvFilePath :: FilePath
+  , bvBinaryHash :: BinaryHash
   , action :: a
   } deriving (Eq, Ord, Show, Generic)
 

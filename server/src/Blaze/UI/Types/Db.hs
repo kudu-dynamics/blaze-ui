@@ -72,5 +72,5 @@ cfgTable = table "cfg" [#cfgId :- primary]
 snapshotBranchTable :: Table SnapshotBranch
 snapshotBranchTable = table "snapshotBranch" [#branchId :- primary]
 
-class MonadDb m where
+class (MonadMask m, MonadIO m, Monad m) => MonadDb m where
   withDb :: SeldaT SQLite m a -> m a

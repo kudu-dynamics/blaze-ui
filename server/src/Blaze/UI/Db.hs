@@ -28,6 +28,7 @@ import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, BranchTree, SnapshotInfo(SnapshotInfo))
 import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Graph as Graph
+import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.Graph (graphFromTransport, graphToTransport)
 
 
@@ -38,37 +39,38 @@ init blazeSqliteFilePath = withSQLite blazeSqliteFilePath $ do
 
 -- | Only called when creating a fresh CFG from a function
 saveNewCfgAndBranch :: MonadDb m
-                    => Address
+                    => BinaryHash
+                    -> Address
                     -> PilCfg
                     -> m ( BranchId
                          , CfgId
                          , Snapshot.Branch BranchTree)
-saveNewCfgAndBranch originFuncAddr' pcfg = do
+saveNewCfgAndBranch h originFuncAddr' pcfg = do
   cid <- liftIO randomIO
   bid <- liftIO randomIO
   utc <- liftIO getCurrentTime
   saveNewCfg_ bid cid pcfg
   let b = Snapshot.singletonBranch originFuncAddr' Nothing cid
           $ SnapshotInfo Nothing utc Snapshot.AutoSave
-  saveNewBranch_ bid b
+  saveNewBranch_ bid h b
   return (bid, cid, b)
     
 
 -- | use `saveNewCfgAndBranch` instead
-saveNewCfg_ :: BranchId -> CfgId -> PilCfg -> EventLoop ()
+saveNewCfg_ :: MonadDb m => BranchId -> CfgId -> PilCfg -> m ()
 saveNewCfg_ bid cid cfg' = withDb $ do
   utc <- liftIO getCurrentTime
   insert_ cfgTable
     [ SavedCfg cid Nothing utc utc bid . Blob $ Cfg.toTransport identity cfg' ]
 
 
-setCfgName :: CfgId -> Text -> EventLoop ()
+setCfgName :: MonadDb m => CfgId -> Text -> m ()
 setCfgName cid name' = withDb $ do
   update_ cfgTable
     (\cfg' -> cfg' ! #cfgId .== literal cid)
     (\cfg' -> cfg' `with` [ #name := just (literal name')])
 
-setCfg :: CfgId -> PilCfg -> EventLoop ()
+setCfg :: MonadDb m => CfgId -> PilCfg -> m ()
 setCfg cid pcfg = withDb $ do
   utc <- liftIO getCurrentTime
   update_ cfgTable
@@ -77,14 +79,14 @@ setCfg cid pcfg = withDb $ do
                               , #modified := literal utc
                               ])
 
-getSavedCfg :: CfgId -> EventLoop [SavedCfg]
+getSavedCfg :: MonadDb m => CfgId -> m [SavedCfg]
 getSavedCfg cid = withDb $ do
   query $ do
     cfg' <- select cfgTable
     restrict (cfg' ! #cfgId .== literal cid)
     return $ cfg'
 
-getCfg :: CfgId -> EventLoop (Maybe PilCfg)
+getCfg :: MonadDb m => CfgId -> m (Maybe PilCfg)
 getCfg cid = (fmap $ view #cfg) <$> getSavedCfg cid >>= \case
   [] -> return Nothing
   [Blob x] -> return . Just . Cfg.fromTransport $ x
@@ -92,14 +94,16 @@ getCfg cid = (fmap $ view #cfg) <$> getSavedCfg cid >>= \case
     P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show cid
 
 -- | use `saveNewCfgAndBranch`
-saveNewBranch_ :: BranchId
-               -> Snapshot.Branch BranchTree
-               -> EventLoop ()
-saveNewBranch_ bid b = ask >>= \ctx -> withDb $
+saveNewBranch_ :: MonadDb m
+  => BranchId
+  -> BinaryHash
+  -> Snapshot.Branch BranchTree
+  -> m ()
+saveNewBranch_ bid h b = withDb $
   insert_ snapshotBranchTable
     [ SnapshotBranch
       bid
-      (ctx ^. #binaryHash)
+      h
       (b ^. #originFuncAddr)
       (b ^. #branchName)
       (b ^. #rootNode)
@@ -108,13 +112,13 @@ saveNewBranch_ bid b = ask >>= \ctx -> withDb $
       $ b ^. #tree
     ]
 
-setBranchTree :: BranchId -> BranchTree -> EventLoop ()
+setBranchTree :: MonadDb m => BranchId -> BranchTree -> m ()
 setBranchTree bid branchTree = withDb $ do
   update_ snapshotBranchTable
     (\b -> b ! #branchId .== literal bid)
     (\b -> b `with` [ #tree := literal (Blob . graphToTransport $ branchTree) ])
 
-getBranch :: BranchId -> EventLoop (Maybe (Snapshot.Branch BranchTree))
+getBranch :: MonadDb m => BranchId -> m (Maybe (Snapshot.Branch BranchTree))
 getBranch bid = withDb $ do
   xs <- query $ do
     branch <- select snapshotBranchTable
@@ -130,7 +134,7 @@ getBranch bid = withDb $ do
     _ -> -- hopefully impossible
       P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show bid
 
-getBranchesForFunction :: Address -> EventLoop [(BranchId, Snapshot.Branch BranchTree)]
+getBranchesForFunction :: MonadDb m => Address -> m [(BranchId, Snapshot.Branch BranchTree)]
 getBranchesForFunction funcAddr = fmap (fmap f) . withDb . query $ do
   branch <- select snapshotBranchTable
   restrict (branch ! #originFuncAddr .== literal funcAddr)
