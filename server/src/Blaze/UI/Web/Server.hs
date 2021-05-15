@@ -5,8 +5,12 @@ import Blaze.UI.Prelude hiding (get)
 import Blaze.UI.Types hiding (cfg)
 import Web.Scotty ( ScottyM
                   , ActionM
+                  , File
                   , get
+                  , post
                   , file
+                  , files
+                  , json
                   , setHeader
                   , html
                   , scotty
@@ -14,12 +18,39 @@ import Web.Scotty ( ScottyM
                   , param
                   )
 import qualified Data.Text.IO as TIO
+import qualified Data.ByteString as BS
+import qualified Network.Wai.Parse as Wai
+import System.Directory (doesFileExist)
+import Blaze.UI.Types.BinaryHash (BinaryHash)
+import qualified Blaze.UI.Types.BinaryManager as BM
+
 
 server :: ServerConfig -> ScottyM ()
 server cfg = do
   get "/" showErrorPage
+  post "/upload" $ uploadBinary cfg
+  -- post (capture "/upload/:binaryname/:binaryhash)") $ uploadBinary cfg
   get "/js/main.js" $ file "./res/js/main.js"
   get (capture "/:sid") $ showUI cfg
+
+
+-- curl to upload example file:
+-- curl -X POST -F 'binaryName=exampleBin' -F 'binaryHash=1234' -F 'bndb=@/tmp/example.bndb' http://localhost:31338/upload
+
+uploadBinary :: ServerConfig -> ActionM ()
+uploadBinary cfg = do
+  (hostBinaryPath :: FilePath) <- param "hostBinaryPath" --used for identification
+  -- putText $ "You got a file, " <> binaryName <> " " <> show binaryHash
+  files >>= mapM_ (saveBndb hostBinaryPath)
+  where
+    saveBndb :: FilePath -> File -> ActionM ()
+    saveBndb hostBinaryPath ("bndb", finfo) = do
+      h <- BM.saveBndbBytestring (cfg ^. #bndbStorageDir) hostBinaryPath
+        . cs
+        . Wai.fileContent
+        $ finfo
+      json h
+    saveBndb _ _ = return ()
 
 showUI :: ServerConfig -> ActionM ()
 showUI cfg = do

@@ -54,7 +54,7 @@ import Control.Monad.Catch as Exports (MonadMask, MonadCatch, MonadThrow)
 import Control.Concurrent.STM.TQueue as Exports
 import Control.Concurrent.STM.TVar as Exports
 import Control.Concurrent.STM.TMVar as Exports
-
+import Data.String.Conversions as Exports (ConvertibleStrings)
 -- type Streaming t m = (Monad m, Monad (t m), MonadTrans t, IsStream t)
 
 -- type StreamingIO t m = (Monad m, Monad (t m), MonadTrans t, IsStream t, MonadIO m, MonadIO (t m))

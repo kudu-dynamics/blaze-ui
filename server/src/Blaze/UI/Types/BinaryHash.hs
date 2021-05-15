@@ -32,5 +32,11 @@ instance SqlType BinaryHash where
    defaultValue = LCustom TBlob (Sql.defaultValue :: Lit ByteString)
 
 -- TODO: crashes if file does not exist
-getBinaryHash :: MonadIO m => FilePath -> m BinaryHash
-getBinaryHash = liftIO . fmap (BinaryHash . MD5.hash) . BS.readFile
+fromFile :: MonadIO m => FilePath -> m BinaryHash
+fromFile = liftIO . fmap fromByteString . BS.readFile
+
+fromByteString :: ByteString -> BinaryHash
+fromByteString = BinaryHash . MD5.hash
+
+toString :: ConvertibleStrings ByteString a => BinaryHash -> a
+toString (BinaryHash h) = cs h
