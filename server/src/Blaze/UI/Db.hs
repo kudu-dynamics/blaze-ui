@@ -63,7 +63,6 @@ saveNewCfg_ bid cid cfg' = withDb $ do
   insert_ cfgTable
     [ SavedCfg cid Nothing utc utc bid . Blob $ Cfg.toTransport identity cfg' ]
 
-
 setCfgName :: MonadDb m => CfgId -> Text -> m ()
 setCfgName cid name' = withDb $ do
   update_ cfgTable
@@ -92,6 +91,21 @@ getCfg cid = (fmap $ view #cfg) <$> getSavedCfg cid >>= \case
   [Blob x] -> return . Just . Cfg.fromTransport $ x
   _ -> -- hopefully impossible
     P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show cid
+
+getCfgBinaryHash :: MonadDb m => CfgId -> m (Maybe BinaryHash)
+getCfgBinaryHash cid = withDb $ do
+  xs <- query $ do
+    cfg' <- select cfgTable
+    restrict (cfg' ! #cfgId .== literal cid)
+    branch <- select snapshotBranchTable
+    restrict (branch ! #branchId .== cfg' ! #branchId)
+    return $ branch ! #binaryHash
+  case xs of
+    [] -> return Nothing
+    [h] -> return $ Just h
+    _ -> P.error "getCfgBinaryHash: returned multiple branch ids"
+
+  
 
 -- | use `saveNewCfgAndBranch`
 saveNewBranch_ :: MonadDb m

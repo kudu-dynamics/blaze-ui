@@ -34,13 +34,13 @@ import qualified Blaze.UI.Web.Pil as WebPil
 import Blaze.UI.Types.Cfg (convertPilCfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Cfg.Snapshot as Snapshot
-import Blaze.UI.Types.BinaryHash (getBinaryHash)
+import qualified Blaze.UI.Types.BinaryHash as BinaryHash
 import qualified Blaze.UI.Db as Db
 import Blaze.Types.Cfg (PilCfg)
 import Blaze.UI.Types.Cfg (CfgId)
 import Data.Time.Clock (getCurrentTime)
 import Blaze.Pretty (pretty)
-
+import qualified Blaze.UI.BinaryManager as BM
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -155,7 +155,8 @@ binjaApp localOutboxThreads st conn = do
                   pushEvent >> binjaApp localOutboxThreads st conn
 
             True -> do
-              logInfo $ "Connected. Loading binary: " <> cs fp
+              BM.create (st ^. #serverConfig . #bndbStorageDir)
+              logInfo $ "Connected:"
               ebv <- BN.getBinaryView fp
               case ebv of
                 Left err -> do
@@ -181,22 +182,18 @@ spawnEventHandler binPath st ss = do
   case b of
     False -> putText "Warning: spawnEventHandler -- event handler already spawned"
     True -> do
-      binHash <- getBinaryHash binPath
       -- spawns event handler workers for new messages
       eventTid <- forkIO . forever $ do
-        bv <- atomically . readTMVar $ ss ^. #binaryView
         msg <- atomically . readTQueue $ ss ^. #eventInbox
         let ctx = EventLoopCtx
-                  binHash
-                  binPath
-                  bv
+                  (ss ^. #binaryManager)
                   (ss ^. #binjaOutboxes)
                   (ss ^. #webOutboxes)
                   (ss ^. #cfgs)
                   (st ^. #serverConfig . #sqliteFilePath)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
-        void . forkIO $ runEventLoop (mainEventLoop bv msg) ctx
+        void . forkIO $ runEventLoop (mainEventLoop msg) ctx
       
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
       putText "Spawned event handlers"
@@ -244,8 +241,6 @@ webApp st sid conn = do
             putText $ "Error parsing JSON: " <> show err
           Right x -> do
             atomically . writeTQueue (ss ^. #eventInbox) . WebEvent $ x
-
-  
 
 app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case splitPath of
@@ -301,6 +296,16 @@ getCfg cid = CfgUI.getCfg cid >>= \case
 
 ------------------------------------------
 --- main event handler
+
+getCfgBinaryView :: CfgId -> EventLoop (Either Text BNBinaryView)
+getCfgBinaryView cid = Db.getCfgBinaryHash cid >>= \case
+  Nothing -> return . Left $ "Could not find binary hash version for cfg: " <> show cid
+  Just h -> do
+    bm <- view #binaryManager <$> ask
+    BM.loadVersion bm h >>= \case
+      Left err -> return . Left $ show err
+      Right bv -> return . Right $ bv
+        
 
 mainEventLoop :: BNBinaryView -> Event -> EventLoop ()
 mainEventLoop bv (WebEvent msg) = handleWebEvent bv msg
@@ -372,7 +377,7 @@ handleBinjaEvent bv = \case
   -- Creates new CFG from function. Also create a new snapshot
   -- where the root node is the auto-cfg
   -- Sends back two messages: one auto-cfg, one new snapshot tree
-  BSCfgNew funcAddr -> do
+  BSCfgNew funcAddr binHash -> do
     mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
     case mfunc of
       Nothing -> sendToBinja
@@ -493,7 +498,7 @@ printPrunedStats a b = do
 
 
 printTypeReportToConsole :: MonadIO m => BNFunc.Function -> Ch.TypeReport -> m ()
-printTypeReportToConsole fn tr = do
+printTypeReportToConsole fn tr = liftIO $ do
   putText "\n------------------------Type Checking Function-------------------------"
   pprint fn
   putText ""

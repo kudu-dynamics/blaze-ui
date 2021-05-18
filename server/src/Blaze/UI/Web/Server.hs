@@ -23,7 +23,8 @@ import qualified Network.Wai.Parse as Wai
 import System.Directory (doesFileExist)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Blaze.UI.Types.BinaryManager as BM
-
+import Blaze.UI.Types.Session (ClientId)
+import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 
 server :: ServerConfig -> ScottyM ()
 server cfg = do
@@ -31,7 +32,7 @@ server cfg = do
   post "/upload" $ uploadBinary cfg
   -- post (capture "/upload/:binaryname/:binaryhash)") $ uploadBinary cfg
   get "/js/main.js" $ file "./res/js/main.js"
-  get (capture "/:sid") $ showUI cfg
+  -- get (capture "/:sid") $ showUI cfg
 
 
 -- curl to upload example file:
@@ -39,35 +40,36 @@ server cfg = do
 
 uploadBinary :: ServerConfig -> ActionM ()
 uploadBinary cfg = do
-  (hostBinaryPath :: FilePath) <- param "hostBinaryPath" --used for identification
+  (hostBinaryPath' :: HostBinaryPath) <- param "hostBinaryPath" --used for identification
+  (clientId' :: ClientId) <- param "clientId"
   -- putText $ "You got a file, " <> binaryName <> " " <> show binaryHash
-  files >>= mapM_ (saveBndb hostBinaryPath)
+  files >>= mapM_ (saveBndb clientId' hostBinaryPath')
   where
-    saveBndb :: FilePath -> File -> ActionM ()
-    saveBndb hostBinaryPath ("bndb", finfo) = do
-      h <- BM.saveBndbBytestring (cfg ^. #bndbStorageDir) hostBinaryPath
+    saveBndb :: ClientId -> HostBinaryPath -> File -> ActionM ()
+    saveBndb clientId' hostBinaryPath' ("bndb", finfo) = do
+      h <- BM.saveBndbBytestring (cfg ^. #binaryManagerStorageDir) clientId' hostBinaryPath'
         . cs
         . Wai.fileContent
         $ finfo
       json h
-    saveBndb _ _ = return ()
+    saveBndb _ _ _ = return ()
 
-showUI :: ServerConfig -> ActionM ()
-showUI cfg = do
-  setHeader "Content-Type" "text/html"
-  body <- liftIO $ TIO.readFile "res/client_ui_body.html"
-  (sid :: SessionId) <- param "sid"
-  html $ header sid <> cs body <> footer
-  where
-    tag t contents = "<" <> t <> ">" <> contents <> "</" <> t <> ">"
-    script = tag "script"
-    header sid = "<html><head>" <> script (jsVars sid) <> "</head>"
+-- showUI :: ServerConfig -> ActionM ()
+-- showUI cfg = do
+--   setHeader "Content-Type" "text/html"
+--   body <- liftIO $ TIO.readFile "res/client_ui_body.html"
+--   (sid :: SessionId) <- param "sid"
+--   html $ header sid <> cs body <> footer
+--   where
+--     tag t contents = "<" <> t <> ">" <> contents <> "</" <> t <> ">"
+--     script = tag "script"
+--     header sid = "<html><head>" <> script (jsVars sid) <> "</head>"
 
-    jsVars (SessionId sid) = "sessionId = '" <> cs sid <> "';\n"
-      <> "blazeServerHost = '" <> cs (serverHost cfg) <> "';\n"
-      <> "blazeServerWsPort = '" <> show (serverWsPort cfg) <> "';"
+--     jsVars (SessionId sid) = "sessionId = '" <> cs sid <> "';\n"
+--       <> "blazeServerHost = '" <> cs (serverHost cfg) <> "';\n"
+--       <> "blazeServerWsPort = '" <> show (serverWsPort cfg) <> "';"
     
-    footer = "</html>"
+--     footer = "</html>"
 
 showErrorPage :: ActionM ()
 showErrorPage = do

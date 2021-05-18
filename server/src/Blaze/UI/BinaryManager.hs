@@ -2,7 +2,8 @@ module Blaze.UI.BinaryManager where
 
 import Blaze.UI.Prelude
 import Binja.Core (BNBinaryView)
-import Blaze.UI.Types.BinaryHash (BinaryHash(BinaryHash), getBinaryHash)
+import Blaze.UI.Types.BinaryHash (BinaryHash(BinaryHash))
+import qualified Blaze.UI.Types.BinaryHash as BinaryHash
 import Blaze.UI.Types.BinaryManager
 import System.Directory (copyFile, removeFile, doesFileExist)
 import qualified Binja.Core as BN
@@ -13,7 +14,7 @@ import qualified Data.HashMap.Strict as HashMap
 -- | updates `latestVersion` in BinaryManager
 saveNewVersion :: MonadIO m => BinaryManager -> FilePath -> m ()
 saveNewVersion bm binPath = do
-  h <- getBinaryHash binPath
+  h <- BinaryHash.fromFile binPath
   liftIO $ do
     copyFile binPath (bndbVersionPath bm h)
     removeFile binPath
