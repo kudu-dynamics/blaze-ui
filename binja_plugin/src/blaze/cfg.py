@@ -1,14 +1,21 @@
-import json
 import logging as _logging
 from copy import deepcopy
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, cast
 
 from binaryninja import BinaryView
 from binaryninja.enums import BranchType, EdgePenStyle, HighlightStandardColor, ThemeColor
-from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphNode
-from binaryninjaui import DockContextHandler, FlowGraphWidget, ViewFrame
-from PySide2.QtCore import QObject
-from PySide2.QtGui import QMouseEvent
+from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphEdge, FlowGraphNode
+from binaryninjaui import (
+    ContextMenuManager,
+    DockContextHandler,
+    FlowGraphWidget,
+    Menu,
+    UIActionContext,
+    UIActionHandler,
+    ViewFrame,
+)
+from PySide2.QtCore import QObject, Qt
+from PySide2.QtGui import QContextMenuEvent, QMouseEvent
 from PySide2.QtWidgets import QVBoxLayout, QWidget
 
 from .types import (
@@ -22,8 +29,10 @@ from .types import (
     CfNode,
     EnterFuncNode,
     LeaveFuncNode,
+    MenuOrder,
     ServerCfg,
 )
+from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge
 
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance
@@ -134,68 +143,37 @@ class ICFGWidget(FlowGraphWidget, QObject):
         self._view_frame: ViewFrame = view_frame
         self.blaze_instance: 'BlazeInstance' = blaze_instance
 
+        self.action_handler = UIActionHandler()
+        self.action_handler.setupActionHandler(self)
+        self.context_menu = Menu()
+        self.context_menu_manager = ContextMenuManager(self)
+
+        self.last_node: Optional[FlowGraphNode] = None
+        self.last_edge: Optional[FlowGraphEdge] = None
+
+        # Bind actions to their callbacks
+
+        actions: List[BNAction] = [
+            BNAction('Blaze', 'Prune', MenuOrder.FIRST, self.context_menu_action_prune),
+            BNAction('Blaze', 'Expand Call Node', MenuOrder.EARLY,
+                     self.context_menu_action_expand_call),
+        ]
+
+        bind_actions(self.action_handler, actions)
+        add_actions(self.context_menu, actions)
+
     def set_icfg(self, cfg_id: CfgId, cfg: Cfg):
         self.blaze_instance.graph = ICFGFlowGraph(self.blaze_instance.bv, cfg, cfg_id)
         self.setGraph(self.blaze_instance.graph)
 
-    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-        parent = super(ICFGWidget, self)
-        # if event.button() != Qt.LeftButton or self.blaze_instance.graph is None:
-        if self.blaze_instance.graph is None:
-            return parent.mousePressEvent(event)
+    def prune(self, from_node: CfNode, to_node: CfNode):
+        '''
+        Send a request to the backend that the edge between `from_node` and
+        `to_node` be pruned
+        '''
 
-        if (fg_node := self.getNodeForMouseEvent(event)):
-            self.handle_node_double_click_event(event, fg_node)
-
-        if (fg_edge := self.getEdgeForMouseEvent(event)):
-            fg_edge, swapped = fg_edge
-            if swapped:
-                source, dest = fg_edge.target, fg_edge.source
-            else:
-                source, dest = fg_edge.source, fg_edge.target
-            self.handle_edge_double_click_event(event, source, dest)
-
-    def handle_node_double_click_event(self, event: QMouseEvent, fg_node: FlowGraphNode) -> None:
-        node = self.blaze_instance.graph.node_mapping.get(fg_node)
-
-        if not node:
-            log.error(f'Couldn\'t find node_mapping[{fg_node}]')
-            return
-
-        if node['tag'] != 'Call':
-            log.warning('Did not double-click on a node')
-            return
-
-        call_node = cast(CallNode, node['contents']).copy()
-        call_node['nodeData'] = []
-        log.info(json.dumps(call_node, indent=2))
-        self.blaze_instance.send(
-            BinjaToServer(
-                tag='BSCfgExpandCall',
-                cfgId=self.blaze_instance.graph.pil_icfg_id,
-                callNode=call_node))
-
-    def handle_edge_double_click_event(
-            self,
-            event: QMouseEvent,
-            source_fg_node: FlowGraphNode,
-            dest_fg_node: FlowGraphNode) \
-            -> None:
-
-        source_node = self.blaze_instance.graph.node_mapping.get(source_fg_node)
-        dest_node = self.blaze_instance.graph.node_mapping.get(dest_fg_node)
-        if source_node is None or dest_node is None:
-            raise RuntimeError('Missing node in node_mapping!')
-
-        edge = self.blaze_instance.graph.get_edge(source_node['contents']['uuid'], dest_node['contents']['uuid'])
-        if not edge:
-            raise RuntimeError('Missing edge!')
-
-        if edge['branchType'] not in ('TrueBranch', 'FalseBranch'):
-            raise ValueError('Not a conditional branch')
-
-        from_node = deepcopy(edge['src'])
-        to_node = deepcopy(edge['dst'])
+        from_node = deepcopy(from_node)
+        to_node = deepcopy(to_node)
         from_node['contents']['nodeData'] = []
         to_node['contents']['nodeData'] = []
 
@@ -204,6 +182,112 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 tag='BSCfgRemoveBranch',
                 cfgId=self.blaze_instance.graph.pil_icfg_id,
                 edge=(from_node, to_node)))
+
+    def expand_call(self, node: CallNode):
+        '''
+        Send a request to the backend that the `CallNode` `node` be expanded
+        '''
+
+        call_node = node.copy()
+        call_node['nodeData'] = []
+        # log.info(json.dumps(call_node, indent=2))
+        self.blaze_instance.send(
+            BinjaToServer(
+                tag='BSCfgExpandCall',
+                cfgId=self.blaze_instance.graph.pil_icfg_id,
+                callNode=call_node))
+
+    def context_menu_action_prune(self, context: UIActionContext):
+        '''
+        Context menu action to call `self.prune`. Assumes `self.last_edge` has already
+        been set by `self.mousePressEvent`
+        '''
+
+        if self.last_edge is None:
+            log.error('Did not right-click on an edge')
+            return
+
+        source_node = self.blaze_instance.graph.node_mapping.get(self.last_edge.source)
+        dest_node = self.blaze_instance.graph.node_mapping.get(self.last_edge.target)
+        if source_node is None or dest_node is None:
+            raise RuntimeError('Missing node in node_mapping!')
+
+        edge = self.blaze_instance.graph.get_edge(source_node['contents']['uuid'],
+                                                  dest_node['contents']['uuid'])
+        if not edge:
+            raise RuntimeError('Missing edge!')
+
+        if edge['branchType'] not in ('TrueBranch', 'FalseBranch'):
+            raise ValueError('Not a conditional branch')
+
+        from_node = edge['src']
+        to_node = edge['dst']
+
+        self.prune(from_node, to_node)
+
+    def context_menu_action_expand_call(self, context: UIActionContext):
+        '''
+        Context menu action to call `self.expand_call`. Assumes `self.last_node` has already
+        been set by `self.mousePressEvent`
+        '''
+
+        if not self.last_node:
+            log.error(f'Did not right-click on a CFG node')
+            return
+
+        node = self.blaze_instance.graph.node_mapping.get(self.last_node)
+        if not node or node['tag'] != 'Call':
+            log.error(f'Did not right-click on a Call node')
+            return
+
+        call_node = cast(CallNode, node['contents'])
+        self.expand_call(call_node)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        '''
+        Expand the call node under mouse, if any
+        '''
+
+        if event.button() != Qt.LeftButton or self.blaze_instance.graph is None:
+            return super().mousePressEvent(event)
+
+        if (fg_node := self.getNodeForMouseEvent(event)):
+            node = self.blaze_instance.graph.node_mapping.get(fg_node)
+
+            if not node:
+                log.error(f'Couldn\'t find node_mapping[{fg_node}]')
+                return
+
+            if node['tag'] != 'Call':
+                log.warning('Did not double-click on a node')
+                return
+
+            call_node = cast(CallNode, node['contents'])
+            self.expand_call(call_node)
+
+    def contextMenuEvent(self, event: QContextMenuEvent) -> None:
+        '''
+        Do nothing, to override the parent (`FlowGraphWidget`) behavior
+        '''
+        return
+
+    def mousePressEvent(self, event: QMouseEvent):
+        '''
+        If the right mouse button was clicked, remember the node or edge (if any)
+        under the mouse, and show the context menu
+        '''
+
+        if event.button() != Qt.MouseButton.RightButton:
+            return super().mousePressEvent(event)
+
+        self.last_node = self.getNodeForMouseEvent(event)
+        if (fg_edge := self.getEdgeForMouseEvent(event)):
+            fg_edge, swapped = fg_edge
+            self.last_edge = fix_flowgraph_edge(fg_edge, swapped)
+        else:
+            self.last_edge = None
+
+        self.context_menu_manager.show(self.context_menu, self.action_handler)
 
     def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', view_frame: ViewFrame):
         self.blaze_instance = blaze_instance
