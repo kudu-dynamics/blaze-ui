@@ -98,8 +98,11 @@ saveBndbBytestring bmdir cid hpath s = do
 --   where
 --     versionDir' = bndbStorageDirFromEnv <> "/" <> initialBndbFile
 
--- create :: MonadIO m => FilePath -> m (Either BinaryManagerError BinaryManager)
--- create fp = 
+create :: MonadIO m => HostBinaryPath -> BinaryHash -> m (Either BinaryManagerError BinaryManager)
+create bpath bhash = undefined
+
+getLatestVersionHash :: MonadIO m => BinaryManager -> m BinaryHash
+getLatestVersionHash bm = liftIO . readTVarIO $ bm ^. #latestVersion
 
 data BinaryManagerError
   = FileDoesNotExist FilePath

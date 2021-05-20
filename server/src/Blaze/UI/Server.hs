@@ -35,12 +35,18 @@ import Blaze.UI.Types.Cfg (convertPilCfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.BinaryHash as BinaryHash
+import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Blaze.UI.Db as Db
 import Blaze.Types.Cfg (PilCfg)
 import Blaze.UI.Types.Cfg (CfgId)
 import Data.Time.Clock (getCurrentTime)
 import Blaze.Pretty (pretty)
 import qualified Blaze.UI.BinaryManager as BM
+import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
+import Blaze.UI.Types.Session ( SessionId
+                              , ClientId
+                              , mkSessionId
+                              )
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -54,22 +60,24 @@ sendJSON conn x =
 
 data SessionError
   = InvalidSessionId Text
+  | BinaryManagerError BM.BinaryManagerError
   deriving (Eq, Ord, Show, Generic)
 
 -- | returns session state or creates it.
 -- bool indicates whether or not it was just now created
 getSessionState :: SessionId
+                -> BinaryHash
                 -> AppState
                 -> IO (Either SessionError (Bool, SessionState))
-getSessionState sid st = atomically $ do
+getSessionState sid binHash st = atomically $ do
     m <- readTVar $ st ^. #binarySessions
     case HashMap.lookup sid m of
       Just ss -> return $ Right (False, ss)
       Nothing -> do
-        case sessionIdToBinaryPath sid of
-          Left e -> return . Left $ InvalidSessionId e
-          Right binPath -> do
-            ss <- emptySessionState binPath
+        BM.create (sid ^. #hostBinaryPath) binHash >>= \case
+          Left e -> return . Left $ BinaryManagerError e
+          Right bm -> do
+            ss <- emptySessionState (sid ^. #hostBinaryPath) bm
             modifyTVar (st ^. #binarySessions) $ HashMap.insert sid ss
             return $ Right (True, ss)
 
@@ -79,13 +87,14 @@ removeSessionState sid st = atomically
 
 createBinjaOutbox :: WS.Connection
                   -> SessionState
-                  -> FilePath
+                  -> ClientId
+                  -> HostBinaryPath
                   -> IO ThreadId
-createBinjaOutbox conn ss fp = do
+createBinjaOutbox conn ss cid hpath = do
   q <- newTQueueIO
   t <- forkIO . forever $ do
-    msg <- atomically . readTQueue $ q
-    sendJSON conn . BinjaMessage fp $ msg
+    (bhash, msg) <- atomically . readTQueue $ q
+    sendJSON conn . BinjaMessage cid hpath bhash $ msg
   atomically . modifyTVar (ss ^. #binjaOutboxes)
     $ HashMap.insert t q
   return t
@@ -102,10 +111,16 @@ createWebOutbox conn ss = do
     $ HashMap.insert t q
   return t
 
-sendToBinja :: ServerToBinja -> EventLoop ()
-sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
+sendToBinja_ :: BinaryHash -> ServerToBinja -> EventLoop ()
+sendToBinja_ bhash msg = ask >>= \ctx -> liftIO . atomically $ do
   qs <- fmap HashMap.elems . readTVar $ ctx ^. #binjaOutboxes
-  mapM_ (`writeTQueue` msg) qs
+  mapM_ (`writeTQueue` (bhash, msg)) qs
+
+sendToBinja :: ServerToBinja -> EventLoop ()
+sendToBinja msg = do
+  bm <- view #binaryManager <$> ask
+  h <- BM.getLatestVersionHash bm
+  sendToBinja_ h msg
 
 sendToWeb :: ServerToWeb -> EventLoop ()
 sendToWeb msg = ask >>= \ctx -> liftIO . atomically $ do
@@ -129,13 +144,15 @@ binjaApp localOutboxThreads st conn = do
     Left err -> do
       putText $ "Error parsing JSON: " <> show err
     Right x -> do
-      let fp = x ^. #bvFilePath
-          sid = binaryPathToSessionId fp
-          reply = sendJSON conn . BinjaMessage fp
+      let cid = x ^. #clientId
+          hpath = x ^. #hostBinaryPath
+          bhash = x ^. #bndbHash
+          sid = mkSessionId cid hpath
+          reply = sendJSON conn . BinjaMessage cid hpath bhash
           logInfo txt = do
             reply . SBLogInfo $ txt
             putText txt
-      getSessionState sid st >>= \case
+      getSessionState sid bhash st >>= \case
         Left serr -> putText $ "Session Error: " <> show serr
         Right (justCreated, ss) -> do
           let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
@@ -145,39 +162,41 @@ binjaApp localOutboxThreads st conn = do
               -- check to see if this conn has registered outbox thread
               case HashMap.member sid localOutboxThreads of
                 False -> do
-                  outboxThread <- createBinjaOutbox conn ss fp
+                  outboxThread <- createBinjaOutbox conn ss cid hpath
                   pushEvent
-                  logInfo $ "Blaze Connected. Attached to existing session for binary: " <> cs fp
-                  logInfo "For web plugin, go here:"
-                  logInfo $ webUri (st ^. #serverConfig) sid
+                  logInfo $ "Blaze Connected. Attached to existing session for binary: " <> cs hpath
+                  -- logInfo "For web plugin, go here:"
+                  -- logInfo $ webUri (st ^. #serverConfig) sid
                   binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
                 True -> do
                   pushEvent >> binjaApp localOutboxThreads st conn
 
             True -> do
-              BM.create (st ^. #serverConfig . #bndbStorageDir)
+              let bm = ss ^. #binaryManager
               logInfo $ "Connected:"
-              ebv <- BN.getBinaryView fp
-              case ebv of
-                Left err -> do
-                  reply . SBLogError $ "Blaze cannot open binary: " <> err -- 
-                  putText $ "Cannot open binary: " <> err
-                  atomically . modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
-              -- TODO: maybe send explicit disconnect?
-                  return ()
-                Right bv -> do
-                  BN.updateAnalysisAndWait bv
-                  logInfo $ "Loaded binary: " <> cs fp
-                  logInfo "For web plugin, go here:"
-                  logInfo $ webUri (st ^. #serverConfig) sid
-                  atomically $ putTMVar (ss ^. #binaryView) bv
-                  spawnEventHandler (cs fp) st ss
-                  outboxThread <- createBinjaOutbox conn ss fp
-                  pushEvent
-                  binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
+              spawnEventHandler st ss
+              outboxThread <- createBinjaOutbox conn ss cid hpath
+              pushEvent
+              binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
 
-spawnEventHandler :: FilePath -> AppState -> SessionState -> IO ()
-spawnEventHandler binPath st ss = do
+              -- BM.loadBndb bm bhash >>= \case
+              --   Left err -> do
+              --     reply . SBLogError $ "Blaze cannot open binary: " <> show err
+              --     putText $ "Cannot open binary: " <> show err
+              --     atomically . modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
+              --     -- TODO: maybe send explicit disconnect?
+              --     return ()
+              --   Right bv -> do
+              --     logInfo $ "Loaded binary: " <> cs hpath
+              --     -- logInfo "For web plugin, go here:"
+              --     -- logInfo $ webUri (st ^. #serverConfig) sid
+              --     spawnEventHandler st ss
+              --     outboxThread <- createBinjaOutbox conn ss cid hpath
+              --     pushEvent
+              --     binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
+
+spawnEventHandler :: AppState -> SessionState -> IO ()
+spawnEventHandler st ss = do
   b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
   case b of
     False -> putText "Warning: spawnEventHandler -- event handler already spawned"
@@ -199,53 +218,56 @@ spawnEventHandler binPath st ss = do
       putText "Spawned event handlers"
 
 webUri :: ServerConfig -> SessionId -> Text
-webUri cfg (SessionId sid) = "http://"
-  <> serverHost cfg
-  <> ":" <> show (serverHttpPort cfg)
-  <> "/" <> cs sid
+webUri = undefined
+-- webUri :: ServerConfig -> SessionId -> Text
+-- webUri cfg (SessionId sid) = "http://"
+--   <> serverHost cfg
+--   <> ":" <> show (serverHttpPort cfg)
+--   <> "/" <> cs sid
 
 webApp :: AppState -> SessionId -> WS.Connection -> IO ()
 webApp st sid conn = do
-  let fatalError t = do
-        sendJSON conn . SWLogError $ t
-        removeSessionState sid st
-        WS.sendClose conn t
-      logInfo = sendJSON conn . SWLogInfo
-  getSessionState sid st >>= \case
-    Left serr -> putText $ "Session Error: " <> show serr
-    Right (justCreated, ss) -> do
-      case justCreated of
-        True -> do
-          let efp = sessionIdToBinaryPath sid
-          case efp of
-            Left err -> fatalError err
-            Right fp -> do
-              logInfo $ "Fresh Web client connected sans binja. Loading binary: " <> cs fp
-              ebv <- BN.getBinaryView fp
-              case ebv of
-                Left err -> fatalError err
-                Right bv -> do
-                  BN.updateAnalysisAndWait bv
-                  logInfo $ "Loaded binary: " <> cs fp
-                  atomically $ putTMVar (ss ^. #binaryView) bv
-                  spawnEventHandler (cs fp) st ss
-        False -> return ()
+  return ()
+  -- let fatalError t = do
+  --       sendJSON conn . SWLogError $ t
+  --       removeSessionState sid st
+  --       WS.sendClose conn t
+  --     logInfo = sendJSON conn . SWLogInfo
+  -- getSessionState sid st >>= \case
+  --   Left serr -> putText $ "Session Error: " <> show serr
+  --   Right (justCreated, ss) -> do
+  --     case justCreated of
+  --       True -> do
+  --         let efp = sessionIdToBinaryPath sid
+  --         case efp of
+  --           Left err -> fatalError err
+  --           Right fp -> do
+  --             logInfo $ "Fresh Web client connected sans binja. Loading binary: " <> cs fp
+  --             ebv <- BN.getBinaryView fp
+  --             case ebv of
+  --               Left err -> fatalError err
+  --               Right bv -> do
+  --                 BN.updateAnalysisAndWait bv
+  --                 logInfo $ "Loaded binary: " <> cs fp
+  --                 atomically $ putTMVar (ss ^. #binaryView) bv
+  --                 spawnEventHandler (cs fp) st ss
+  --       False -> return ()
       
-      -- TODO: pass outboxThread in with event
-      _outboxThread <- createWebOutbox conn ss
+  --     -- TODO: pass outboxThread in with event
+  --     _outboxThread <- createWebOutbox conn ss
 
-      forever $ do
-        er <- receiveJSON conn :: IO (Either Text WebToServer)
-        case er of
-          Left err -> do
-            putText $ "Error parsing JSON: " <> show err
-          Right x -> do
-            atomically . writeTQueue (ss ^. #eventInbox) . WebEvent $ x
+  --     forever $ do
+  --       er <- receiveJSON conn :: IO (Either Text WebToServer)
+  --       case er of
+  --         Left err -> do
+  --           putText $ "Error parsing JSON: " <> show err
+  --         Right x -> do
+  --           atomically . writeTQueue (ss ^. #eventInbox) . WebEvent $ x
 
 app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case splitPath of
   ["binja"] -> WS.acceptRequest pconn >>= binjaApp HashMap.empty st
-  ["web", sid] -> WS.acceptRequest pconn >>= webApp st (SessionId $ cs sid)
+  -- ["web", sid] -> WS.acceptRequest pconn >>= webApp st (SessionId $ cs sid)
   _ -> do
     putText $ "Rejected request to invalid path: " <> cs path
     WS.rejectRequest pconn $ "Invalid path: " <> path
@@ -302,7 +324,7 @@ getCfgBinaryView cid = Db.getCfgBinaryHash cid >>= \case
   Nothing -> return . Left $ "Could not find binary hash version for cfg: " <> show cid
   Just h -> do
     bm <- view #binaryManager <$> ask
-    BM.loadVersion bm h >>= \case
+    BM.loadBndb bm h >>= \case
       Left err -> return . Left $ show err
       Right bv -> return . Right $ bv
         

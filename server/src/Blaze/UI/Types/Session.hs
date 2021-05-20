@@ -19,3 +19,6 @@ data SessionId = SessionId
   , hostBinaryPath :: HostBinaryPath
   }
   deriving (Eq, Ord, Show, Generic, Hashable, FromJSON, ToJSON)
+
+mkSessionId :: ClientId -> HostBinaryPath -> SessionId
+mkSessionId = SessionId
