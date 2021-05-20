@@ -2,28 +2,13 @@ module Blaze.UI.Types.Cfg.Snapshot where
 
 import Blaze.Prelude hiding (Symbol)
 
-import Blaze.Types.Pil (Stmt)
-import Blaze.Types.Cfg ( CfNode, CfEdge, Cfg )
-import qualified Blaze.Graph as G
-import Blaze.Graph (Graph)
-import qualified Data.Set as Set
 import qualified Data.HashMap.Strict as HashMap
-import Blaze.Pretty (pretty)
-import Blaze.Cfg.Interprocedural (
-  InterCfg,
-  unInterCfg,
- )
 import System.Random (Random)
-import qualified Blaze.Types.Cfg as Cfg
 import Blaze.Types.Cfg (PilCfg)
-import Blaze.Function (Function)
 import Blaze.UI.Types.Cfg (CfgId)
-import Blaze.Types.Graph (Graph)
-import qualified Blaze.Types.Graph as G
 import Blaze.Types.Graph.Alga (AlgaGraph)
 import Data.Time.Clock (UTCTime)
-import Control.Concurrent.STM.TVar (TVar)
-import Control.Concurrent.STM.TMVar (TMVar, takeTMVar, putTMVar)
+import Control.Concurrent.STM.TMVar (TMVar)
 import Database.Selda.SqlType ( Lit(LCustom)
                               , SqlTypeRep(TBlob)
                               , SqlType

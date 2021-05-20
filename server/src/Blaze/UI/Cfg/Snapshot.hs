@@ -2,28 +2,11 @@ module Blaze.UI.Cfg.Snapshot where
 
 import Blaze.Prelude hiding (Symbol)
 
-import Blaze.Types.Pil (Stmt)
-import Blaze.Types.Cfg ( CfNode, CfEdge, Cfg )
 import qualified Blaze.Graph as G
-import qualified Data.HashMap.Strict as HMap
-import Blaze.Pretty (pretty)
-import Blaze.Cfg.Interprocedural (
-  InterCfg,
-  unInterCfg,
- )
-import System.Random (Random)
-import qualified Blaze.Types.Cfg as Cfg
 import Blaze.Types.Cfg (PilCfg)
-import Blaze.Function (Function)
 import Blaze.UI.Types.Cfg (CfgId)
-import Blaze.Types.Graph (Graph)
-import qualified Blaze.Types.Graph as G
-import Blaze.Types.Graph.Alga (AlgaGraph)
-import Data.Time.Clock (UTCTime)
-import Control.Concurrent.STM.TVar (TVar)
 import Blaze.UI.Types.Cfg.Snapshot
-import Blaze.UI.Types (EventLoop)
-import Control.Concurrent.STM.TMVar (TMVar, takeTMVar, putTMVar, readTMVar)
+import Control.Concurrent.STM.TMVar (TMVar, takeTMVar, putTMVar)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.UI.Types.Graph as Graph
 

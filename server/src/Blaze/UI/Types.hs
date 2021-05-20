@@ -8,7 +8,6 @@ module Blaze.UI.Types
 import Blaze.UI.Prelude
 import qualified System.Envy as Envy
 import System.Envy (fromEnv, FromEnv)
-import Binja.Core (BNBinaryView)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.Types.Pil.Checker as Ch
 import Blaze.Types.Pil (Stmt)
@@ -18,7 +17,7 @@ import Blaze.UI.Types.WebMessages as WebMessages
 import Blaze.Function (Function)
 import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
 import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
-import Blaze.UI.Types.Cfg.Snapshot (BranchId, BranchTransport)
+-- import Blaze.UI.Types.Cfg.Snapshot (BranchId, BranchTransport)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.Db (MonadDb(withDb))
@@ -135,8 +134,7 @@ data Event = WebEvent WebToServer
            deriving (Eq, Ord, Show, Generic)
 
 data EventLoopCtx = EventLoopCtx
-  { binaryHash :: BinaryHash
-  , binaryManager :: BinaryManager
+  { binaryManager :: BinaryManager
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue (BinaryHash, ServerToBinja)))
   , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))

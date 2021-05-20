@@ -5,14 +5,11 @@ module Blaze.UI.Server where
 
 import Blaze.UI.Prelude
 import Blaze.Import.Source.BinaryNinja (BNImporter(BNImporter))
-import qualified Blaze.Import.CallGraph
 import qualified Data.Aeson as Aeson
 import qualified Network.WebSockets as WS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Char8 as BSC
--- import Control.Concurrent (threadDelay)
 import Binja.Core (BNBinaryView)
-import qualified Binja.Core as BN
 import qualified Binja.Function as BNFunc
 import Blaze.UI.Types hiding ( cfg, callNode )
 import qualified Data.HashMap.Strict as HashMap
@@ -30,17 +27,13 @@ import qualified Blaze.Cfg.Interprocedural as ICfg
 import Blaze.Pretty (prettyIndexedStmts, showHex)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
-import qualified Blaze.UI.Web.Pil as WebPil
 import Blaze.UI.Types.Cfg (convertPilCfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Cfg.Snapshot as Snapshot
-import qualified Blaze.UI.Types.BinaryHash as BinaryHash
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Blaze.UI.Db as Db
 import Blaze.Types.Cfg (PilCfg)
 import Blaze.UI.Types.Cfg (CfgId)
-import Data.Time.Clock (getCurrentTime)
-import Blaze.Pretty (pretty)
 import qualified Blaze.UI.BinaryManager as BM
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session ( SessionId
@@ -175,7 +168,6 @@ binjaApp localOutboxThreads st conn = do
               pushEvent >> binjaApp localOutboxThreads st conn
 
         True -> do
-          let bm = ss ^. #binaryManager
           logInfo $ "Connected:"
           spawnEventHandler st ss
           outboxThread <- createBinjaOutbox conn ss cid hpath
@@ -208,7 +200,6 @@ spawnEventHandler st ss = do
       eventTid <- forkIO . forever $ do
         (bhash, msg) <- atomically . readTQueue $ ss ^. #eventInbox
         let ctx = EventLoopCtx
-                  bhash
                   (ss ^. #binaryManager)
                   (ss ^. #binjaOutboxes)
                   (ss ^. #webOutboxes)
@@ -216,13 +207,12 @@ spawnEventHandler st ss = do
                   (st ^. #serverConfig . #sqliteFilePath)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
-        void . forkIO . void $ runEventLoop (mainEventLoop bhash msg) ctx
+        BM.setLatest bhash $ ss ^. #binaryManager
+        void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx
       
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
       putText "Spawned event handlers"
 
-webUri :: ServerConfig -> SessionId -> Text
-webUri = undefined
 -- webUri :: ServerConfig -> SessionId -> Text
 -- webUri cfg (SessionId sid) = "http://"
 --   <> serverHost cfg
@@ -230,7 +220,7 @@ webUri = undefined
 --   <> "/" <> cs sid
 
 webApp :: AppState -> SessionId -> WS.Connection -> IO ()
-webApp st sid conn = do
+webApp _st _sid _conn = do
   return ()
   -- let fatalError t = do
   --       sendJSON conn . SWLogError $ t
@@ -350,12 +340,12 @@ getLatestBinaryView = do
   bm <- view #binaryManager <$> ask
   BM.loadLatest bm >>= either (logError . show) return
 
-mainEventLoop :: BinaryHash -> Event -> EventLoop ()
-mainEventLoop bhash (WebEvent msg) = handleWebEvent bhash msg
-mainEventLoop bhash (BinjaEvent msg) = handleBinjaEvent bhash msg
+mainEventLoop :: Event -> EventLoop ()
+mainEventLoop (WebEvent msg) = handleWebEvent msg
+mainEventLoop (BinjaEvent msg) = handleBinjaEvent msg
 
-handleWebEvent :: BinaryHash -> WebToServer -> EventLoop ()
-handleWebEvent bhash msg =
+handleWebEvent :: WebToServer -> EventLoop ()
+handleWebEvent _msg =
   debug "Web events currently not handled"
   -- \case
   -- WSNoop -> debug "web noop"
@@ -390,8 +380,8 @@ handleWebEvent bhash msg =
   -- where
   --   bvi = BNImporter bv
 
-handleBinjaEvent :: BinaryHash -> BinjaToServer -> EventLoop ()
-handleBinjaEvent bhash = \case
+handleBinjaEvent :: BinjaToServer -> EventLoop ()
+handleBinjaEvent = \case
   BSConnect -> debug "Binja explicitly connected"  
   BSTextMessage t -> do
     debug $ "Message from binja: " <> t
@@ -476,7 +466,7 @@ handleBinjaEvent bhash = \case
     
   BSCfgRemoveBranch cfgId' (node1, node2) -> do
     debug "Binja remove branch"
-    bv <- getCfgBinaryView cfgId'
+    -- bv <- getCfgBinaryView cfgId'
     mCfg <- getCfg cfgId'
     case mCfg of
       Nothing -> sendToBinja
@@ -495,7 +485,7 @@ handleBinjaEvent bhash = \case
 
   BSCfgRemoveNode cfgId' node' -> do
     debug "Binja remove node"
-    bv <- getCfgBinaryView cfgId'
+    -- bv <- getCfgBinaryView cfgId'
     mCfg <- getCfg cfgId'
     case mCfg of
       Nothing -> sendToBinja

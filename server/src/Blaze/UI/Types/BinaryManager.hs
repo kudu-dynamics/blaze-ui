@@ -4,9 +4,8 @@ import Blaze.UI.Prelude
 import Binja.Core (BNBinaryView)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Data.HashMap.Strict as HashMap
-import Blaze.UI.Types.BinaryHash (BinaryHash(BinaryHash))
 import qualified Blaze.UI.Types.BinaryHash as BinaryHash
-import System.Directory (copyFile, removeFile, doesFileExist, createDirectoryIfMissing)
+import System.Directory (createDirectoryIfMissing)
 import qualified Data.ByteString as BS
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import qualified Blaze.UI.Types.HostBinaryPath as HBP
@@ -43,6 +42,9 @@ data BinaryManager = BinaryManager
   -- right now they just get stored here forever
   , cachedViews :: TVar (HashMap BinaryHash BNBinaryView)
   } deriving (Generic)
+
+setLatest :: MonadIO m => BinaryHash -> BinaryManager -> m ()
+setLatest h bm = liftIO . atomically $ writeTVar (bm ^. #latestVersion) h
 
 getBndbVersionsDir :: BinaryManagerStorageDir
                    -> ClientId

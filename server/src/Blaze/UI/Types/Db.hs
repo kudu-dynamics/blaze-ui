@@ -1,4 +1,6 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE InstanceSigs #-}
+
 module Blaze.UI.Types.Db where
 
 import Blaze.UI.Prelude hiding ((:*:))

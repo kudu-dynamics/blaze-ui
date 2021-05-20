@@ -9,20 +9,9 @@ import qualified Prelude as P
 import Blaze.UI.Types.Db as Exports
 import Database.Selda
 import Database.Selda.SQLite
-import Blaze.UI.Types.Cfg (CfgId(CfgId), CfgTransport)
+import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.Types.Cfg (PilCfg)
 import qualified Blaze.UI.Types.Cfg as Cfg
-import Blaze.Types.Pil (Stmt)
-import Blaze.Function (Function)
-import qualified Data.Aeson as Aeson
-import Unsafe.Coerce (unsafeCoerce)
-import qualified Database.Selda.SqlType as SqlT
-import Database.Selda.SqlType ( Lit(LBlob, LCustom)
-                              , SqlTypeRep(TBlob)
-                              , SqlValue(SqlBlob)
-                              )
-import System.Directory (doesFileExist)
-import Blaze.UI.Types (EventLoop)
 import Data.Time.Clock (getCurrentTime)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, BranchTree, SnapshotInfo(SnapshotInfo))
