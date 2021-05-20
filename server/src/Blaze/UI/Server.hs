@@ -68,18 +68,21 @@ data SessionError
 getSessionState :: SessionId
                 -> BinaryHash
                 -> AppState
-                -> IO (Either SessionError (Bool, SessionState))
+                -> IO (Bool, SessionState)
 getSessionState sid binHash st = atomically $ do
     m <- readTVar $ st ^. #binarySessions
     case HashMap.lookup sid m of
-      Just ss -> return $ Right (False, ss)
+      Just ss -> return (False, ss)
       Nothing -> do
-        BM.create (sid ^. #hostBinaryPath) binHash >>= \case
-          Left e -> return . Left $ BinaryManagerError e
-          Right bm -> do
-            ss <- emptySessionState (sid ^. #hostBinaryPath) bm
-            modifyTVar (st ^. #binarySessions) $ HashMap.insert sid ss
-            return $ Right (True, ss)
+        bm <- BM.create
+          (st ^. #serverConfig . #binaryManagerStorageDir)
+          (sid ^. #clientId)
+          (sid ^. #hostBinaryPath)
+          binHash
+        ss <- emptySessionState (sid ^. #hostBinaryPath) bm
+        modifyTVar (st ^. #binarySessions)
+          $ HashMap.insert sid ss
+        return (True, ss)
 
 removeSessionState :: SessionId -> AppState -> IO ()
 removeSessionState sid st = atomically
@@ -152,32 +155,32 @@ binjaApp localOutboxThreads st conn = do
           logInfo txt = do
             reply . SBLogInfo $ txt
             putText txt
-      getSessionState sid bhash st >>= \case
-        Left serr -> putText $ "Session Error: " <> show serr
-        Right (justCreated, ss) -> do
-          let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
-                          . BinjaEvent $ x ^. #action
-          case justCreated of
+      (justCreated, ss) <- getSessionState sid bhash st
+      let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
+                      . (bhash,)
+                      . BinjaEvent
+                      $ x ^. #action
+      case justCreated of
+        False -> do
+          -- check to see if this conn has registered outbox thread
+          case HashMap.member sid localOutboxThreads of
             False -> do
-              -- check to see if this conn has registered outbox thread
-              case HashMap.member sid localOutboxThreads of
-                False -> do
-                  outboxThread <- createBinjaOutbox conn ss cid hpath
-                  pushEvent
-                  logInfo $ "Blaze Connected. Attached to existing session for binary: " <> cs hpath
-                  -- logInfo "For web plugin, go here:"
-                  -- logInfo $ webUri (st ^. #serverConfig) sid
-                  binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
-                True -> do
-                  pushEvent >> binjaApp localOutboxThreads st conn
-
-            True -> do
-              let bm = ss ^. #binaryManager
-              logInfo $ "Connected:"
-              spawnEventHandler st ss
               outboxThread <- createBinjaOutbox conn ss cid hpath
               pushEvent
+              logInfo $ "Blaze Connected. Attached to existing session for binary: " <> show hpath
+              -- logInfo "For web plugin, go here:"
+              -- logInfo $ webUri (st ^. #serverConfig) sid
               binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
+            True -> do
+              pushEvent >> binjaApp localOutboxThreads st conn
+
+        True -> do
+          let bm = ss ^. #binaryManager
+          logInfo $ "Connected:"
+          spawnEventHandler st ss
+          outboxThread <- createBinjaOutbox conn ss cid hpath
+          pushEvent
+          binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
 
               -- BM.loadBndb bm bhash >>= \case
               --   Left err -> do
@@ -203,8 +206,9 @@ spawnEventHandler st ss = do
     True -> do
       -- spawns event handler workers for new messages
       eventTid <- forkIO . forever $ do
-        msg <- atomically . readTQueue $ ss ^. #eventInbox
+        (bhash, msg) <- atomically . readTQueue $ ss ^. #eventInbox
         let ctx = EventLoopCtx
+                  bhash
                   (ss ^. #binaryManager)
                   (ss ^. #binjaOutboxes)
                   (ss ^. #webOutboxes)
@@ -212,7 +216,7 @@ spawnEventHandler st ss = do
                   (st ^. #serverConfig . #sqliteFilePath)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
-        void . forkIO $ runEventLoop (mainEventLoop msg) ctx
+        void . forkIO . void $ runEventLoop (mainEventLoop bhash msg) ctx
       
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
       putText "Spawned event handlers"
@@ -319,56 +323,75 @@ getCfg cid = CfgUI.getCfg cid >>= \case
 ------------------------------------------
 --- main event handler
 
-getCfgBinaryView :: CfgId -> EventLoop (Either Text BNBinaryView)
+-- | log error sends error to binja, prints to server log, and halts eventloop
+-- (maybe should be named something more than "log...")
+logError :: Text -> EventLoop a
+logError errMsg = do
+  sendToBinja . SBLogError $ errMsg
+  putText $ "ERROR: " <> errMsg
+  throwError $ EventLoopError errMsg
+
+logWarn :: Text -> EventLoop ()
+logWarn warnMsg = do
+  sendToBinja . SBLogWarn $ warnMsg
+  putText $ "WARNING: " <> warnMsg
+
+getCfgBinaryView :: CfgId -> EventLoop (BNBinaryView, BinaryHash)
 getCfgBinaryView cid = Db.getCfgBinaryHash cid >>= \case
-  Nothing -> return . Left $ "Could not find binary hash version for cfg: " <> show cid
+  Nothing ->
+    logError $ "Could not find binary hash version for cfg: " <> show cid
+    
   Just h -> do
     bm <- view #binaryManager <$> ask
-    BM.loadBndb bm h >>= \case
-      Left err -> return . Left $ show err
-      Right bv -> return . Right $ bv
-        
+    BM.loadBndb bm h >>= either (logError . show) (return . (,h))
 
-mainEventLoop :: BNBinaryView -> Event -> EventLoop ()
-mainEventLoop bv (WebEvent msg) = handleWebEvent bv msg
-mainEventLoop bv (BinjaEvent msg) = handleBinjaEvent bv msg
+getLatestBinaryView :: EventLoop (BNBinaryView, BinaryHash)
+getLatestBinaryView = do
+  bm <- view #binaryManager <$> ask
+  BM.loadLatest bm >>= either (logError . show) return
 
-handleWebEvent :: BNBinaryView -> WebToServer -> EventLoop ()
-handleWebEvent bv = \case
-  WSNoop -> debug "web noop"
+mainEventLoop :: BinaryHash -> Event -> EventLoop ()
+mainEventLoop bhash (WebEvent msg) = handleWebEvent bhash msg
+mainEventLoop bhash (BinjaEvent msg) = handleBinjaEvent bhash msg
 
-  WSGetFunctionsList -> do
-    funcs <- liftIO $ Blaze.Import.CallGraph.getFunctions bvi
-    -- sendToWeb $ SWPilType WebPil.testPilType
-    -- sendToWeb $ SWProblemType WebPil.testCallOp
-    sendToWeb $ SWFunctionsList funcs
+handleWebEvent :: BinaryHash -> WebToServer -> EventLoop ()
+handleWebEvent bhash msg =
+  debug "Web events currently not handled"
+  -- \case
+  -- WSNoop -> debug "web noop"
+
+  -- WSGetFunctionsList -> do
+  --   funcs <- liftIO $ Blaze.Import.CallGraph.getFunctions bvi
+  --   -- sendToWeb $ SWPilType WebPil.testPilType
+  --   -- sendToWeb $ SWProblemType WebPil.testCallOp
+  --   sendToWeb $ SWFunctionsList funcs
     
-  WSTextMessage t -> do
-    debug $ "Text Message from Web: " <> t
-    sendToWeb $ SWTextMessage "I got your message and am flying with it!"
-    sendToBinja . SBLogInfo $ "From the Web UI: " <> t
+  -- WSTextMessage t -> do
+  --   debug $ "Text Message from Web: " <> t
+  --   sendToWeb $ SWTextMessage "I got your message and am flying with it!"
+  --   sendToBinja . SBLogInfo $ "From the Web UI: " <> t
 
-  WSGetTypeReport fn -> do
-    debug $ "Generating type report for " <> show fn
-    etr <- getFunctionTypeReport bv (fn ^. #address)
-    case etr of
-      Left err -> do
-        let msg = "Failed to generate type report: " <> err
-        debug msg
-        sendToWeb . SWLogError $ msg
+  -- WSGetTypeReport fn -> do
+  --   debug $ "Generating type report for " <> show fn
+  --   etr <- getFunctionTypeReport bv (fn ^. #address)
+  --   case etr of
+  --     Left err -> do
+  --       let msg = "Failed to generate type report: " <> err
+  --       debug msg
+  --       sendToWeb . SWLogError $ msg
 
-      Right (func, tr) -> do
-        printTypeReportToConsole func tr
-        let tr' = WebPil.toTypeReport tr
-        -- let tr'' = tr' & #symStmts %~ (take 1 . drop 7)
-        --let tr'' = tr' & #symStmts .~ WebPil.testCallOp
-        liftIO $ pprint tr'
-        sendToWeb $ SWFunctionTypeReport tr'
-  where
-    bvi = BNImporter bv
+  --     Right (func, tr) -> do
+  --       printTypeReportToConsole func tr
+  --       let tr' = WebPil.toTypeReport tr
+  --       -- let tr'' = tr' & #symStmts %~ (take 1 . drop 7)
+  --       --let tr'' = tr' & #symStmts .~ WebPil.testCallOp
+  --       liftIO $ pprint tr'
+  --       sendToWeb $ SWFunctionTypeReport tr'
+  -- where
+  --   bvi = BNImporter bv
 
-handleBinjaEvent :: BNBinaryView -> BinjaToServer -> EventLoop ()
-handleBinjaEvent bv = \case
+handleBinjaEvent :: BinaryHash -> BinjaToServer -> EventLoop ()
+handleBinjaEvent bhash = \case
   BSConnect -> debug "Binja explicitly connected"  
   BSTextMessage t -> do
     debug $ "Message from binja: " <> t
@@ -384,6 +407,7 @@ handleBinjaEvent bv = \case
         $ "Here is your important integer: " <> show n
       
   BSTypeCheckFunction addr -> do
+    (bv, _) <- getLatestBinaryView
     etr <- getFunctionTypeReport bv (fromIntegral addr)
     case etr of
       Left err -> do
@@ -399,7 +423,8 @@ handleBinjaEvent bv = \case
   -- Creates new CFG from function. Also create a new snapshot
   -- where the root node is the auto-cfg
   -- Sends back two messages: one auto-cfg, one new snapshot tree
-  BSCfgNew funcAddr binHash -> do
+  BSCfgNew funcAddr -> do
+    (bv, bhash) <- getLatestBinaryView
     mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
     case mfunc of
       Nothing -> sendToBinja
@@ -411,7 +436,7 @@ handleBinjaEvent bv = \case
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
             let pcfg = r ^. #result
-            (bid, cid, snapBranch) <- Db.saveNewCfgAndBranch (func ^. #address) pcfg
+            (bid, cid, snapBranch) <- Db.saveNewCfgAndBranch bhash (func ^. #address) pcfg
             CfgUI.addCfg cid pcfg 
             -- TODO: this calls convertPilCfg and Snapshot.toTransport twice
             -- instead, do it once and pass converted cfg to db saving func
@@ -421,6 +446,7 @@ handleBinjaEvent bv = \case
         debug "Created new branch and added auto-cfg."
 
   BSCfgExpandCall cfgId' callNode -> do
+    (bv, _bhash) <- getCfgBinaryView cfgId'
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
     mCfg <- getCfg cfgId'
     case mCfg of
@@ -450,6 +476,7 @@ handleBinjaEvent bv = \case
     
   BSCfgRemoveBranch cfgId' (node1, node2) -> do
     debug "Binja remove branch"
+    bv <- getCfgBinaryView cfgId'
     mCfg <- getCfg cfgId'
     case mCfg of
       Nothing -> sendToBinja
@@ -468,6 +495,7 @@ handleBinjaEvent bv = \case
 
   BSCfgRemoveNode cfgId' node' -> do
     debug "Binja remove node"
+    bv <- getCfgBinaryView cfgId'
     mCfg <- getCfg cfgId'
     case mCfg of
       Nothing -> sendToBinja

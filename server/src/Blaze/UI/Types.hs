@@ -62,7 +62,6 @@ data BinjaToServer = BSConnect
 
                    | BSCfgNew
                      { startFuncAddress :: Word64
-                     , binaryHash :: BinaryHash
                      }
                    | BSCfgExpandCall
                      { cfgId :: CfgId
@@ -136,7 +135,8 @@ data Event = WebEvent WebToServer
            deriving (Eq, Ord, Show, Generic)
 
 data EventLoopCtx = EventLoopCtx
-  { binaryManager :: BinaryManager
+  { binaryHash :: BinaryHash
+  , binaryManager :: BinaryManager
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue (BinaryHash, ServerToBinja)))
   , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
@@ -148,11 +148,15 @@ data EventLoopState = EventLoopState
   , webOutput :: [ServerToWeb]
   } deriving (Generic)
 
-newtype EventLoop a = EventLoop { _runEventLoop :: ReaderT EventLoopCtx IO a }
+data EventLoopError = EventLoopError Text
+  deriving (Eq, Ord, Show, Generic)
+
+newtype EventLoop a = EventLoop { _runEventLoop :: ReaderT EventLoopCtx (ExceptT EventLoopError IO) a }
   deriving newtype ( Functor
                    , Applicative
                    , Monad
                    , MonadReader EventLoopCtx
+                   , MonadError EventLoopError
                    , MonadIO
                    , MonadThrow
                    , MonadCatch
@@ -164,12 +168,11 @@ instance MonadDb EventLoop where
     ctx <- ask
     withSQLite (ctx ^. #sqliteFilePath) m
 
-
-runEventLoop :: EventLoop a -> EventLoopCtx -> IO a
-runEventLoop m ctx = flip runReaderT ctx $ _runEventLoop m
+runEventLoop :: EventLoop a -> EventLoopCtx -> IO (Either EventLoopError a)
+runEventLoop m ctx = runExceptT . flip runReaderT ctx $ _runEventLoop m
 
 forkEventLoop :: EventLoop () -> EventLoop ThreadId
-forkEventLoop m = ask >>= \ctx -> liftIO . forkIO $ runEventLoop m ctx
+forkEventLoop m = ask >>= \ctx -> liftIO . forkIO . void $ runEventLoop m ctx
 
 forkEventLoop_ :: EventLoop () -> EventLoop ()
 forkEventLoop_ = void . forkEventLoop
@@ -190,7 +193,7 @@ data SessionState = SessionState
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue (BinaryHash, ServerToBinja)))
   , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
   , eventHandlerThread :: TMVar ThreadId
-  , eventInbox :: TQueue Event
+  , eventInbox :: TQueue (BinaryHash, Event)
   } deriving (Generic)
 
 emptySessionState :: HostBinaryPath -> BinaryManager -> STM SessionState

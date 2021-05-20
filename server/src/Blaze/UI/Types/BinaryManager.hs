@@ -98,8 +98,11 @@ saveBndbBytestring bmdir cid hpath s = do
 --   where
 --     versionDir' = bndbStorageDirFromEnv <> "/" <> initialBndbFile
 
-create :: MonadIO m => HostBinaryPath -> BinaryHash -> m (Either BinaryManagerError BinaryManager)
-create bpath bhash = undefined
+create :: BinaryManagerStorageDir -> ClientId -> HostBinaryPath -> BinaryHash -> STM BinaryManager
+create bmdir cid bpath bhash = BinaryManager
+  (getBndbVersionsDir bmdir cid bpath)
+  <$> newTVar bhash
+  <*> newTVar HashMap.empty
 
 getLatestVersionHash :: MonadIO m => BinaryManager -> m BinaryHash
 getLatestVersionHash bm = liftIO . readTVarIO $ bm ^. #latestVersion
