@@ -1,3 +1,4 @@
 {
-    "stubPath": "./stubs"
+    "stubPath": "./stubs",
+    "reportUnnecessaryComparison": "warning"
 }

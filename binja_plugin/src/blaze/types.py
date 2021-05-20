@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict, Union
+import enum
+from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict, Union, cast
 
 # T = TypeVar('T')
 # TypedDict cannot be polymorphic/generic
@@ -121,3 +122,17 @@ class BinjaToServer(TypedDict, total=False):
 class BinjaMessage(TypedDict):
     bvFilePath: str
     action: Union[BinjaToServer, ServerToBinja]
+
+
+# From binaryninja-api/ui/action.h
+class MenuOrder(enum.IntEnum):
+    FIRST = 0
+    EARLY = 64
+    NORMAL = 128
+    LATE = 192
+    LAST = 255
+
+    def to_int(self) -> Literal[0, 64, 128, 192, 255]:
+        i = int(self)
+        assert i in {0, 64, 128, 192, 255}
+        return cast(Literal[0, 64, 128, 192, 255], i)
