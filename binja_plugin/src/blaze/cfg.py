@@ -5,6 +5,12 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, cast
 from binaryninja import BinaryView
 from binaryninja.enums import BranchType, EdgePenStyle, HighlightStandardColor, ThemeColor
 from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphEdge, FlowGraphNode
+from binaryninja.interaction import (
+    MessageBoxButtonResult,
+    MessageBoxButtonSet,
+    MessageBoxIcon,
+    show_message_box,
+)
 from binaryninjaui import (
     ContextMenuManager,
     DockContextHandler,
@@ -125,16 +131,23 @@ class ICFGFlowGraph(FlowGraph):
                 branch_type, nodes[edge['dst']['contents']['uuid']], edge_style)
 
     @property
-    def nodes(self):
+    def nodes(self) -> Dict[UUID, CfNode]:
         return self.pil_icfg['nodes']
 
+    @property
+    def edges(self) -> List[CfEdge]:
+        return self.pil_icfg['edges']
+
     def get_edge(self, source_id: str = None, dest_id: str = None) -> Optional[CfEdge]:
-        for edge in self.pil_icfg['edges']:
+        for edge in self.edges:
             if (source_id is None or edge['src']['contents']['uuid'] == source_id) and \
                (dest_id is None or edge['dst']['contents']['uuid'] == dest_id):
                 return edge
 
         return None
+
+    def get_edges_from(self, source_id: str) -> List[CfEdge]:
+        return [edge for edge in self.edges if source_id == edge['src']['contents']['uuid']]
 
 
 class ICFGWidget(FlowGraphWidget, QObject):
@@ -222,6 +235,32 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         from_node = edge['src']
         to_node = edge['dst']
+
+        # 1. check if there exists a paired conditional branch
+
+        # this must be a list of len 1 or 2, because the edge we're looking
+        # at must be a conditional, and it must exist itself
+        #   if len == 2, there is another conditional and we can carry on
+        #   if len == 1, this is the only remaining conditional and we want to verify its deletion
+        edges_from_source: List[CfEdge] = \
+            self.blaze_instance.graph.get_edges_from(from_node['contents']['uuid'])
+
+        if len(edges_from_source) == 1:
+            # verify the only node is ourself, for sanity
+            if edges_from_source[0]['dst']['contents']['uuid'] != to_node['contents']['uuid']:
+                raise RuntimeError("I don't exist!")  # XXX uh oh! ... better msg needed
+
+            # 2. popup modal
+            # binaryninja.interaction.show_message_box
+            to_continue: Optional[MessageBoxButtonResult] = show_message_box(
+                "Blaze",
+                "Pruning an isolated conditional branch! This will remove all nodes only reachable from this edge. Continue?",
+                buttons=MessageBoxButtonSet.YesNoButtonSet,
+                icon=MessageBoxIcon.WarningIcon)
+
+            # 3. if cancel, return
+            if to_continue == MessageBoxButtonResult.NoButton:
+                return
 
         self.prune(from_node, to_node)
 
