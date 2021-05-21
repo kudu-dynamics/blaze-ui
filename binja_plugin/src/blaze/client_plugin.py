@@ -8,6 +8,7 @@ import queue
 import tempfile
 import threading
 from typing import Dict, Literal, Optional, Union, cast
+import uuid
 
 import websockets
 from binaryninja import BinaryView, PluginCommand
@@ -17,7 +18,7 @@ from PySide2.QtWidgets import QApplication, QWidget
 from websockets.client import WebSocketClientProtocol
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
-from .types import BinjaMessage, BinjaToServer, CfgId, ServerCfg, ServerToBinja
+from .types import BinjaMessage, BinjaToServer, CfgId, ServerCfg, ServerToBinja, BlazeConfig
 
 LOG_LEVEL = 'INFO'
 BLAZE_UI_HOST = os.environ.get('BLAZE_UI_HOST', 'localhost')
@@ -35,6 +36,22 @@ def register_for_function(action, description):
 
     return wrapper
 
+def get_blaze_config() -> BlazeConfig:
+    "Gets config from .blaze, or creates it"
+    try:
+        f = open(".blaze", "r")
+        data = f.read()
+        cfg = json.loads(data)
+        return cfg
+    except IOError:
+        f = open(".blaze", "w")
+        cfg = {'client_id': str(uuid.uuid4())}
+        data = json.dumps(cfg)
+        f.write(data)
+        log.info("Created .blaze config file")
+        f.close()
+    finally:
+        f.close()
 
 def register(action, description):
     def wrapper(f):
@@ -43,12 +60,14 @@ def register(action, description):
 
     return wrapper
 
+    
 
 class BlazeInstance():
     def __init__(self, bv: BinaryView, blaze: 'BlazePlugin'):
         self.bv: BinaryView = bv
         self.blaze: 'BlazePlugin' = blaze
         self.graph: Optional[ICFGFlowGraph] = None
+        self.blazeConfig: BlazeConfig = get_blaze_config()
 
     def send(self, msg: BinjaToServer):
         self.blaze.send(self.bv, msg)
@@ -119,7 +138,7 @@ class BlazePlugin():
                 msg = "Is it ok to save analysis database to " + bndb_filename + " ?"
             to_save: Optional[MessageBoxButtonResult] = show_message_box(
                 "Blaze",
-                msg
+                msg,
                 buttons=MessageBoxButtonSet.YesNoButtonSet,
                 icon=MessageBoxIcon.WarningIcon
             )

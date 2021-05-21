@@ -12,15 +12,16 @@ Address = int
 Word64 = int
 UUID = str
 CfgId = UUID
-
+ClientId = UUID
 
 class Symbol(TypedDict):
     _symbolName: str
     _symbolRawName: str
 
-
+class BlazeConfig(TypedDict):
+    client_id: ClientId
+    
 FuncParamInfo = Any
-
 
 class Function(TypedDict):
     symbol: Optional[Symbol]
