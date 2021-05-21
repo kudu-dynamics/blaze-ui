@@ -25,7 +25,7 @@ class BinaryNinjaUILoggingHandler(logging.Handler):
             binaryninja.log_warn(f'Unknown log level: {record.levelno} ({record.levelname})')
 
 
-def setup_logging():
+def setup_logging() -> BinaryNinjaUILoggingHandler:
     # for handler in list(logging.root.handlers):
     #     if any(t.__name__ == BinaryNinjaUILoggingHandler.__name__
     #            for t in handler.__class__.__mro__):
@@ -37,5 +37,7 @@ def setup_logging():
     logging.getLogger(__name__).handlers = [handler]
     logging.root.level = min(LOG_LEVEL, logging.root.level)
 
+    return handler
 
-setup_logging()
+
+ui_log_handler = setup_logging()

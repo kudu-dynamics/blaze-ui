@@ -20,11 +20,12 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-from PySide2.QtCore import QObject, Qt
+from PySide2.QtCore import QEvent, QObject, Qt
 from PySide2.QtGui import QContextMenuEvent, QMouseEvent
 from PySide2.QtWidgets import QVBoxLayout, QWidget
 
 from .types import (
+    BINARYNINJAUI_CUSTOM_EVENT,
     UUID,
     BasicBlockNode,
     BinjaToServer,
@@ -43,6 +44,8 @@ from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance
 
+VERBOSE = False
+
 log = _logging.getLogger(__name__)
 
 
@@ -60,9 +63,9 @@ def get_edge_type(edge: CfEdge, cfg: Cfg) -> Tuple[BranchType, Optional[EdgeStyl
     node_from = cfg['nodes'][edge['src']['contents']['uuid']]
 
     if node_from['tag'] == 'Call':
-        return (BranchType.UserDefinedBranch,
-                EdgeStyle(
-                    style=EdgePenStyle.DotLine, theme_color=ThemeColor.UnconditionalBranchColor))
+        return (
+            BranchType.UserDefinedBranch,
+            EdgeStyle(style=EdgePenStyle.DotLine, theme_color=ThemeColor.UnconditionalBranchColor))
 
     return {
         'TrueBranch': (BranchType.TrueBranch, None),
@@ -77,23 +80,23 @@ def format_block_header(node: CfNode) -> str:
 
     if node_tag == 'BasicBlock':
         node_contents = cast(BasicBlockNode, node['contents'])
-        return f'{node_contents["start"]:#x} (id {node_id}) BasicBlockNode'
+        return f'{node_contents["start"]:#x} (id {node_id}) BasicBlockNode' if VERBOSE else f'{node_contents["start"]:#x}'
 
     if node_tag == 'Call':
         node_contents = cast(CallNode, node['contents'])
-        return f'{node_contents["start"]:#x} (id {node_id}) CallNode'
+        return f'{node_contents["start"]:#x} (id {node_id}) CallNode' if VERBOSE else f'{node_contents["start"]:#x} Call'
 
     if node_tag == 'EnterFunc':
         node_contents = cast(EnterFuncNode, node['contents'])
         prevFun = node_contents['prevCtx']['func']['name']
         nextFun = node_contents['nextCtx']['func']['name']
-        return f'(id {node_id}) EnterFuncNode {prevFun} -> {nextFun}'
+        return f'(id {node_id}) EnterFuncNode {prevFun} -> {nextFun}' if VERBOSE else f'Enter {prevFun} -> {nextFun}'
 
     if node_tag == 'LeaveFunc':
         node_contents = cast(LeaveFuncNode, node['contents'])
         prevFun = node_contents['prevCtx']['func']['name']
         nextFun = node_contents['nextCtx']['func']['name']
-        return f'(id {node_id}) LeaveFuncNode {nextFun} <- {prevFun}'
+        return f'(id {node_id}) LeaveFuncNode {nextFun} <- {prevFun}' if VERBOSE else f'Leave {nextFun} <- {prevFun}'
 
     assert False, f'Inexaustive match on CFNode? tag={node["tag"]}'
 
@@ -164,12 +167,15 @@ class ICFGWidget(FlowGraphWidget, QObject):
         self.last_node: Optional[FlowGraphNode] = None
         self.last_edge: Optional[FlowGraphEdge] = None
 
+        # Node ID which, once we get a new ICFG back, we should recenter on
+        self.recenter_node_id: Optional[UUID] = None
+
         # Bind actions to their callbacks
 
         actions: List[BNAction] = [
             BNAction('Blaze', 'Prune', MenuOrder.FIRST, self.context_menu_action_prune),
-            BNAction('Blaze', 'Expand Call Node', MenuOrder.EARLY,
-                     self.context_menu_action_expand_call),
+            BNAction(
+                'Blaze', 'Expand Call Node', MenuOrder.EARLY, self.context_menu_action_expand_call),
         ]
 
         bind_actions(self.action_handler, actions)
@@ -196,6 +202,22 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 cfgId=self.blaze_instance.graph.pil_icfg_id,
                 edge=(from_node, to_node)))
 
+    def customEvent(self, event: QEvent) -> None:
+        FlowGraphWidget.customEvent(self, event)
+        if event.type() != BINARYNINJAUI_CUSTOM_EVENT or self.recenter_node_id is None:
+            return
+
+        log.debug(f'Recentering on UUID {self.recenter_node_id!r}')
+        for fg_node, cf_node in self.blaze_instance.graph.node_mapping.items():
+            if cf_node['contents']['uuid'] == self.recenter_node_id:
+                log.debug('Found recenter node\n%s', '\n'.join(map(str, fg_node.lines)))
+                # time.sleep(self.sleep_time)
+                self.showNode(fg_node)
+                break
+        else:
+            log.error('Recenter node was deleted')
+            return
+
     def expand_call(self, node: CallNode):
         '''
         Send a request to the backend that the `CallNode` `node` be expanded
@@ -203,7 +225,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         call_node = node.copy()
         call_node['nodeData'] = []
-        # log.info(json.dumps(call_node, indent=2))
         self.blaze_instance.send(
             BinjaToServer(
                 tag='BSCfgExpandCall',
@@ -225,13 +246,21 @@ class ICFGWidget(FlowGraphWidget, QObject):
         if source_node is None or dest_node is None:
             raise RuntimeError('Missing node in node_mapping!')
 
-        edge = self.blaze_instance.graph.get_edge(source_node['contents']['uuid'],
-                                                  dest_node['contents']['uuid'])
+        edge = self.blaze_instance.graph.get_edge(
+            source_node['contents']['uuid'], dest_node['contents']['uuid'])
         if not edge:
             raise RuntimeError('Missing edge!')
 
         if edge['branchType'] not in ('TrueBranch', 'FalseBranch'):
-            raise ValueError('Not a conditional branch')
+            log.error('Not a conditional branch')
+            return
+
+        log.debug(
+            'Double click on %s edge from %s to %s',
+            'True' if edge['branchType'] == 'TrueBranch' else 'False',
+            source_node['contents']['uuid'], dest_node['contents']['uuid'])
+
+        self.recenter_node_id = source_node['contents']['uuid']
 
         from_node = edge['src']
         to_node = edge['dst']
@@ -279,6 +308,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
             log.error(f'Did not right-click on a Call node')
             return
 
+        self.recenter_node_id = node['contents']['uuid']
+
         call_node = cast(CallNode, node['contents'])
         self.expand_call(call_node)
 
@@ -300,6 +331,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
             if node['tag'] != 'Call':
                 log.warning('Did not double-click on a node')
                 return
+
+            self.recenter_node_id = node['contents']['uuid']
 
             call_node = cast(CallNode, node['contents'])
             self.expand_call(call_node)
@@ -337,8 +370,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
 
 class ICFGDockWidget(QWidget, DockContextHandler):
-    def __init__(self, name: str, view_frame: ViewFrame, parent: QWidget,
-                 blaze_instance: 'BlazeInstance'):
+    def __init__(
+            self, name: str, view_frame: ViewFrame, parent: QWidget,
+            blaze_instance: 'BlazeInstance'):
         QWidget.__init__(self, parent)
         DockContextHandler.__init__(self, self, name)
 
@@ -346,8 +380,11 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         self.blaze_instance: Optional['BlazeInstance'] = blaze_instance
         self.icfg_widget: ICFGWidget = ICFGWidget(self, view_frame, self.blaze_instance)
 
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
+        # TODO why does pyright choke on these? Idea: they're both @typing.overload
+        # And the overload that we want is the first one, but pyright only seems to
+        # see the second one
+        layout = QVBoxLayout()  # type: ignore
+        layout.setContentsMargins(0, 0, 0, 0)  # type: ignore
         layout.setSpacing(0)
         layout.addWidget(self.icfg_widget)
         self.setLayout(layout)
