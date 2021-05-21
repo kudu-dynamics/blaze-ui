@@ -60,8 +60,7 @@ dependencies="$(pkginfo $DIST_DIR/$wheel_name -f requires_dist --single --sequen
 
 echo "cp $PLUGIN_JSON $DIST_DIR/$PLUGIN_JSON ..."
 cp $PLUGIN_JSON $DIST_DIR/$PLUGIN_JSON
-echo "cp $PLUGINS_JSON.template $DIST_DIR/$PLUGINS_JSON ..."
-cp $PLUGINS_JSON.template $DIST_DIR/$PLUGINS_JSON
+# we're not copying plugins.json here, just piping sed output
 
 
 # 3. Search and replace
@@ -69,5 +68,8 @@ cp $PLUGINS_JSON.template $DIST_DIR/$PLUGINS_JSON
 
 # I'm assuming ` is a fine delimiter that won't show up in these variables...
 # please don't use ` in your package url <3
-sed -i "s\`%PACKAGEURL%\`$package_url/$wheel_name\`" $DIST_DIR/$PLUGINS_JSON
-sed -i "s\`%DEPENDENCIES%\`$dependencies\`" $DIST_DIR/$PLUGINS_JSON
+sed \
+  -e "s\`%PACKAGEURL%\`$package_url/$wheel_name\`" \
+  -e"s\`%DEPENDENCIES%\`$dependencies\`" \
+  $PLUGINS_JSON.template > $DIST_DIR/$PLUGINS_JSON
+
