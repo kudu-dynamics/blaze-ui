@@ -219,21 +219,10 @@ class Action(str, enum.Enum):
     SAY_HELLO = r'Blaze\Say Hello'
     SEND_INSTRUCTION = r'Blaze\Send Instruction'
     TYPE_CHECK_FUNCTION = r'Blaze\Type Check Function'
-    START_CFG = r'Blaze\Start CFG'
+    START_CFG = r'Blaze\Create ICFG'
 
 
-@register(Action.SAY_HELLO, 'Say Hello')
-def say_hello(bv):
-    # blaze.send(bv, BS {'tag': 'BSTextMessage', 'message': 'this is Bilbo'})
-    blaze.send(bv, BinjaToServer(tag='BSTextMessage', message='this is Bilbo'))
-
-
-@register_for_function(Action.TYPE_CHECK_FUNCTION, 'Type Check Function')
-def type_check_function(bv, func):
-    blaze.send(bv, BinjaToServer(tag='BSTypeCheckFunction', address=func.start))
-
-
-@register_for_function(Action.START_CFG, 'Start CFG')
+@register_for_function(Action.START_CFG, 'Create ICFG')
 def start_cfg(bv, func):
     blaze.icfg_dock_widget.icfg_widget.recenter_node_id = None
     blaze.send(bv, BinjaToServer(tag='BSCfgNew', startFuncAddress=func.start))
