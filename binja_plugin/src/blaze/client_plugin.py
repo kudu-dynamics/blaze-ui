@@ -5,6 +5,7 @@ import logging as _logging
 import os
 import os.path
 import queue
+import tempfile
 import threading
 from typing import Dict, Literal, Optional, Union, cast
 
@@ -109,6 +110,37 @@ class BlazePlugin():
             if self.websocket_thread.is_alive():
                 log.warn('websocket thread is still alive after timeout')
 
+    def upload_bndb(self, bv: BinaryView) -> None:
+        if (not bv.file.filename.endswith('.bndb')):
+            bndb_filename = bv.file.filename + '.bndb'
+            if (os.path.isfile(bndb_filename)):
+                msg = "Is it ok to overwrite existing analysis database " + bndb_filename + " ? If not, please manually load bndb and try again."
+            else:
+                msg = "Is it ok to save analysis database to " + bndb_filename + " ?"
+            to_save: Optional[MessageBoxButtonResult] = show_message_box(
+                "Blaze",
+                msg
+                buttons=MessageBoxButtonSet.YesNoButtonSet,
+                icon=MessageBoxIcon.WarningIcon
+            )
+
+            if to_save == MessageBoxButtonResult.NoButton:
+                log.error("failed to send analysis database because it is not yet saved")
+                return
+            else:
+                bv.create_database(bndb_filename)
+
+        og_filename = bv.file.filename
+        
+        tf = tempfile.NamedTemporaryFile()
+        temp_bndb_name = tf.name + '.bndb'
+        tf.close()
+            
+        bv.create_database(temp_bndb_name)
+        log.info("Just uploaded a bndb, really did: " + temp_bndb_name)
+        os.remove(temp_bndb_name)
+        bv.create_database(og_filename)
+                
     def ensure_instance(self, bv: BinaryView) -> BlazeInstance:
         if (instance := BlazePlugin.instances.get(bv.file.filename)) is not None:
             return instance
