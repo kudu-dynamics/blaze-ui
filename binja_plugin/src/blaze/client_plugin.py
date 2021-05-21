@@ -121,7 +121,7 @@ class BlazePlugin():
         self._init_thread()
         self.ensure_instance(bv)
         new_msg = BinjaMessage(bvFilePath=bv.file.filename, action=msg)
-        log.debug('enqueueing %s', new_msg)
+        # log.debug('enqueueing %s', new_msg)
         self.out_queue.put(new_msg)
 
     async def main_websocket_loop(self):
@@ -156,7 +156,7 @@ class BlazePlugin():
                 log.error("couldn't find blaze instance in mapping for %s", msg)
                 continue
 
-            log.debug('Blaze: received %r', msg)
+            # log.debug('Blaze: received %r', msg)
             try:
                 self.message_handler(instance, msg['action'])
             except Exception:
@@ -171,7 +171,7 @@ class BlazePlugin():
                 return
 
             json_msg = json.dumps(msg)
-            log.debug('sending %r', json_msg)
+            # log.debug('sending %r', json_msg)
 
             try:
                 await websocket.send(json_msg)
@@ -182,7 +182,7 @@ class BlazePlugin():
 
     def message_handler(self, instance: BlazeInstance, msg: ServerToBinja) -> None:
         tag = msg['tag']
-        log.debug('Got message: %s', json.dumps(msg, indent=2))
+        # log.debug('Got message: %s', json.dumps(msg, indent=2))
 
         if tag == 'SBLogInfo':
             log.info(msg['message'])
@@ -235,6 +235,7 @@ def type_check_function(bv, func):
 
 @register_for_function(Action.START_CFG, 'Start CFG')
 def start_cfg(bv, func):
+    blaze.icfg_dock_widget.icfg_widget.recenter_node_id = None
     blaze.send(bv, BinjaToServer(tag='BSCfgNew', startFuncAddress=func.start))
 
 

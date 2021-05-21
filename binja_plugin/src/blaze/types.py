@@ -13,6 +13,8 @@ Word64 = int
 UUID = str
 CfgId = UUID
 
+BINARYNINJAUI_CUSTOM_EVENT = 0xfff6
+
 
 class Symbol(TypedDict):
     _symbolName: str

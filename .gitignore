@@ -20,6 +20,7 @@ binja_plugin/dist
 .env.development.local
 .env.test.local
 .env.production.local
+.dir-locals-2.el
 
 __pycache__/
 *.pyc
