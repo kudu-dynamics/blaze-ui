@@ -38,6 +38,7 @@ def register_for_function(action, description):
 
 def get_blaze_config() -> BlazeConfig:
     "Gets config from .blaze, or creates it"
+    # blaze_file = user_plugin_path() + "
     try:
         f = open(".blaze", "r")
         data = f.read()
@@ -172,7 +173,7 @@ class BlazePlugin():
         self._init_thread()
         self.ensure_instance(bv)
         new_msg = BinjaMessage(bvFilePath=bv.file.filename, action=msg)
-        log.debug('enqueueing %s', new_msg)
+        # log.debug('enqueueing %s', new_msg)
         self.out_queue.put(new_msg)
 
     async def main_websocket_loop(self):
@@ -207,7 +208,7 @@ class BlazePlugin():
                 log.error("couldn't find blaze instance in mapping for %s", msg)
                 continue
 
-            log.debug('Blaze: received %r', msg)
+            # log.debug('Blaze: received %r', msg)
             try:
                 self.message_handler(instance, msg['action'])
             except Exception:
@@ -222,7 +223,7 @@ class BlazePlugin():
                 return
 
             json_msg = json.dumps(msg)
-            log.debug('sending %r', json_msg)
+            # log.debug('sending %r', json_msg)
 
             try:
                 await websocket.send(json_msg)
@@ -233,7 +234,7 @@ class BlazePlugin():
 
     def message_handler(self, instance: BlazeInstance, msg: ServerToBinja) -> None:
         tag = msg['tag']
-        log.debug('Got message: %s', json.dumps(msg, indent=2))
+        # log.debug('Got message: %s', json.dumps(msg, indent=2))
 
         if tag == 'SBLogInfo':
             log.info(msg['message'])
@@ -270,22 +271,12 @@ class Action(str, enum.Enum):
     SAY_HELLO = r'Blaze\Say Hello'
     SEND_INSTRUCTION = r'Blaze\Send Instruction'
     TYPE_CHECK_FUNCTION = r'Blaze\Type Check Function'
-    START_CFG = r'Blaze\Start CFG'
+    START_CFG = r'Blaze\Create ICFG'
 
 
-@register(Action.SAY_HELLO, 'Say Hello')
-def say_hello(bv):
-    # blaze.send(bv, BS {'tag': 'BSTextMessage', 'message': 'this is Bilbo'})
-    blaze.send(bv, BinjaToServer(tag='BSTextMessage', message='this is Bilbo'))
-
-
-@register_for_function(Action.TYPE_CHECK_FUNCTION, 'Type Check Function')
-def type_check_function(bv, func):
-    blaze.send(bv, BinjaToServer(tag='BSTypeCheckFunction', address=func.start))
-
-
-@register_for_function(Action.START_CFG, 'Start CFG')
+@register_for_function(Action.START_CFG, 'Create ICFG')
 def start_cfg(bv, func):
+    blaze.icfg_dock_widget.icfg_widget.recenter_node_id = None
     blaze.send(bv, BinjaToServer(tag='BSCfgNew', startFuncAddress=func.start))
 
 

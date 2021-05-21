@@ -14,12 +14,16 @@ UUID = str
 CfgId = UUID
 ClientId = UUID
 
+BINARYNINJAUI_CUSTOM_EVENT = 0xfff6
+
 class Symbol(TypedDict):
     _symbolName: str
     _symbolRawName: str
 
+
 class BlazeConfig(TypedDict):
     client_id: ClientId
+
     
 FuncParamInfo = Any
 
