@@ -59,10 +59,9 @@ data SessionError
 -- | returns session state or creates it.
 -- bool indicates whether or not it was just now created
 getSessionState :: SessionId
-                -> BinaryHash
                 -> AppState
                 -> IO (Bool, SessionState)
-getSessionState sid binHash st = atomically $ do
+getSessionState sid st = atomically $ do
     m <- readTVar $ st ^. #binarySessions
     case HashMap.lookup sid m of
       Just ss -> return (False, ss)
@@ -71,7 +70,6 @@ getSessionState sid binHash st = atomically $ do
           (st ^. #serverConfig . #binaryManagerStorageDir)
           (sid ^. #clientId)
           (sid ^. #hostBinaryPath)
-          binHash
         ss <- emptySessionState (sid ^. #hostBinaryPath) bm
         modifyTVar (st ^. #binarySessions)
           $ HashMap.insert sid ss
@@ -89,8 +87,8 @@ createBinjaOutbox :: WS.Connection
 createBinjaOutbox conn ss cid hpath = do
   q <- newTQueueIO
   t <- forkIO . forever $ do
-    (bhash, msg) <- atomically . readTQueue $ q
-    sendJSON conn . BinjaMessage cid hpath bhash $ msg
+    msg <- atomically . readTQueue $ q
+    sendJSON conn . BinjaMessage cid hpath $ msg
   atomically . modifyTVar (ss ^. #binjaOutboxes)
     $ HashMap.insert t q
   return t
@@ -107,16 +105,15 @@ createWebOutbox conn ss = do
     $ HashMap.insert t q
   return t
 
-sendToBinja_ :: BinaryHash -> ServerToBinja -> EventLoop ()
-sendToBinja_ bhash msg = ask >>= \ctx -> liftIO . atomically $ do
-  qs <- fmap HashMap.elems . readTVar $ ctx ^. #binjaOutboxes
-  mapM_ (`writeTQueue` (bhash, msg)) qs
+-- sendToBinja_ :: BinaryHash -> ServerToBinja -> EventLoop ()
+-- sendToBinja_ bhash msg = ask >>= \ctx -> liftIO . atomically $ do
+--   qs <- fmap HashMap.elems . readTVar $ ctx ^. #binjaOutboxes
+--   mapM_ (`writeTQueue` (bhash, msg)) qs
 
 sendToBinja :: ServerToBinja -> EventLoop ()
-sendToBinja msg = do
-  bm <- view #binaryManager <$> ask
-  h <- BM.getLatestVersionHash bm
-  sendToBinja_ h msg
+sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
+  qs <- fmap HashMap.elems . readTVar $ ctx ^. #binjaOutboxes
+  mapM_ (`writeTQueue` msg) qs
 
 sendToWeb :: ServerToWeb -> EventLoop ()
 sendToWeb msg = ask >>= \ctx -> liftIO . atomically $ do
@@ -142,15 +139,13 @@ binjaApp localOutboxThreads st conn = do
     Right x -> do
       let cid = x ^. #clientId
           hpath = x ^. #hostBinaryPath
-          bhash = x ^. #bndbHash
           sid = mkSessionId cid hpath
-          reply = sendJSON conn . BinjaMessage cid hpath bhash
+          reply = sendJSON conn . BinjaMessage cid hpath
           logInfo txt = do
             reply . SBLogInfo $ txt
             putText txt
-      (justCreated, ss) <- getSessionState sid bhash st
+      (justCreated, ss) <- getSessionState sid st
       let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
-                      . (bhash,)
                       . BinjaEvent
                       $ x ^. #action
       case justCreated of
@@ -198,7 +193,7 @@ spawnEventHandler st ss = do
     True -> do
       -- spawns event handler workers for new messages
       eventTid <- forkIO . forever $ do
-        (bhash, msg) <- atomically . readTQueue $ ss ^. #eventInbox
+        msg <- atomically . readTQueue $ ss ^. #eventInbox
         let ctx = EventLoopCtx
                   (ss ^. #binaryManager)
                   (ss ^. #binjaOutboxes)
@@ -207,7 +202,6 @@ spawnEventHandler st ss = do
                   (st ^. #serverConfig . #sqliteFilePath)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
-        BM.setLatest bhash $ ss ^. #binaryManager
         void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx
       
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
@@ -335,10 +329,10 @@ getCfgBinaryView cid = Db.getCfgBinaryHash cid >>= \case
     bm <- view #binaryManager <$> ask
     BM.loadBndb bm h >>= either (logError . show) (return . (,h))
 
-getLatestBinaryView :: EventLoop (BNBinaryView, BinaryHash)
-getLatestBinaryView = do
+getBinaryView :: BinaryHash -> EventLoop BNBinaryView
+getBinaryView bhash = do
   bm <- view #binaryManager <$> ask
-  BM.loadLatest bm >>= either (logError . show) return
+  BM.loadBndb bm bhash >>= either (logError . show) return
 
 mainEventLoop :: Event -> EventLoop ()
 mainEventLoop (WebEvent msg) = handleWebEvent msg
@@ -396,8 +390,8 @@ handleBinjaEvent = \case
       sendToBinja . SBLogInfo
         $ "Here is your important integer: " <> show n
       
-  BSTypeCheckFunction addr -> do
-    (bv, _) <- getLatestBinaryView
+  BSTypeCheckFunction bhash addr -> do
+    bv <- getBinaryView bhash
     etr <- getFunctionTypeReport bv (fromIntegral addr)
     case etr of
       Left err -> do
@@ -413,8 +407,8 @@ handleBinjaEvent = \case
   -- Creates new CFG from function. Also create a new snapshot
   -- where the root node is the auto-cfg
   -- Sends back two messages: one auto-cfg, one new snapshot tree
-  BSCfgNew funcAddr -> do
-    (bv, bhash) <- getLatestBinaryView
+  BSCfgNew bhash funcAddr -> do
+    bv <- getBinaryView bhash
     mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
     case mfunc of
       Nothing -> sendToBinja
@@ -432,11 +426,11 @@ handleBinjaEvent = \case
             -- instead, do it once and pass converted cfg to db saving func
             sendToBinja . SBSnapshotMsg . Snapshot.SnapshotBranch bid
               $ Snapshot.toTransport snapBranch
-            sendToBinja . SBCfg cid $ convertPilCfg pcfg
+            sendToBinja . SBCfg cid bhash $ convertPilCfg pcfg
         debug "Created new branch and added auto-cfg."
 
   BSCfgExpandCall cfgId' callNode -> do
-    (bv, _bhash) <- getCfgBinaryView cfgId'
+    (bv, bhash) <- getCfgBinaryView cfgId'
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
     mCfg <- getCfg cfgId'
     case mCfg of
@@ -459,14 +453,15 @@ handleBinjaEvent = \case
                 let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'               
                 -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
                 printPrunedStats cfg' prunedCfg
-                sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
+                sendToBinja . SBCfg cfgId' bhash . convertPilCfg $ prunedCfg
                 setCfg cfgId' prunedCfg
           Just _ -> do
             sendToBinja . SBLogError $ "Node must be a CallNode"
     
   BSCfgRemoveBranch cfgId' (node1, node2) -> do
     debug "Binja remove branch"
-    -- bv <- getCfgBinaryView cfgId'
+    -- TODO: just get the bhash since bv isn't used
+    (_bv, bhash) <- getCfgBinaryView cfgId'
     mCfg <- getCfg cfgId'
     case mCfg of
       Nothing -> sendToBinja
@@ -480,12 +475,13 @@ handleBinjaEvent = \case
                 (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
             -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
             printPrunedStats cfg' prunedCfg
-            sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
+            sendToBinja . SBCfg cfgId' bhash . convertPilCfg $ prunedCfg
             setCfg cfgId' prunedCfg
 
   BSCfgRemoveNode cfgId' node' -> do
     debug "Binja remove node"
-    -- bv <- getCfgBinaryView cfgId'
+    -- TODO: just get the bhash since bv isn't used
+    (_bv, bhash) <- getCfgBinaryView cfgId'
     mCfg <- getCfg cfgId'
     case mCfg of
       Nothing -> sendToBinja
@@ -501,7 +497,7 @@ handleBinjaEvent = \case
                   (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
               -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
               printPrunedStats cfg' prunedCfg
-              sendToBinja . SBCfg cfgId' . convertPilCfg $ prunedCfg
+              sendToBinja . SBCfg cfgId' bhash . convertPilCfg $ prunedCfg
               setCfg cfgId' prunedCfg
 
   BSNoop -> debug "Binja noop"

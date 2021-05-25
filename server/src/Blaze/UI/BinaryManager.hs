@@ -21,7 +21,7 @@ saveNewVersion bm binPath = do
   liftIO $ do
     copyFile binPath (getBndbPath bm h)
     removeFile binPath
-    atomically . writeTVar (bm ^. #latestVersion) $ h
+    -- atomically . writeTVar (bm ^. #latestVersion) $ h
 
 cacheBinaryView :: MonadIO m => BinaryManager -> BinaryHash -> BNBinaryView -> m ()
 cacheBinaryView bm h bv = liftIO . atomically $ do
@@ -59,10 +59,10 @@ loadBndb bm h = loadVersionFromCache bm h >>= \case
       cacheBinaryView bm h bv
       return $ Right bv
 
-loadLatest :: MonadIO m => BinaryManager -> m (Either BinaryManagerError (BNBinaryView, BinaryHash))
-loadLatest bm = do
-  h <- liftIO . atomically . readTVar $ bm ^. #latestVersion
-  er <- loadBndb bm h
-  return $ (,h) <$> er
+-- loadLatest :: MonadIO m => BinaryManager -> m (Either BinaryManagerError (BNBinaryView, BinaryHash))
+-- loadLatest bm = do
+--   h <- liftIO . atomically . readTVar $ bm ^. #latestVersion
+--   er <- loadBndb bm h
+--   return $ (,h) <$> er
 
   

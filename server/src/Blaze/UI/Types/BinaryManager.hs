@@ -36,15 +36,15 @@ data BinaryManager = BinaryManager
     bndbVersionsDir :: BndbVersionsDir
   
   -- latest version is empty if there are no versions saved yet
-  , latestVersion :: TVar BinaryHash
+  -- , latestVersion :: TVar BinaryHash
   
   -- TODO: make binary views into resource pool with expiries
   -- right now they just get stored here forever
   , cachedViews :: TVar (HashMap BinaryHash BNBinaryView)
   } deriving (Generic)
 
-setLatest :: MonadIO m => BinaryHash -> BinaryManager -> m ()
-setLatest h bm = liftIO . atomically $ writeTVar (bm ^. #latestVersion) h
+-- setLatest :: MonadIO m => BinaryHash -> BinaryManager -> m ()
+-- setLatest h bm = liftIO . atomically $ writeTVar (bm ^. #latestVersion) h
 
 getBndbVersionsDir :: BinaryManagerStorageDir
                    -> ClientId
@@ -100,14 +100,14 @@ saveBndbBytestring bmdir cid hpath s = do
 --   where
 --     versionDir' = bndbStorageDirFromEnv <> "/" <> initialBndbFile
 
-create :: BinaryManagerStorageDir -> ClientId -> HostBinaryPath -> BinaryHash -> STM BinaryManager
-create bmdir cid bpath bhash = BinaryManager
+create :: BinaryManagerStorageDir -> ClientId -> HostBinaryPath -> STM BinaryManager
+create bmdir cid bpath = BinaryManager
   (getBndbVersionsDir bmdir cid bpath)
-  <$> newTVar bhash
-  <*> newTVar HashMap.empty
+  -- <$> newTVar bhash
+  <$> newTVar HashMap.empty
 
-getLatestVersionHash :: MonadIO m => BinaryManager -> m BinaryHash
-getLatestVersionHash bm = liftIO . readTVarIO $ bm ^. #latestVersion
+-- getLatestVersionHash :: MonadIO m => BinaryManager -> m BinaryHash
+-- getLatestVersionHash bm = liftIO . readTVarIO $ bm ^. #latestVersion
 
 data BinaryManagerError
   = FileDoesNotExist FilePath

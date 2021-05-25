@@ -70,9 +70,20 @@ class BlazeInstance():
         self.bv: BinaryView = bv
         self.blaze: 'BlazePlugin' = blaze
         self.graph: Optional[ICFGFlowGraph] = None
+        self.bndbHash: Optional[BinaryHash] = None
 
     def send(self, msg: BinjaToServer):
         self.blaze.send(self.bv, msg)
+
+    def with_bndb_hash(self, callback: Callable[[BinaryHash], None]) -> None:
+        def set_hash_and_do_callback (h: BinaryHash) -> None:
+            self.bndbHash = h
+            callback(h)
+            
+        if self.bndbHash == None or self.bv.file.analysis_changed or self.bv.file.modified:
+            blaze.upload_bndb(self.bv, set_hash_and_do_callback)
+        else:
+            callback(self.bndbHash)
 
 
 class BlazePlugin():
@@ -153,27 +164,32 @@ class BlazePlugin():
                 return
             else:
                 bv.create_database(bndb_filename)
-
+                
         # by now, bv is saved as bndb and bv.file.filename is bndb
         og_filename = bv.file.filename
+
+        if bv.file.analysis_changed:
+            bv.create_database(og_filename)
         
-        tf = tempfile.NamedTemporaryFile()
-        temp_bndb_name = tf.name + '.bndb'
-        tf.close()
-        bv.create_database(temp_bndb_name)
+        # tf = tempfile.NamedTemporaryFile()
+        # temp_bndb_name = tf.name + '.bndb'
+        # tf.close()
+        # bv.create_database(temp_bndb_name)
         uri = "http://" + BLAZE_UI_HOST + ":" + BLAZE_UI_HTTP_PORT + "/upload"
-        handle = open(temp_bndb_name,'rb')
+        # handle = open(temp_bndb_name,'rb')
+        handle = open(og_filename, 'rb')
         files = { 'bndb': handle }
         post_data = {'hostBinaryPath': og_filename,
                      'clientId': self.client_id,
                     }
+        # TODO: run this in thread with callback
         r = requests.post(uri, data=post_data, files=files)
         handle.close()
         rj = r.json()
         log.info(str(rj))
 
-        os.remove(temp_bndb_name)
-        bv.create_database(og_filename)
+        # os.remove(temp_bndb_name)
+        # bv.create_database(og_filename)
         callback(rj)
         
                 
@@ -188,11 +204,11 @@ class BlazePlugin():
     def send(self, bv: BinaryView, msg: BinjaToServer) -> None:
         self._init_thread()
         self.ensure_instance(bv)
-        def sendWithHash (bndb_hash):
-            new_msg = BinjaMessage(clientId=self.client_id, hostBinaryPath=bv.file.filename, bndbHash=bndb_hash, action=msg)
+
+        new_msg = BinjaMessage(clientId=self.client_id, hostBinaryPath=bv.file.filename, action=msg)
             # log.debug('enqueueing %s', new_msg)
-            self.out_queue.put(new_msg)
-        self.upload_bndb(bv, sendWithHash)
+        self.out_queue.put(new_msg)
+
 
     async def main_websocket_loop(self):
         uri = "ws://" + BLAZE_UI_HOST + ":" + BLAZE_UI_WS_PORT + "/binja"
@@ -268,6 +284,7 @@ class BlazePlugin():
 
         elif tag == 'SBCfg':
             cfg_id = cast(CfgId, msg['cfgId'])
+            bndb_hash = cast(BinaryHash, msg['bndbHash'])
             cfg = cast(ServerCfg, msg['cfg'])
             self.icfg_dock_widget.icfg_widget.set_icfg(cfg_id, cfg_from_server(cfg))
 
@@ -295,7 +312,8 @@ class Action(str, enum.Enum):
 @register_for_function(Action.START_CFG, 'Create ICFG')
 def start_cfg(bv, func):
     blaze.icfg_dock_widget.icfg_widget.recenter_node_id = None
-    blaze.send(bv, BinjaToServer(tag='BSCfgNew', startFuncAddress=func.start))
+    blaze_instance = blaze.ensure_instance(bv)
+    blaze_instance.with_bndb_hash(lambda h: blaze_instance.send(BinjaToServer(tag='BSCfgNew', startFuncAddress=func.start, bndbHash=h)))
 
 
 def listen_start(bv):
