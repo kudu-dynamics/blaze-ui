@@ -29,7 +29,7 @@ workflow:
 
 # Potential build dependencies for the dind host
 .script-bootstrap-dind: &script-bootstrap-dind
-  - echo -e "section_start:`date +%s`:bootstrap\r\e[0KBootstrap build dependencies"
+  - echo -e "section_start:`date +%s`:bootstrap[collapsed=true]\r\e[0KBootstrap build dependencies"
   - |
     if [ -f /etc/alpine-release ]; then
       apk add git coreutils python3
@@ -39,7 +39,7 @@ workflow:
 
 # Print runner environment info for debugging
 .script-before-info: &script-before-info
-  - echo -e "section_start:`date +%s`:pre-env\r\e[0KEnvironment info (before_script)"
+  - echo -e "section_start:`date +%s`:pre-env[collapsed=true]\r\e[0KEnvironment info (before_script)"
   - uname -a
   - env
   - ls -al
@@ -93,16 +93,24 @@ build:branch:
   needs: []
   script:
     - image=${REPO_DOCKER_REGISTRY}/blaze-service
+
+    - echo -e "section_start:`date +%s`:docker-pull[collapsed=true]\r\e[0KPull docker images for caching"
     - docker login -u "${CI_REGISTRY_USER}" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
     - docker pull "${image}:branch-${CI_COMMIT_REF_SLUG}" ||
       docker pull "${image}:latest" ||
       true
+    - echo -e "section_end:`date +%s`:docker-pull\r\e[0K"
+
+    - echo -e "section_start:`date +%s`:docker-build\r\e[0KBuild docker image"
     - \time -v docker build --pull . -f Dockerfile --target main
       -t "${image}:commit-${CI_COMMIT_SHA}"
       -t "${image}:branch-${CI_COMMIT_REF_SLUG}"
     - \time -v docker build --squash --pull . -f Dockerfile --target minimal
       -t "${image}/squashed:commit-${CI_COMMIT_SHA}"
       -t "${image}/squashed:branch-${CI_COMMIT_REF_SLUG}"
+    - echo -e "section_end:`date +%s`:docker-build\r\e[0K"
+
+    - echo -e "section_start:`date +%s`:docker-push[collapsed=true]\r\e[0KPush new docker image"
     - docker push "${image}:commit-${CI_COMMIT_SHA}"
     - docker push "${image}:branch-${CI_COMMIT_REF_SLUG}"
     - docker push "${image}/squashed:commit-${CI_COMMIT_SHA}"
@@ -116,16 +124,25 @@ build:detached:
   needs: []
   script:
     - image=${REPO_DOCKER_REGISTRY}/blaze-service
+
+    - echo -e "section_start:`date +%s`:docker-pull[collapsed=true]\r\e[0KPull docker images for caching"
     - docker login -u "${CI_REGISTRY_USER}" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
     - docker pull "${image}:merge-${CI_MERGE_REQUEST_IID}" ||
       docker pull "${image}:latest" ||
       true
+    - echo -e "section_end:`date +%s`:docker-pull\r\e[0K"
+
+    - echo -e "section_start:`date +%s`:docker-build\r\e[0KBuild docker image"
     - \time -v docker build --pull . -f Dockerfile --target main
       -t "${image}:merge-${CI_MERGE_REQUEST_IID}"
     - \time -v docker build --squash --pull . -f Dockerfile --target minimal
       -t "${image}/squashed:merge-${CI_MERGE_REQUEST_IID}"
+    - echo -e "section_end:`date +%s`:docker-build\r\e[0K"
+
+    - echo -e "section_start:`date +%s`:docker-push[collapsed=true]\r\e[0KPush new docker image"
     - docker push "${image}:merge-${CI_MERGE_REQUEST_IID}"
     - docker push "${image}/squashed:merge-${CI_MERGE_REQUEST_IID}"
+    - echo -e "section_end:`date +%s`:docker-push\r\e[0K"
 
 # Likewise, we need 2 test jobs. The test:branch job uses the ${image}:commit-... image,
 # and the test:detached uses the ${image}:merge-... image
@@ -179,23 +196,31 @@ push:latest:
     - aws_image=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-service
 
     # Set up AWS ECR credentials
+    - echo -e "section_start:`date +%s`:aws-config[collapsed=true]\r\e[0KConfigure AWS credentials"
     - apk add aws-cli
     - aws configure set default.region "${AWS_DEFAULT_REGION}"
     - aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
     - aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
+    - echo -e "section_end:`date +%s`:aws-config\r\e[0K"
 
     # Pull this pipeline's image
+    - echo -e "section_start:`date +%s`:docker-pull\r\e[0KPull latest docker image"
     - docker login -u "${CI_REGISTRY_USER}" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
     - docker pull "${local_image}:commit-${CI_COMMIT_SHA}"
+    - echo -e "section_end:`date +%s`:docker-pull\r\e[0K"
 
     # Push :latest to internal gitlab registry
+    - echo -e "section_start:`date +%s`:docker-push-gitlab\r\e[0KPush latest docker image to gitlab"
     - docker tag "${local_image}:commit-${CI_COMMIT_SHA}" "${local_image}:latest"
     - docker push "${local_image}:latest"
+    - echo -e "section_end:`date +%s`:docker-push-gitlab\r\e[0K"
 
     # Push :latest to AWS ECR integration registry
+    - echo -e "section_start:`date +%s`:docker-push-aws\r\e[0KPush latest docker image to blaze AWS ECR registry"
     - aws ecr get-login-password | docker login --username AWS --password-stdin "${AWS_ECR_REGISTRY}"
     - docker tag "${local_image}:commit-${CI_COMMIT_SHA}" "${aws_image}:latest"
     - docker push "${aws_image}:latest"
+    - echo -e "section_end:`date +%s`:docker-push-aws\r\e[0K"
 
 pages:
   extends: .haskell-job
