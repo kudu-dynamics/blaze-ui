@@ -16,15 +16,18 @@ import Web.Scotty ( ScottyM
                   , scotty
                   , capture
                   , param
+                  , text
                   )
 import qualified Data.Text.IO as TIO
 import qualified Data.ByteString as BS
 import qualified Network.Wai.Parse as Wai
 import System.Directory (doesFileExist)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
+import qualified Blaze.UI.Types.BinaryHash as BinaryHash
 import qualified Blaze.UI.Types.BinaryManager as BM
 import Blaze.UI.Types.Session (ClientId)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
+import qualified Blaze.UI.Types.HostBinaryPath as HBP
 
 server :: ServerConfig -> ScottyM ()
 server cfg = do
@@ -52,6 +55,9 @@ uploadBinary cfg = do
         . Wai.fileContent
         $ finfo
       json h
+      putText $ "New bndb uploaded: "
+        <> HBP.toText hostBinaryPath'
+        <> " (" <> BinaryHash.toText h <> ")"
     saveBndb _ _ _ = return ()
 
 -- showUI :: ServerConfig -> ActionM ()

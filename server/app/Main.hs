@@ -9,6 +9,7 @@ import qualified System.Envy as Envy
 import System.IO ( BufferMode(LineBuffering)
                  , hSetBuffering)
 import qualified Blaze.UI.Types.BinaryManager as BM
+import qualified Blaze.UI.Db as Db
 
 main :: IO ()
 main = do
@@ -23,5 +24,6 @@ main = do
       putText "or"
       putText "blaze-ui-server [host] [websockets port] [http port] [sqlite filepath] [bndb dir]"
       P.error "Invalid args"
+  Db.init $ cfg ^. #sqliteFilePath
   void . forkIO $ WebServer.run cfg
   Server.run cfg

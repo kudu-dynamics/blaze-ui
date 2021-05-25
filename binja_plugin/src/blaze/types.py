@@ -13,6 +13,8 @@ Word64 = int
 UUID = str
 CfgId = UUID
 ClientId = UUID
+BinaryHash = str
+HostBinaryPath = str
 
 BINARYNINJAUI_CUSTOM_EVENT = 0xfff6
 
@@ -125,7 +127,9 @@ class BinjaToServer(TypedDict, total=False):
 
 
 class BinjaMessage(TypedDict):
-    bvFilePath: str
+    clientId: ClientId
+    hostBinaryPath: HostBinaryPath
+    bndbHash: BinaryHash
     action: Union[BinjaToServer, ServerToBinja]
 
 

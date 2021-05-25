@@ -23,6 +23,7 @@ dependencies:
   - aeson
   - async
   - base >= 4.7 && < 5
+  - base16-bytestring
   - base64
   - binary-analysis
   - binaryninja

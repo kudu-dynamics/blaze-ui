@@ -22,3 +22,6 @@ encode (HostBinaryPath x) = cs . encodeBase64 . cs $ x
 
 decode :: ConvertibleStrings a Text => a -> Either Text HostBinaryPath
 decode = fmap (HostBinaryPath . cs) . decodeBase64 . cs
+
+toText :: ConvertibleStrings String a => HostBinaryPath -> a
+toText (HostBinaryPath p) = cs p

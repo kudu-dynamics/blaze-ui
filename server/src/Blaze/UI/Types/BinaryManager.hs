@@ -61,7 +61,7 @@ getBndbPath_ :: BndbVersionsDir -> BinaryHash -> FilePath
 getBndbPath_ (BndbVersionsDir vdir) h
   =  vdir
   <> "/"
-  <> BinaryHash.toString h
+  <> BinaryHash.toText h
   <> ".bndb"
 
 getBndbPath :: BinaryManager -> BinaryHash -> FilePath
