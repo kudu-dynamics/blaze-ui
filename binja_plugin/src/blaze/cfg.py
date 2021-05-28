@@ -1,6 +1,6 @@
 import logging as _logging
 from copy import deepcopy
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union, cast
 
 from binaryninja import BinaryView
 from binaryninja.enums import BranchType, EdgePenStyle, HighlightStandardColor, ThemeColor
@@ -72,6 +72,19 @@ def get_edge_type(edge: CfEdge, cfg: Cfg) -> Tuple[BranchType, Optional[EdgeStyl
         'FalseBranch': (BranchType.FalseBranch, None),
         'UnconditionalBranch': (BranchType.UnconditionalBranch, None),
     }[edge['branchType']]
+
+
+def is_conditional_edge(edge: Union[CfEdge, FlowGraphEdge]) -> bool:
+    conditional_types = (
+        'TrueBranch', 'FalseBranch',
+        BranchType.TrueBranch, BranchType.FalseBranch
+    )
+    edge_type = edge.type if isinstance(edge, FlowGraphEdge) else edge.get('branchType')
+    return edge_type in conditional_types
+
+
+def is_call_node(node: CfNode) -> bool:
+    return node['tag'] == 'Call'
 
 
 def format_block_header(node: CfNode) -> str:
@@ -164,8 +177,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
         self.context_menu = Menu()
         self.context_menu_manager = ContextMenuManager(self)
 
-        self.last_node: Optional[FlowGraphNode] = None
-        self.last_edge: Optional[FlowGraphEdge] = None
+        self.clicked_node: Optional[FlowGraphNode] = None
+        self.clicked_edge: Optional[FlowGraphEdge] = None
 
         # Node ID which, once we get a new ICFG back, we should recenter on
         self.recenter_node_id: Optional[UUID] = None
@@ -173,9 +186,22 @@ class ICFGWidget(FlowGraphWidget, QObject):
         # Bind actions to their callbacks
 
         actions: List[BNAction] = [
-            BNAction('Blaze', 'Prune', MenuOrder.FIRST, self.context_menu_action_prune),
             BNAction(
-                'Blaze', 'Expand Call Node', MenuOrder.EARLY, self.context_menu_action_expand_call),
+                'Blaze', 'Prune', MenuOrder.FIRST,
+                activate = self.context_menu_action_prune,
+                isValid = (
+                    lambda ctx: isinstance(self.clicked_edge, FlowGraphEdge) \
+                        and is_conditional_edge(self.clicked_edge)
+                ),
+            ),
+            BNAction(
+                'Blaze', 'Expand Call Node', MenuOrder.EARLY,
+                activate =self.context_menu_action_expand_call,
+                isValid = (
+                    lambda ctx: isinstance(self.clicked_node, FlowGraphNode) \
+                        and is_call_node(self.get_cf_node(self.clicked_node))
+                ),
+            ),
         ]
 
         bind_actions(self.action_handler, actions)
@@ -233,16 +259,16 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
     def context_menu_action_prune(self, context: UIActionContext):
         '''
-        Context menu action to call `self.prune`. Assumes `self.last_edge` has already
+        Context menu action to call `self.prune`. Assumes `self.clicked_edge` has already
         been set by `self.mousePressEvent`
         '''
 
-        if self.last_edge is None:
+        if self.clicked_edge is None:
             log.error('Did not right-click on an edge')
             return
 
-        source_node = self.blaze_instance.graph.node_mapping.get(self.last_edge.source)
-        dest_node = self.blaze_instance.graph.node_mapping.get(self.last_edge.target)
+        source_node = self.get_cf_node(self.clicked_edge.source)
+        dest_node = self.get_cf_node(self.clicked_edge.target)
         if source_node is None or dest_node is None:
             raise RuntimeError('Missing node in node_mapping!')
 
@@ -251,7 +277,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         if not edge:
             raise RuntimeError('Missing edge!')
 
-        if edge['branchType'] not in ('TrueBranch', 'FalseBranch'):
+        if not is_conditional_edge(edge):
             log.error('Not a conditional branch')
             return
 
@@ -295,16 +321,16 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
     def context_menu_action_expand_call(self, context: UIActionContext):
         '''
-        Context menu action to call `self.expand_call`. Assumes `self.last_node` has already
+        Context menu action to call `self.expand_call`. Assumes `self.clicked_node` has already
         been set by `self.mousePressEvent`
         '''
 
-        if not self.last_node:
+        if not self.clicked_node:
             log.error(f'Did not right-click on a CFG node')
             return
 
-        node = self.blaze_instance.graph.node_mapping.get(self.last_node)
-        if not node or node['tag'] != 'Call':
+        node = self.get_cf_node(self.clicked_node)
+        if not is_call_node(node): #node or node['tag'] != 'Call':
             log.error(f'Did not right-click on a Call node')
             return
 
@@ -322,14 +348,14 @@ class ICFGWidget(FlowGraphWidget, QObject):
             return super().mousePressEvent(event)
 
         if (fg_node := self.getNodeForMouseEvent(event)):
-            node = self.blaze_instance.graph.node_mapping.get(fg_node)
+            node = self.get_cf_node(fg_node)
 
             if not node:
                 log.error(f'Couldn\'t find node_mapping[{fg_node}]')
                 return
 
-            if node['tag'] != 'Call':
-                log.warning('Did not double-click on a node')
+            if not is_call_node(node):
+                log.warning('Did not double-click on a call node')
                 return
 
             self.recenter_node_id = node['contents']['uuid']
@@ -352,12 +378,12 @@ class ICFGWidget(FlowGraphWidget, QObject):
         if event.button() != Qt.MouseButton.RightButton:
             return super().mousePressEvent(event)
 
-        self.last_node = self.getNodeForMouseEvent(event)
+        self.clicked_node = self.getNodeForMouseEvent(event)
         if (fg_edge := self.getEdgeForMouseEvent(event)):
             fg_edge, swapped = fg_edge
-            self.last_edge = fix_flowgraph_edge(fg_edge, swapped)
+            self.clicked_edge = fix_flowgraph_edge(fg_edge, swapped)
         else:
-            self.last_edge = None
+            self.clicked_edge = None
 
         self.context_menu_manager.show(self.context_menu, self.action_handler)
 
@@ -367,6 +393,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
     def notifyOffsetChanged(self, view_frame: ViewFrame, offset: int) -> None:
         pass
+
+    def get_cf_node(self, node: FlowGraphNode) -> CfNode:
+        return self.blaze_instance.graph.node_mapping.get(node)
 
 
 class ICFGDockWidget(QWidget, DockContextHandler):
