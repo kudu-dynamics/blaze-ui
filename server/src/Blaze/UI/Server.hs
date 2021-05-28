@@ -29,7 +29,8 @@ import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import Blaze.UI.Types.Cfg (convertPilCfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
-import Blaze.UI.Cfg.Snapshot as Snapshot
+import Blaze.UI.Types.Cfg.Snapshot (BranchId, Branch, BranchTree)
+import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Blaze.UI.Db as Db
 import Blaze.Types.Cfg (PilCfg)
@@ -40,6 +41,7 @@ import Blaze.UI.Types.Session ( SessionId
                               , ClientId
                               , mkSessionId
                               )
+import Data.Time.Clock (getCurrentTime)
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -195,6 +197,7 @@ spawnEventHandler st ss = do
       eventTid <- forkIO . forever $ do
         msg <- atomically . readTQueue $ ss ^. #eventInbox
         let ctx = EventLoopCtx
+                  (ss ^. #binaryPath)
                   (ss ^. #binaryManager)
                   (ss ^. #binjaOutboxes)
                   (ss ^. #webOutboxes)
@@ -295,14 +298,14 @@ setCfg cid pcfg = do
 
 -- | Tries to getCfg from in-memory state. If that fails, try db.
 -- if db has it, add it to cache
-getCfg :: CfgId -> EventLoop (Maybe PilCfg)
+getCfg :: CfgId -> EventLoop PilCfg
 getCfg cid = CfgUI.getCfg cid >>= \case
-  Just pcfg -> return $ Just pcfg
+  Just pcfg -> return pcfg
   Nothing -> Db.getCfg cid >>= \case
-    Nothing -> return Nothing
+    Nothing -> throwError . EventLoopError $ "Could not find existing CFG with id " <> show cid
     Just pcfg -> do
       CfgUI.addCfg cid pcfg
-      return $ Just pcfg
+      return pcfg
 
 ------------------------------------------
 --- main event handler
@@ -329,10 +332,26 @@ getCfgBinaryView cid = Db.getCfgBinaryHash cid >>= \case
     bm <- view #binaryManager <$> ask
     BM.loadBndb bm h >>= either (logError . show) (return . (,h))
 
+getCfgBinaryHash :: CfgId -> EventLoop BinaryHash
+getCfgBinaryHash cid = Db.getCfgBinaryHash cid >>= \case
+  Nothing -> throwError . EventLoopError $ "getCfgBinaryHash cannot find CfgId: " <> show cid
+  Just h -> return h
+
 getBinaryView :: BinaryHash -> EventLoop BNBinaryView
 getBinaryView bhash = do
   bm <- view #binaryManager <$> ask
   BM.loadBndb bm bhash >>= either (logError . show) return
+
+getBranch :: BranchId
+          -> EventLoop (Branch BranchTree)
+getBranch bid = Db.getBranch bid >>= \case
+  Nothing -> logError $ "Could not find snapshot branch: " <> show bid
+  Just b -> return b
+
+getBranchId :: CfgId -> EventLoop BranchId
+getBranchId cid = Db.getCfgBranchId cid >>= \case
+  Nothing -> logError $ "Could not find branch id for: " <> show cid
+  Just bid -> return bid
 
 mainEventLoop :: Event -> EventLoop ()
 mainEventLoop (WebEvent msg) = handleWebEvent msg
@@ -419,8 +438,9 @@ handleBinjaEvent = \case
           Nothing -> sendToBinja
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
+            hpath <- view #hostBinaryPath <$> ask
             let pcfg = r ^. #result
-            (bid, cid, snapBranch) <- Db.saveNewCfgAndBranch bhash (func ^. #address) pcfg
+            (bid, cid, snapBranch) <- Db.saveNewCfgAndBranch hpath bhash (func ^. #address) pcfg
             CfgUI.addCfg cid pcfg 
             -- TODO: this calls convertPilCfg and Snapshot.toTransport twice
             -- instead, do it once and pass converted cfg to db saving func
@@ -432,97 +452,133 @@ handleBinjaEvent = \case
   BSCfgExpandCall cfgId' callNode -> do
     (bv, bhash) <- getCfgBinaryView cfgId'
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
-    mCfg <- getCfg cfgId'
-    case mCfg of
-      Nothing -> sendToBinja
-        . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
-      Just cfg -> do
-        case Cfg.getFullNodeMay cfg (Cfg.Call callNode) of
-          Nothing ->
-            sendToBinja . SBLogError $ "Could not find call node in Cfg"
+    cfg <- getCfg cfgId'
+    case Cfg.getFullNodeMay cfg (Cfg.Call callNode) of
+      Nothing ->
+        sendToBinja . SBLogError $ "Could not find call node in Cfg"
           -- TODO: fix issue #160 so we can just send `CallNode ()` to expandCall
-          Just (Cfg.Call fullCallNode) -> do
-            let bs = ICfg.mkBuilderState (BNImporter bv)
-            mCfg' <- liftIO . ICfg.build bs $ ICfg.expandCall (InterCfg cfg) fullCallNode
+      Just (Cfg.Call fullCallNode) -> do
+        let bs = ICfg.mkBuilderState (BNImporter bv)
+        mCfg' <- liftIO . ICfg.build bs $ ICfg.expandCall (InterCfg cfg) fullCallNode
 
-            case mCfg' of
-              Left err ->
-                -- TODO: more specific error
-                sendToBinja . SBLogError . show $ err
-              Right (InterCfg cfg') -> do
-                let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'               
-                -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
-                printPrunedStats cfg' prunedCfg
-                sendToBinja . SBCfg cfgId' bhash . convertPilCfg $ prunedCfg
-                setCfg cfgId' prunedCfg
-          Just _ -> do
-            sendToBinja . SBLogError $ "Node must be a CallNode"
-    
-  BSCfgRemoveBranch cfgId' (node1, node2) -> do
-    debug "Binja remove branch"
-    -- TODO: just get the bhash since bv isn't used
-    (_bv, bhash) <- getCfgBinaryView cfgId'
-    mCfg <- getCfg cfgId'
-    case mCfg of
-      Nothing -> sendToBinja
-        . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
-      Just cfg -> do
-        case (,) <$> Cfg.getFullNodeMay cfg node1 <*> Cfg.getFullNodeMay cfg node2 of
-          Nothing -> sendToBinja
-            . SBLogError $ "Node(s) don't exist in Cfg"
-          Just (fullNode1, fullNode2) -> do
-            let cfg' = G.removeEdge (G.Edge fullNode1 fullNode2) cfg
-                (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+        case mCfg' of
+          Left err ->
+            -- TODO: more specific error
+            sendToBinja . SBLogError . show $ err
+          Right (InterCfg cfg') -> do
+            let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'               
             -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
             printPrunedStats cfg' prunedCfg
             sendToBinja . SBCfg cfgId' bhash . convertPilCfg $ prunedCfg
             setCfg cfgId' prunedCfg
+      Just _ -> do
+        sendToBinja . SBLogError $ "Node must be a CallNode"
+    
+  BSCfgRemoveBranch cfgId' (node1, node2) -> do
+    debug "Binja remove branch"
+    -- TODO: just get the bhash since bv isn't used
+    bhash <- getCfgBinaryHash cfgId'
+    cfg <- getCfg cfgId'
+    case (,) <$> Cfg.getFullNodeMay cfg node1 <*> Cfg.getFullNodeMay cfg node2 of
+      Nothing -> sendToBinja
+        . SBLogError $ "Node or nodes don't exist in Cfg"
+      Just (fullNode1, fullNode2) -> do
+        let cfg' = G.removeEdge (G.Edge fullNode1 fullNode2) cfg
+            (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+        -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
+        printPrunedStats cfg' prunedCfg
+        sendToBinja . SBCfg cfgId' bhash . convertPilCfg $ prunedCfg
+        setCfg cfgId' prunedCfg
 
   BSCfgRemoveNode cfgId' node' -> do
     debug "Binja remove node"
     -- TODO: just get the bhash since bv isn't used
-    (_bv, bhash) <- getCfgBinaryView cfgId'
-    mCfg <- getCfg cfgId'
-    case mCfg of
+    bhash <- getCfgBinaryHash cfgId'
+    cfg <- getCfg cfgId'
+    case Cfg.getFullNodeMay cfg node' of
       Nothing -> sendToBinja
-        . SBLogError $ "Could not find existing CFG with id " <> show cfgId'
-      Just cfg -> do
-        case Cfg.getFullNodeMay cfg node' of
-          Nothing -> sendToBinja
-            . SBLogError $ "Node doesn't exist in Cfg"
-          Just fullNode -> if fullNode == cfg ^. #root
-            then sendToBinja $ SBLogError "Cannot remove root node"
-            else do
-              let cfg' = G.removeNode fullNode cfg
-                  (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
-              -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
-              printPrunedStats cfg' prunedCfg
-              sendToBinja . SBCfg cfgId' bhash . convertPilCfg $ prunedCfg
-              setCfg cfgId' prunedCfg
+        . SBLogError $ "Node doesn't exist in Cfg"
+      Just fullNode -> if fullNode == cfg ^. #root
+        then sendToBinja $ SBLogError "Cannot remove root node"
+        else do
+          let cfg' = G.removeNode fullNode cfg
+              (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+          -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
+          printPrunedStats cfg' prunedCfg
+          sendToBinja . SBCfg cfgId' bhash . convertPilCfg $ prunedCfg
+          setCfg cfgId' prunedCfg
 
   BSNoop -> debug "Binja noop"
 
   BSSnapshot snapMsg -> case snapMsg of
-    _ -> undefined
+    Snapshot.GetAllBranches -> do
+      hpath <- view #hostBinaryPath <$> ask
+      branches <- Db.getAllBranches hpath
+      sendToBinja
+        . SBSnapshotMsg
+        . Snapshot.BranchesOfBinary
+        . fmap (over _2 Snapshot.toTransport)
+        $ branches
+      
+    -- returns all branches for function
+    Snapshot.GetBranchesOfFunction funcAddr -> do
+      hpath <- view #hostBinaryPath <$> ask
+      branches <- Db.getBranchesForFunction hpath (fromIntegral funcAddr)
+      sendToBinja
+        . SBSnapshotMsg
+        . Snapshot.BranchesOfFunction funcAddr
+        . fmap (over _2 Snapshot.toTransport)
+        $ branches  
 
-    -- -- returns all branches for function
-    -- BranchesOfFunction funcAddr -> undefined
+    Snapshot.RenameBranch bid name' -> do
+      Db.setBranchName bid (Just name')
+      Db.getBranch bid >>= \case
+        Nothing -> logError $ "Could not find snapshot with id: " <> show bid
+        Just br -> sendToBinja
+                   . SBSnapshotMsg
+                   $ Snapshot.SnapshotBranch bid
+                   (Snapshot.toTransport br)
 
-    -- -- Loads cfg from snapshot tree
-    -- -- 
-    -- -- creates new cid for it
-    -- -- returns new cfg and new snapshot tree with auto-cfg added
-    -- Snapshot.Load cid -> undefined
+    Snapshot.LoadSnapshot bid cid -> do
+      b <- getBranch bid
+      case getCfg cid
+    
+    Snapshot.SaveSnapshot cid -> do
+      -- Already exists and this point:
+      --     * branch containing cid
+      --     * cid is in branch, saved as an autocfg
+      -- get cfg from sessionstate
+      -- DB: save old cid as immutables cfg
+      --     change cid in sessionstate to newly created autoCid
+      --     change cid attr to be immutable in snap branch tree
+      --     add autoCid as child of cid in snap branch tree
+      --     send back new autoCid cfg and updated branch
+      cfg <- getCfg cid
+      newAutoCid <- liftIO randomIO
 
-    -- -- Saves auto-cfg cid as an immutable snapshot
-    -- -- assumes cfg has already been loaded
-    -- -- copies cfg to db with a different cid
-    -- -- modifies snapshot tree
-    -- -- sends back new snapshot tree
-    -- Snapshot.Save cid mname -> undefined
+      bid <- getBranchId cid
+      
+      -- TODO: these convert same PilCfg to transport-cfg twice...
+      Db.saveNewCfg_ bid newAutoCid cfg
+      Db.setCfg cid cfg
+
+      -- change CfgId in cache to new auto-saved cfg
+      CfgUI.changeCfgId cid newAutoCid
+
+      b <- getBranch bid
+
+      utc <- liftIO $ getCurrentTime
+      let updatedTree = Snapshot.immortalizeAutosave cid newAutoCid utc $ b ^. #tree
+          updatedBranch = b & #tree .~ updatedTree
+      Db.setBranchTree bid updatedTree
+
+      sendToBinja . SBSnapshotMsg . Snapshot.SnapshotBranch bid
+        $ Snapshot.toTransport updatedBranch
 
     -- -- Renames previously saved immutable cfg
-    -- Snapshot.Rename cid name -> undefined
+    Snapshot.RenameSnapshot cid name' -> do
+      bid <- getBranchId cid
+      Db.setCfgName bid cid name'
 
 printPrunedStats :: (Ord a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printPrunedStats a b = do

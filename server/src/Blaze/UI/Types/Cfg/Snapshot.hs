@@ -15,9 +15,8 @@ import Database.Selda.SqlType ( Lit(LCustom)
                               )
 import qualified Database.Selda.SqlType as Sql
 import Blaze.UI.Types.Graph (GraphTransport)
+import Blaze.UI.Types.BinaryHash (BinaryHash)
 
-
-type Name = Text
 
 newtype BranchId = BranchId UUID
   deriving (Eq, Ord, Show, Generic)
@@ -36,7 +35,7 @@ data ActiveCfg = ActiveCfg
   , cfg :: TMVar PilCfg
   } deriving (Eq, Generic)
 
--- one SnapState per binary (and user? eventually)
+-- one SnapState per binary and user
 data SnapState = SnapState
   { branches :: HashMap BranchId (Branch BranchTree)
   -- active cfg's are unsaved/snapped and can be mutated
@@ -71,39 +70,40 @@ data OutgoingMsg
                      
   | BranchesOfFunction
     { funcAddress :: Word64
-    , branches :: [Branch BranchTransport]
+    , branches :: [(BranchId, Branch BranchTransport)]
     }
+  | BranchesOfBinary
+    { branches :: [(BranchId, Branch BranchTransport)] }
   deriving (Eq, Ord, Show, Generic)
 instance ToJSON OutgoingMsg
 instance FromJSON OutgoingMsg
 
 
 data IncomingMsg
-  -- Loads new Cfg based off of parent (CfgId arg)
-  -- copies parent CFG as a new working cfg
-  -- returns Cfg
-  = GetAllBranches
+  = GetAllBranches -- all for binary
 
   | GetBranchesOfFunction {originFuncAddr :: Word64}
 
   | RenameBranch { branchId :: BranchId, name :: Text }
 
+  -- loads a cfg snapshot
+  -- if not an autosave, it creates one and returns that cfgid
   | LoadSnapshot { branchId :: BranchId, cfgId :: CfgId }
 
   -- Copies current CFG into snapshot tree (new CfgId)
   -- returns updated snapshot tree
-  | SaveSnapshot CfgId (Maybe Name)
+  | SaveSnapshot { cfgId :: CfgId }
 
   -- renames cfg snapshot
   -- returns updated snapshot tree containing Cfg
-  | RenameSnapshot CfgId Name
+  | RenameSnapshot { cfgId :: CfgId, name :: Text }
 
   deriving (Eq, Ord, Show, Generic)
 instance ToJSON IncomingMsg
 instance FromJSON IncomingMsg
 
 data SnapshotType
-  = AutoSave
+  = Autosave
   | Immutable
   deriving (Eq, Ord, Show, Generic, Bounded, ToJSON, FromJSON)
 
@@ -112,12 +112,14 @@ data SnapshotInfo = SnapshotInfo
   , date :: UTCTime
   , snapshotType :: SnapshotType
   } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
+
 type BranchTree = AlgaGraph () SnapshotInfo CfgId
 
 type BranchTransport = GraphTransport () SnapshotInfo CfgId
 
 data Branch a = Branch
-  { originFuncAddr :: Address
+  { bndbHash :: BinaryHash
+  , originFuncAddr :: Address
   , branchName :: Maybe Text
   , rootNode :: CfgId
   , tree :: a

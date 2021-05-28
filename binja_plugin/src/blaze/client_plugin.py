@@ -182,8 +182,10 @@ class BlazePlugin():
         post_data = {'hostBinaryPath': og_filename,
                      'clientId': self.client_id,
                     }
-        # TODO: run this in thread with callback
+        
+        # TODO: run the following in a thread
         r = requests.post(uri, data=post_data, files=files)
+        
         handle.close()
         rj = r.json()
         log.info(str(rj))
@@ -191,6 +193,8 @@ class BlazePlugin():
         # os.remove(temp_bndb_name)
         # bv.create_database(og_filename)
         callback(rj)
+            
+
         
                 
     def ensure_instance(self, bv: BinaryView) -> BlazeInstance:

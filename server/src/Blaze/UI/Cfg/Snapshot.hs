@@ -9,7 +9,8 @@ import Blaze.UI.Types.Cfg.Snapshot
 import Control.Concurrent.STM.TMVar (TMVar, takeTMVar, putTMVar)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.UI.Types.Graph as Graph
-
+import Data.Time.Clock (UTCTime)
+import Blaze.UI.Types.BinaryHash (BinaryHash)
 
 addSnapshotToBranch :: CfgId -> CfgId -> SnapshotInfo -> Branch BranchTree -> Branch BranchTree
 addSnapshotToBranch parentId' id info snap =
@@ -17,13 +18,30 @@ addSnapshotToBranch parentId' id info snap =
     ( G.setNodeAttr info id
     . G.addEdge (G.LEdge () $ G.Edge parentId' id) )
 
-renameSnapshot :: CfgId -> Name -> Branch BranchTree -> Branch BranchTree
-renameSnapshot id name' snap =
-  snap & #tree %~ G.updateNodeAttr (over #name $ const (Just name')) id
 
-singletonBranch :: Address -> Maybe Text -> CfgId -> SnapshotInfo -> Branch BranchTree
-singletonBranch originFuncAddr' mname rootNode' rootNodeInfo = Branch
-  { originFuncAddr = originFuncAddr'
+-- | changes parent snapshot type to be Immutable and updates time.
+-- Adds newAutoId to tree as child of og autoId
+immortalizeAutosave :: CfgId -> CfgId -> UTCTime -> BranchTree -> BranchTree
+immortalizeAutosave autoId newChildAutoId saveTime bt
+  = G.setNodeAttr immortalizedNodeAttr autoId
+  . G.setNodeAttr newAutoNodeAttr newChildAutoId
+  . G.addEdge (G.LEdge () $ G.Edge autoId newChildAutoId)
+  $ bt
+  where
+    newAutoNodeAttr = SnapshotInfo Nothing saveTime Autosave
+    immortalizedNodeAttr = case G.getNodeAttr autoId bt of
+      Nothing -> SnapshotInfo Nothing saveTime Immutable
+      Just x -> x & #snapshotType .~ Immutable
+                  & #date .~ saveTime
+
+
+renameSnapshot :: CfgId -> Text -> BranchTree -> BranchTree
+renameSnapshot id name' = G.updateNodeAttr (over #name $ const (Just name')) id
+
+singletonBranch :: BinaryHash -> Address -> Maybe Text -> CfgId -> SnapshotInfo -> Branch BranchTree
+singletonBranch bhash originFuncAddr' mname rootNode' rootNodeInfo = Branch
+  { bndbHash = bhash
+  , originFuncAddr = originFuncAddr'
   , branchName = mname
   , rootNode = rootNode'
   , tree = G.setNodeAttr rootNodeInfo rootNode'

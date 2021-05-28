@@ -18,7 +18,7 @@ import Database.Selda.SqlType ( Lit(LBlob, LText, LCustom)
 import Blaze.UI.Types.Graph (GraphTransport)
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, SnapshotInfo)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
-
+import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 
 newtype Blob a = Blob a
   deriving (Eq, Ord, Show, Generic, Typeable)
@@ -50,9 +50,9 @@ instance SqlType Address where
 
 data SavedCfg = SavedCfg
   { cfgId :: CfgId
-  , name :: Maybe Text
-  , created :: UTCTime
-  , modified :: UTCTime
+  -- , name :: Maybe Text
+  -- , created :: UTCTime
+  -- , modified :: UTCTime
   , branchId :: BranchId
   , cfg :: Blob (CfgTransport [Stmt])
   } deriving Generic
@@ -60,7 +60,8 @@ instance SqlRow SavedCfg
 
 data SnapshotBranch = SnapshotBranch
   { branchId :: BranchId
-  , binaryHash :: BinaryHash
+  , hostBinaryPath :: HostBinaryPath
+  , bndbHash :: BinaryHash
   , originFuncAddr :: Address
   , branchName :: Maybe Text
   , rootNode :: CfgId

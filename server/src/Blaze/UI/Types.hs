@@ -138,8 +138,10 @@ data Event = WebEvent WebToServer
            | BinjaEvent BinjaToServer
            deriving (Eq, Ord, Show, Generic)
 
+-- TODO: Maybe we should just use SessionState since they are almost the same.
 data EventLoopCtx = EventLoopCtx
-  { binaryManager :: BinaryManager
+  { hostBinaryPath :: HostBinaryPath
+  , binaryManager :: BinaryManager
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
