@@ -107,9 +107,10 @@ library:
   - Blaze.UI.Prelude
   - Blaze.UI.Server
   - Blaze.UI.Types
+  - Blaze.UI.Types.BinaryManager
   - Blaze.UI.Types.Cfg
   - Blaze.UI.Types.Cfg.Snapshot
-  - Blaze.UI.Types.BinaryManager
+  - Blaze.UI.Types.Session
   - Blaze.UI.Web.Server
 
   

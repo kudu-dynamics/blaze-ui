@@ -539,10 +539,33 @@ handleBinjaEvent = \case
                    $ Snapshot.SnapshotBranch bid
                    (Snapshot.toTransport br)
 
+    -- load directly if autosave, otherwise create autosave branch
     Snapshot.LoadSnapshot bid cid -> do
       b <- getBranch bid
-      case getCfg cid
-    
+      (newCid, cfg') <- case Snapshot.isAutosave cid (b ^. #tree) of
+        Nothing -> logError $ "Could not find snapshot info for: " <> show cid
+        Just True -> (cid,) <$> getCfg cid
+        Just False -> do
+          cfg' <- getCfg cid
+          newAutoCid <- liftIO randomIO
+          Db.saveNewCfg_ bid newAutoCid cfg'
+
+          -- TODO: is this necessary? should already be up to date
+          Db.setCfg cid cfg'
+
+          -- change CfgId in cache to new auto-saved cfg
+          CfgUI.changeCfgId cid newAutoCid
+          utc <- liftIO $ getCurrentTime
+          let updatedTree = Snapshot.immortalizeAutosave cid newAutoCid utc $ b ^. #tree
+              updatedBranch = b & #tree .~ updatedTree
+          Db.setBranchTree bid updatedTree
+              
+          sendToBinja . SBSnapshotMsg . Snapshot.SnapshotBranch bid
+            $ Snapshot.toTransport updatedBranch
+          return (newAutoCid, cfg')
+      sendToBinja . SBCfg newCid (b ^. #bndbHash) . convertPilCfg $ cfg'
+
+        
     Snapshot.SaveSnapshot cid -> do
       -- Already exists and this point:
       --     * branch containing cid
@@ -560,6 +583,8 @@ handleBinjaEvent = \case
       
       -- TODO: these convert same PilCfg to transport-cfg twice...
       Db.saveNewCfg_ bid newAutoCid cfg
+
+      -- TODO: is this necessary? should already be up to date
       Db.setCfg cid cfg
 
       -- change CfgId in cache to new auto-saved cfg

@@ -14,15 +14,15 @@ import Web.Scotty ( ScottyM
                   , setHeader
                   , html
                   , scotty
-                  , capture
+                  -- , capture
                   , param
-                  , text
+                  -- , text
                   )
-import qualified Data.Text.IO as TIO
-import qualified Data.ByteString as BS
+-- import qualified Data.Text.IO as TIO
+-- import qualified Data.ByteString as BS
 import qualified Network.Wai.Parse as Wai
-import System.Directory (doesFileExist)
-import Blaze.UI.Types.BinaryHash (BinaryHash)
+-- import System.Directory (doesFileExist)
+-- import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Blaze.UI.Types.BinaryHash as BinaryHash
 import qualified Blaze.UI.Types.BinaryManager as BM
 import Blaze.UI.Types.Session (ClientId)

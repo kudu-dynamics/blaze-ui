@@ -17,6 +17,10 @@ import System.Directory (removeFile)
 import System.IO.Temp (emptySystemTempFile)
 import Blaze.Types.Cfg as Cfg
 import qualified Data.Set as Set
+import qualified Blaze.Types.Pil as Pil
+import Blaze.Util.Spec (mkUuid1)
+import qualified Blaze.UI.Types.BinaryManager as BM
+import Blaze.UI.Types.Session (ClientId(ClientId)) 
 import Test.Hspec
 
 
@@ -31,17 +35,22 @@ tryRemoveFile p = removeFile p `catch` ignore
     ignore _ = return ()
 
 mockEventLoopCtx :: IO EventLoopCtx
-mockEventLoopCtx = EventLoopCtx
-  <$> newTVarIO HashMap.empty
+mockEventLoopCtx = EventLoopCtx hpath
+  <$> atomically (BM.create "/tmp/blaze/bm" cid hpath)
+  <*> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
   <*> emptySystemTempFile "blazeTest"
+  where
+    bmdir = "/tmp/blaze/bm"
+    hpath = "/tmp/blaze/spec"
+    cid = ClientId $ mkUuid1 0
 
 mockEventLoop :: EventLoop a -> IO a
 mockEventLoop m = do
   ctx' <- mockEventLoopCtx
   Db.init $ ctx' ^. #sqliteFilePath
-  r <- runEventLoop m ctx'
+  (Right r) <- runEventLoop m ctx'
   clean ctx'
   return r
 
@@ -52,12 +61,14 @@ clean = tryRemoveFile . view #sqliteFilePath
 spec :: Spec
 spec = describe "Blaze.UI.Db" $ do
   context "Cfg" $ do
+    bid <- runIO randomIO
+    cid <- runIO randomIO
     bv <- runIO $ unsafeFromRight <$> BN.getBinaryView diveBin
     let imp = BNImporter bv
     selectDive <- runIO $ fromJust <$> CG.getFunction imp 0x804e080
     (ImportResult _ originalCfg _) <- runIO $ fromJust <$> getCfg imp selectDive
     mRetrievedCfg <- runIO . mockEventLoop $ do
-      cid <- Db.saveNewCfg originalCfg
+      Db.saveNewCfg_ bid cid originalCfg
       Db.getCfg cid
 
     it "Should save and retrieve a pil cfg" $ do
@@ -67,7 +78,7 @@ spec = describe "Blaze.UI.Db" $ do
       let firstCfg = Cfg.removeEdges
             (Set.toList $ Cfg.succEdges (originalCfg ^. #root) originalCfg)
             $ originalCfg
-      cid <- Db.saveNewCfg firstCfg
+      Db.saveNewCfg_ bid cid firstCfg
       Db.setCfg cid originalCfg
       Db.getCfg cid
 

@@ -1,12 +1,12 @@
 module Blaze.UI.Cfg.Snapshot where
 
-import Blaze.Prelude hiding (Symbol)
+import Blaze.UI.Prelude hiding (Symbol)
 
 import qualified Blaze.Graph as G
 import Blaze.Types.Cfg (PilCfg)
 import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.UI.Types.Cfg.Snapshot
-import Control.Concurrent.STM.TMVar (TMVar, takeTMVar, putTMVar)
+--import Control.Concurrent.STM.TMVar (TMVar, takeTMVar, putTMVar)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.UI.Types.Graph as Graph
 import Data.Time.Clock (UTCTime)
@@ -17,7 +17,6 @@ addSnapshotToBranch parentId' id info snap =
   snap & #tree %~
     ( G.setNodeAttr info id
     . G.addEdge (G.LEdge () $ G.Edge parentId' id) )
-
 
 -- | changes parent snapshot type to be Immutable and updates time.
 -- Adds newAutoId to tree as child of og autoId
@@ -32,8 +31,11 @@ immortalizeAutosave autoId newChildAutoId saveTime bt
     immortalizedNodeAttr = case G.getNodeAttr autoId bt of
       Nothing -> SnapshotInfo Nothing saveTime Immutable
       Just x -> x & #snapshotType .~ Immutable
-                  & #date .~ saveTime
 
+
+-- | Returns Nothing if CfgId is missing SnapshotInfo (which should be error)
+isAutosave :: CfgId -> BranchTree -> Maybe Bool
+isAutosave cid bt = is #_Autosave . view #snapshotType <$> G.getNodeAttr cid bt
 
 renameSnapshot :: CfgId -> Text -> BranchTree -> BranchTree
 renameSnapshot id name' = G.updateNodeAttr (over #name $ const (Just name')) id

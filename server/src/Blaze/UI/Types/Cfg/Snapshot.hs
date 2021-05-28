@@ -107,9 +107,14 @@ data SnapshotType
   | Immutable
   deriving (Eq, Ord, Show, Generic, Bounded, ToJSON, FromJSON)
 
+
 data SnapshotInfo = SnapshotInfo
   { name :: Maybe Text
-  , date :: UTCTime
+  , date :: UTCTime -- creation date
+  -- TODO: add modified date for autosave snapshots.
+  -- the problem currently is that updating things in the snapshot tree is
+  -- expensive because we just store it as a json blob
+  -- so I don't want to update the modified date each action
   , snapshotType :: SnapshotType
   } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 
@@ -124,5 +129,4 @@ data Branch a = Branch
   , rootNode :: CfgId
   , tree :: a
   } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Functor, Foldable, Traversable)
-
 

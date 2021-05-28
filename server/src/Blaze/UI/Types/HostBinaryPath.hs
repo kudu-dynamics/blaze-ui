@@ -1,13 +1,11 @@
 module Blaze.UI.Types.HostBinaryPath where
 
 import Blaze.UI.Prelude
-import qualified Prelude as P
 import Data.Text.Encoding.Base64.URL (encodeBase64, decodeBase64)
 import Web.Scotty (Parsable(parseParam))
 
-import Database.Selda.SqlType ( Lit(LBlob, LText, LCustom)
-                              , SqlTypeRep(TBlob, TText)
-                              , SqlValue(SqlBlob, SqlString)
+import Database.Selda.SqlType ( Lit(LCustom)
+                              , SqlTypeRep(TText)
                               , SqlType(defaultValue)
                               )
 import qualified Database.Selda.SqlType as Sql

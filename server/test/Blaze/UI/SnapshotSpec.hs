@@ -31,6 +31,21 @@ utc n = UTCTime (toEnum n) (toEnum n)
 mkId :: Int -> CfgId
 mkId = CfgId . mkUuid1
 
+mkBranchTree :: [(Int, SnapshotInfo)] -> [(Int, Int)] -> BranchTree
+mkBranchTree nodes' edges'
+  = G.addNodesWithAttrs (over _1 mkId <$> nodes')
+  .  G.fromEdges
+  . fmap G.fromTupleLEdge
+  . fmap (\(a, b) -> ((), (mkId a, mkId b)))
+  $ edges'
+
+branchTree0 :: BranchTree
+branchTree0 = mkBranchTree nodes' edges'
+  where
+    nodes' = [(0, SnapshotInfo (Just "a") (utc 0) Autosave)]
+    edges' = []
+
+
 branch1 :: Branch BranchTree
 branch1 = Branch
   { originFuncAddr = 0
@@ -46,9 +61,9 @@ branch1 = Branch
     nodes' = [ (mkId 0, SnapshotInfo (Just "a") (utc 0) Immutable)
              , (mkId 1, SnapshotInfo (Just "b") (utc 1) Immutable)
              , (mkId 2, SnapshotInfo (Just "c") (utc 2) Immutable)
-             , (mkId 3, SnapshotInfo Nothing (utc 3) AutoSave)
+             , (mkId 3, SnapshotInfo Nothing (utc 3) Autosave)
              , (mkId 4, SnapshotInfo (Just "d") (utc 4) Immutable)
-             , (mkId 5, SnapshotInfo Nothing (utc 5) AutoSave)
+             , (mkId 5, SnapshotInfo Nothing (utc 5) Autosave)
              ]
     edges' = [ (0, 1)
              , (0, 2)
@@ -61,7 +76,16 @@ branch1 = Branch
 
 spec :: Spec
 spec = describe "Blaze.UI.Snapshot" $ do
-  context "Snapshot" $ do
-
-    it "Should do something" $ do
-      False `shouldBe` True
+  context "immortalizeAutosave" $ do
+    it "should create new node and make old node immutable fortree with single node" $ do
+      let oldCid = mkId 0
+          newCid = mkId 1
+          saveTime = utc 1
+          result = immortalizeAutosave oldCid newCid saveTime branchTree0
+          expected = mkBranchTree
+            [ (0, SnapshotInfo (Just "a") (utc 0) Immutable)
+            , (1, SnapshotInfo Nothing saveTime Autosave)
+            ]
+            [(0, 1)]
+      
+      result `shouldBe` expected
