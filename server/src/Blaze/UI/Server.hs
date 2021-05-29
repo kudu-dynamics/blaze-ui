@@ -444,7 +444,7 @@ handleBinjaEvent = \case
             CfgUI.addCfg cid pcfg 
             -- TODO: this calls convertPilCfg and Snapshot.toTransport twice
             -- instead, do it once and pass converted cfg to db saving func
-            sendToBinja . SBSnapshotMsg . Snapshot.SnapshotBranch bid
+            sendToBinja . SBSnapshot . Snapshot.SnapshotBranch bid
               $ Snapshot.toTransport snapBranch
             sendToBinja . SBCfg cid bhash $ convertPilCfg pcfg
         debug "Created new branch and added auto-cfg."
@@ -515,7 +515,7 @@ handleBinjaEvent = \case
       hpath <- view #hostBinaryPath <$> ask
       branches <- Db.getAllBranches hpath
       sendToBinja
-        . SBSnapshotMsg
+        . SBSnapshot
         . Snapshot.BranchesOfBinary
         . fmap (over _2 Snapshot.toTransport)
         $ branches
@@ -525,7 +525,7 @@ handleBinjaEvent = \case
       hpath <- view #hostBinaryPath <$> ask
       branches <- Db.getBranchesForFunction hpath (fromIntegral funcAddr)
       sendToBinja
-        . SBSnapshotMsg
+        . SBSnapshot
         . Snapshot.BranchesOfFunction funcAddr
         . fmap (over _2 Snapshot.toTransport)
         $ branches  
@@ -535,7 +535,7 @@ handleBinjaEvent = \case
       Db.getBranch bid >>= \case
         Nothing -> logError $ "Could not find snapshot with id: " <> show bid
         Just br -> sendToBinja
-                   . SBSnapshotMsg
+                   . SBSnapshot
                    $ Snapshot.SnapshotBranch bid
                    (Snapshot.toTransport br)
 
@@ -560,7 +560,7 @@ handleBinjaEvent = \case
               updatedBranch = b & #tree .~ updatedTree
           Db.setBranchTree bid updatedTree
               
-          sendToBinja . SBSnapshotMsg . Snapshot.SnapshotBranch bid
+          sendToBinja . SBSnapshot . Snapshot.SnapshotBranch bid
             $ Snapshot.toTransport updatedBranch
           return (newAutoCid, cfg')
       sendToBinja . SBCfg newCid (b ^. #bndbHash) . convertPilCfg $ cfg'
@@ -597,7 +597,7 @@ handleBinjaEvent = \case
           updatedBranch = b & #tree .~ updatedTree
       Db.setBranchTree bid updatedTree
 
-      sendToBinja . SBSnapshotMsg . Snapshot.SnapshotBranch bid
+      sendToBinja . SBSnapshot . Snapshot.SnapshotBranch bid
         $ Snapshot.toTransport updatedBranch
 
     -- -- Renames previously saved immutable cfg

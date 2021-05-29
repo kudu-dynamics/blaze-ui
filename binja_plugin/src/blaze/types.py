@@ -11,6 +11,7 @@ T = List[str]
 Address = int
 Word64 = int
 UUID = str
+BranchId = UUID
 CfgId = UUID
 ClientId = UUID
 BinaryHash = str
@@ -107,23 +108,69 @@ class ServerCfg(TypedDict):
     root: CfNode
     nodes: List[Tuple[CfNode, CfNode]]
 
+   
+class SnapshotInfo(TypedDict):
+    name: Optional[str]
+    date: Any # TODO: utc time
+    snapshotType: Literal['Autosave', 'Immutable'] 
 
+    
+class ServerBranchTree(TypedDict):
+    edges: List[Tuple[CfgId, CfgId]] # actually (e, (n, n)), but e is (), so...
+    nodes: List[Tuple[CfgId, Optional[SnapshotInfo]]]
+
+class BranchTree(TypedDict):
+    edges: List[Tuple[CfgId, CfgId]] # actually (e, (n, n)), but e is (), so...
+    attrs: Dict[CfgId, SnapshotInfo]
+
+class Branch(TypedDict):
+    bndbHash: BinaryHash
+    originFuncAddr: Address
+    branchName: Optional[str]
+    rootNode: CfgId
+    tree: BranchTree
+
+class ServerBranch(TypedDict):
+    bndbHash: BinaryHash
+    originFuncAddr: Address
+    branchName: Optional[str]
+    rootNode: CfgId
+    tree: ServerBranchTree
+
+    
+class SnapshotServerToBinja(TypedDict, total=False):
+    tag: Literal['SnapshotBranch', 'BranchesOfFunction', 'BranchesOfBinary']
+    branchId: Optional[BranchId]
+    funcAddress: Optional[Address]
+    branch: Optional[ServerBranch]
+    branches: Optional[List[Tuple[BranchId, ServerBranch]]]
+
+class SnapshotBinjaToServer(TypedDict, total=False):
+    tag: Literal['GetAllBranches', 'GetBranchesOfFunction', 'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot']
+    originFuncAddr: Optional[Address]
+    branchId: Optional[BranchId]
+    name: Optional[str]
+    cfgId: Optional[CfgId]
+    
 class ServerToBinja(TypedDict, total=False):
-    tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop']
+    tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshotMsg']
     message: Optional[str]
     cfgId: Optional[CfgId]
     cfg: Optional[ServerCfg]
+    snapshotMsg: Optional[SnapshotServerToBinja]
+    
 
 
 class BinjaToServer(TypedDict, total=False):
     tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
-                 'BSCfgRemoveBranch', 'BSNoop']
+                 'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop']
     message: Optional[str]
     address: Optional[Word64]
     startFuncAddress: Optional[Word64]
     cfgId: Optional[CfgId]
     callNode: Optional[CallNode]
     edge: Optional[Tuple[CfNode, CfNode]]
+    snapshotMsg: Optional[SnapshotBinjaToServer]
 
 
 class BinjaMessage(TypedDict):

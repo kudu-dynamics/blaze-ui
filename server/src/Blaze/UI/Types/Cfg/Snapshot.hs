@@ -62,7 +62,7 @@ emptySnapState = SnapState
 -- Active CFGs map has CfgId -> WorkingCfg
 -- ActiveCfg = parentId, branchId
 
-data OutgoingMsg
+data ServerToBinja
   = SnapshotBranch
     { branchId :: BranchId
     , branch :: Branch BranchTransport
@@ -75,11 +75,11 @@ data OutgoingMsg
   | BranchesOfBinary
     { branches :: [(BranchId, Branch BranchTransport)] }
   deriving (Eq, Ord, Show, Generic)
-instance ToJSON OutgoingMsg
-instance FromJSON OutgoingMsg
+instance ToJSON ServerToBinja
+instance FromJSON ServerToBinja
 
 
-data IncomingMsg
+data BinjaToServer
   = GetAllBranches -- all for binary
 
   | GetBranchesOfFunction {originFuncAddr :: Word64}
@@ -99,8 +99,8 @@ data IncomingMsg
   | RenameSnapshot { cfgId :: CfgId, name :: Text }
 
   deriving (Eq, Ord, Show, Generic)
-instance ToJSON IncomingMsg
-instance FromJSON IncomingMsg
+instance ToJSON BinjaToServer
+instance FromJSON BinjaToServer
 
 data SnapshotType
   = Autosave

@@ -48,7 +48,7 @@ data ServerToBinja = SBLogInfo { message :: Text }
                            , cfg :: CfgTransport [Text]
                            }
 
-                   | SBSnapshotMsg { snapshotMsg :: Snapshot.OutgoingMsg }
+                   | SBSnapshot { snapshotMsg :: Snapshot.ServerToBinja }
                      
                    | SBNoop
                    deriving (Eq, Ord, Show, Generic)
@@ -81,7 +81,7 @@ data BinjaToServer = BSConnect
                      , node :: CfNode ()
                      }
 
-                   | BSSnapshot Snapshot.IncomingMsg
+                   | BSSnapshot { snapshotMsg :: Snapshot.BinjaToServer }
 
                    | BSNoop
 

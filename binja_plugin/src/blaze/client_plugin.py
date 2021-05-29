@@ -21,6 +21,7 @@ from websockets.client import WebSocketClientProtocol
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
 from .types import BinjaMessage, BinjaToServer, CfgId, ServerCfg, ServerToBinja, BlazeConfig, ClientId, BinaryHash
+from .snapshot import snapshot_message_handler
 
 LOG_LEVEL = 'INFO'
 BLAZE_UI_HOST = os.environ.get('BLAZE_UI_HOST', 'localhost')
@@ -291,6 +292,9 @@ class BlazePlugin():
             bndb_hash = cast(BinaryHash, msg['bndbHash'])
             cfg = cast(ServerCfg, msg['cfg'])
             self.icfg_dock_widget.icfg_widget.set_icfg(cfg_id, cfg_from_server(cfg))
+
+        elif tag == 'SBSnapshot':
+            snapshot_message_handler(msg['snapshotMsg'])
 
         else:
             log.error("Blaze: unknown message type: %s", tag)
