@@ -164,7 +164,7 @@ class ICFGFlowGraph(FlowGraph):
 
 class ICFGWidget(FlowGraphWidget, QObject):
     def __init__(self, parent: QWidget, view_frame: ViewFrame, blaze_instance: 'BlazeInstance'):
-        FlowGraphWidget.__init__(self, parent, blaze_instance.bv, None)
+        FlowGraphWidget.__init__(self, parent, blaze_instance.bv)
         self._view_frame: ViewFrame = view_frame
         self.blaze_instance: 'BlazeInstance' = blaze_instance
 
