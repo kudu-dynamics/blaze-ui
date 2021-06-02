@@ -140,7 +140,8 @@ data Event = WebEvent WebToServer
 
 -- TODO: Maybe we should just use SessionState since they are almost the same.
 data EventLoopCtx = EventLoopCtx
-  { hostBinaryPath :: HostBinaryPath
+  { clientId :: ClientId
+  , hostBinaryPath :: HostBinaryPath
   , binaryManager :: BinaryManager
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))

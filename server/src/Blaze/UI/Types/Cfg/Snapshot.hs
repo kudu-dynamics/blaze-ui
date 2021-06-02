@@ -16,7 +16,7 @@ import Database.Selda.SqlType ( Lit(LCustom)
 import qualified Database.Selda.SqlType as Sql
 import Blaze.UI.Types.Graph (GraphTransport)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
-
+import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 
 newtype BranchId = BranchId UUID
   deriving (Eq, Ord, Show, Generic)
@@ -73,14 +73,20 @@ data ServerToBinja
     , branches :: [(BranchId, Branch BranchTransport)]
     }
   | BranchesOfBinary
-    { branches :: [(BranchId, Branch BranchTransport)] }
+    { hostBinaryPath :: HostBinaryPath
+    , branches :: [(BranchId, Branch BranchTransport)]
+    }
+  | BranchesOfClient
+    { branchesOfClient :: [(HostBinaryPath, [(BranchId, Branch BranchTransport)])] }
   deriving (Eq, Ord, Show, Generic)
 instance ToJSON ServerToBinja
 instance FromJSON ServerToBinja
 
 
 data BinjaToServer
-  = GetAllBranches -- all for binary
+  = GetAllBranchesOfClient
+  
+  | GetAllBranchesOfBinary -- all for currently focused binary
 
   | GetBranchesOfFunction {originFuncAddr :: Word64}
 
@@ -123,7 +129,8 @@ type BranchTree = AlgaGraph () SnapshotInfo CfgId
 type BranchTransport = GraphTransport () SnapshotInfo CfgId
 
 data Branch a = Branch
-  { bndbHash :: BinaryHash
+  { hostBinaryPath :: HostBinaryPath
+  , bndbHash :: BinaryHash
   , originFuncAddr :: Address
   , branchName :: Maybe Text
   , rootNode :: CfgId

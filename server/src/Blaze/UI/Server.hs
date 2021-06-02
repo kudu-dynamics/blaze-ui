@@ -166,7 +166,7 @@ binjaApp localOutboxThreads st conn = do
 
         True -> do
           logInfo $ "Connected:"
-          spawnEventHandler st ss
+          spawnEventHandler cid st ss
           outboxThread <- createBinjaOutbox conn ss cid hpath
           pushEvent
           binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
@@ -187,8 +187,8 @@ binjaApp localOutboxThreads st conn = do
               --     pushEvent
               --     binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
 
-spawnEventHandler :: AppState -> SessionState -> IO ()
-spawnEventHandler st ss = do
+spawnEventHandler :: ClientId -> AppState -> SessionState -> IO ()
+spawnEventHandler cid st ss = do
   b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
   case b of
     False -> putText "Warning: spawnEventHandler -- event handler already spawned"
@@ -197,6 +197,7 @@ spawnEventHandler st ss = do
       eventTid <- forkIO . forever $ do
         msg <- atomically . readTQueue $ ss ^. #eventInbox
         let ctx = EventLoopCtx
+                  cid
                   (ss ^. #binaryPath)
                   (ss ^. #binaryManager)
                   (ss ^. #binjaOutboxes)
@@ -360,38 +361,6 @@ mainEventLoop (BinjaEvent msg) = handleBinjaEvent msg
 handleWebEvent :: WebToServer -> EventLoop ()
 handleWebEvent _msg =
   debug "Web events currently not handled"
-  -- \case
-  -- WSNoop -> debug "web noop"
-
-  -- WSGetFunctionsList -> do
-  --   funcs <- liftIO $ Blaze.Import.CallGraph.getFunctions bvi
-  --   -- sendToWeb $ SWPilType WebPil.testPilType
-  --   -- sendToWeb $ SWProblemType WebPil.testCallOp
-  --   sendToWeb $ SWFunctionsList funcs
-    
-  -- WSTextMessage t -> do
-  --   debug $ "Text Message from Web: " <> t
-  --   sendToWeb $ SWTextMessage "I got your message and am flying with it!"
-  --   sendToBinja . SBLogInfo $ "From the Web UI: " <> t
-
-  -- WSGetTypeReport fn -> do
-  --   debug $ "Generating type report for " <> show fn
-  --   etr <- getFunctionTypeReport bv (fn ^. #address)
-  --   case etr of
-  --     Left err -> do
-  --       let msg = "Failed to generate type report: " <> err
-  --       debug msg
-  --       sendToWeb . SWLogError $ msg
-
-  --     Right (func, tr) -> do
-  --       printTypeReportToConsole func tr
-  --       let tr' = WebPil.toTypeReport tr
-  --       -- let tr'' = tr' & #symStmts %~ (take 1 . drop 7)
-  --       --let tr'' = tr' & #symStmts .~ WebPil.testCallOp
-  --       liftIO $ pprint tr'
-  --       sendToWeb $ SWFunctionTypeReport tr'
-  -- where
-  --   bvi = BNImporter bv
 
 handleBinjaEvent :: BinjaToServer -> EventLoop ()
 handleBinjaEvent = \case
@@ -438,9 +407,14 @@ handleBinjaEvent = \case
           Nothing -> sendToBinja
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
-            hpath <- view #hostBinaryPath <$> ask
+            ctx <- ask
             let pcfg = r ^. #result
-            (bid, cid, snapBranch) <- Db.saveNewCfgAndBranch hpath bhash (func ^. #address) pcfg
+            (bid, cid, snapBranch) <- Db.saveNewCfgAndBranch
+              (ctx ^. #clientId)
+              (ctx ^. #hostBinaryPath)
+              bhash
+              (func ^. #address)
+              pcfg
             CfgUI.addCfg cid pcfg 
             -- TODO: this calls convertPilCfg and Snapshot.toTransport twice
             -- instead, do it once and pass converted cfg to db saving func
@@ -511,19 +485,32 @@ handleBinjaEvent = \case
   BSNoop -> debug "Binja noop"
 
   BSSnapshot snapMsg -> case snapMsg of
-    Snapshot.GetAllBranches -> do
-      hpath <- view #hostBinaryPath <$> ask
-      branches <- Db.getAllBranches hpath
+    Snapshot.GetAllBranchesOfClient -> do
+      ctx <- ask
+      branches <- HashMap.toList <$> Db.getAllBranchesForClient (ctx ^. #clientId) :: EventLoop [(HostBinaryPath, [(BranchId, Snapshot.Branch Snapshot.BranchTree)])]
       sendToBinja
         . SBSnapshot
-        . Snapshot.BranchesOfBinary
+        . Snapshot.BranchesOfClient
+        . fmap (over _2 (fmap (over _2 Snapshot.toTransport)))
+        $ branches
+      
+    Snapshot.GetAllBranchesOfBinary -> do
+      ctx <- ask
+      let hpath = ctx ^. #hostBinaryPath
+      branches <- Db.getAllBranchesForBinary (ctx ^. #clientId) hpath
+      sendToBinja
+        . SBSnapshot
+        . Snapshot.BranchesOfBinary hpath
         . fmap (over _2 Snapshot.toTransport)
         $ branches
       
     -- returns all branches for function
     Snapshot.GetBranchesOfFunction funcAddr -> do
-      hpath <- view #hostBinaryPath <$> ask
-      branches <- Db.getBranchesForFunction hpath (fromIntegral funcAddr)
+      ctx <- ask
+      branches <- Db.getBranchesForFunction
+                  (ctx ^. #clientId)
+                  (ctx ^. #hostBinaryPath)
+                  (fromIntegral funcAddr)
       sendToBinja
         . SBSnapshot
         . Snapshot.BranchesOfFunction funcAddr

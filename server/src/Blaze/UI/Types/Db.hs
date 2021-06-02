@@ -19,6 +19,8 @@ import Blaze.UI.Types.Graph (GraphTransport)
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, SnapshotInfo)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
+import Blaze.UI.Types.Session (ClientId)
+
 
 newtype Blob a = Blob a
   deriving (Eq, Ord, Show, Generic, Typeable)
@@ -60,6 +62,7 @@ instance SqlRow SavedCfg
 
 data SnapshotBranch = SnapshotBranch
   { branchId :: BranchId
+  , clientId :: ClientId
   , hostBinaryPath :: HostBinaryPath
   , bndbHash :: BinaryHash
   , originFuncAddr :: Address
