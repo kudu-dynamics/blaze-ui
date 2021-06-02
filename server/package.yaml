@@ -106,6 +106,7 @@ library:
   - Blaze.UI.Prelude
   - Blaze.UI.Server
   - Blaze.UI.Types
+  - Blaze.UI.Types.BinaryHash
   - Blaze.UI.Types.BinaryManager
   - Blaze.UI.Types.Cfg
   - Blaze.UI.Types.Cfg.Snapshot

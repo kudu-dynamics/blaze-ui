@@ -1,27 +1,12 @@
 module Blaze.UI.SnapshotSpec where
 
-import qualified Binja.Core as BN
-import qualified Blaze.Import.CallGraph as CG
-import Blaze.Import.Cfg (CfgImporter (getCfg))
-import Blaze.Import.Source.BinaryNinja (BNImporter (BNImporter))
-import Blaze.Types.Import (ImportResult (ImportResult))
-import qualified Blaze.UI.Db as Db
 import Blaze.UI.Prelude hiding (ignore)
-import Blaze.UI.Types
-  ( EventLoopCtx (EventLoopCtx)
-  , EventLoop
-  , runEventLoop
-  )
-import qualified Data.HashMap.Strict as HashMap
-import System.Directory (removeFile)
-import System.IO.Temp (emptySystemTempFile)
-import Blaze.Types.Cfg as Cfg
-import qualified Data.Set as Set
 import Data.Time.Clock (UTCTime(UTCTime))
 import qualified Blaze.Types.Graph as G
 import Blaze.UI.Types.Cfg.Snapshot
 import Blaze.UI.Cfg.Snapshot
 import Blaze.UI.Types.Cfg (CfgId(CfgId))
+import qualified Blaze.UI.Types.BinaryHash as BinaryHash
 import Blaze.Util.Spec (mkUuid1)
 import Test.Hspec
 
@@ -48,7 +33,9 @@ branchTree0 = mkBranchTree nodes' edges'
 
 branch1 :: Branch BranchTree
 branch1 = Branch
-  { originFuncAddr = 0
+  { hostBinaryPath = "/tmp"
+  , bndbHash = BinaryHash.fromByteString "branch1"
+  , originFuncAddr = 0
   , branchName = Nothing
   , rootNode = mkId 0
   , tree = G.addNodesWithAttrs nodes'

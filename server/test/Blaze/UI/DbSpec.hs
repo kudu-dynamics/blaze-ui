@@ -17,12 +17,10 @@ import System.Directory (removeFile)
 import System.IO.Temp (emptySystemTempFile)
 import Blaze.Types.Cfg as Cfg
 import qualified Data.Set as Set
-import qualified Blaze.Types.Pil as Pil
 import Blaze.Util.Spec (mkUuid1)
 import qualified Blaze.UI.Types.BinaryManager as BM
 import Blaze.UI.Types.Session (ClientId(ClientId)) 
 import Test.Hspec
-
 
 
 diveBin :: FilePath
@@ -35,8 +33,8 @@ tryRemoveFile p = removeFile p `catch` ignore
     ignore _ = return ()
 
 mockEventLoopCtx :: IO EventLoopCtx
-mockEventLoopCtx = EventLoopCtx hpath
-  <$> atomically (BM.create "/tmp/blaze/bm" cid hpath)
+mockEventLoopCtx = EventLoopCtx cid hpath
+  <$> atomically (BM.create bmdir cid hpath)
   <*> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
@@ -44,7 +42,7 @@ mockEventLoopCtx = EventLoopCtx hpath
   where
     bmdir = "/tmp/blaze/bm"
     hpath = "/tmp/blaze/spec"
-    cid = ClientId $ mkUuid1 0
+    cid = ClientId $ mkUuid1 (0 :: Int)
 
 mockEventLoop :: EventLoop a -> IO a
 mockEventLoop m = do
