@@ -267,13 +267,13 @@ class BlazePlugin():
         # log.debug('Got message: %s', json.dumps(msg, indent=2))
 
         if tag == 'SBLogInfo':
-            log.info(msg['message'])
+            log.info(msg.get('message'))
 
         elif tag == 'SBLogWarn':
-            log.warn(msg['message'])
+            log.warn(msg.get('message'))
 
         elif tag == 'SBLogError':
-            log.error(msg['message'])
+            log.error(msg.get('message'))
 
         elif tag == 'SBNoop':
             log.info("got Noop")
@@ -281,11 +281,11 @@ class BlazePlugin():
         elif tag == 'SBCfg':
             cfg_id = cast(CfgId, msg.get('cfgId'))
             bndb_hash = cast(BinaryHash, msg.get('bndbHash'))
-            cfg = cast(ServerCfg, msg['cfg'])
+            cfg = cast(ServerCfg, msg.get('cfg'))
             self.icfg_dock_widget.icfg_widget.set_icfg(cfg_id, cfg_from_server(cfg))
 
         elif tag == 'SBSnapshot':
-            snapshot_message_handler(cast(SnapshotServerToBinja, msg['snapshotMsg']))
+            snapshot_message_handler(cast(SnapshotServerToBinja, msg.get('snapshotMsg')))
 
         else:
             log.error("Blaze: unknown message type: %s", tag)

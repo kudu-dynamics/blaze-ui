@@ -74,10 +74,14 @@ def get_edge_type(edge: CfEdge, cfg: Cfg) -> Tuple[BranchType, Optional[EdgeStyl
     }[edge['branchType']]
 
 
-def is_conditional_edge(edge: Union[CfEdge, FlowGraphEdge]) -> bool:
-    conditional_types = ('TrueBranch', 'FalseBranch', BranchType.TrueBranch, BranchType.FalseBranch)
-    edge_type = edge.type if isinstance(edge, FlowGraphEdge) else edge.get('branchType')
-    return edge_type in conditional_types
+def is_conditional_cf_edge(edge: CfEdge) -> bool:
+    conditional_types = ('TrueBranch', 'FalseBranch')
+    return edge.get('branchType') in conditional_types
+
+
+def is_conditional_flowgraph_edge(edge: FlowGraphEdge) -> bool:
+    conditional_types = (BranchType.TrueBranch, BranchType.FalseBranch)
+    return edge.branch_type in conditional_types
 
 
 def is_call_node(node: CfNode) -> bool:
@@ -188,7 +192,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 activate = self.context_menu_action_prune,
                 isValid = (
                     lambda ctx: isinstance(self.clicked_edge, FlowGraphEdge) \
-                        and is_conditional_edge(self.clicked_edge)
+                        and is_conditional_flowgraph_edge(self.clicked_edge)
                 ),
             ),
             BNAction(
@@ -274,7 +278,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         if not edge:
             raise RuntimeError('Missing edge!')
 
-        if not is_conditional_edge(edge):
+        if not is_conditional_cf_edge(edge):
             log.error('Not a conditional branch')
             return
 

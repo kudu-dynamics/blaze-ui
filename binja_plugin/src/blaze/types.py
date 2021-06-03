@@ -16,6 +16,9 @@ CfgId = UUID
 ClientId = UUID
 BinaryHash = str
 HostBinaryPath = str
+
+# What Aeson encodes the unit value `()` as
+# NOTE: we might want `Literal[[]]` instead
 Unit = Any
 
 BINARYNINJAUI_CUSTOM_EVENT = 0xfff6
@@ -153,7 +156,6 @@ class SnapshotServerToBinja(TypedDict, total=False):
     branches: Optional[List[Tuple[BranchId, ServerBranch]]]
     branchesOfClient: Optional[List[Tuple[HostBinaryPath, List[Tuple[BranchId, ServerBranch]]]]]
 
-
 class SnapshotBinjaToServer(TypedDict, total=False):
     tag: Literal['GetAllBranchesOfClient', 'GetAllBranchesOfBinary', 'GetBranchesOfFunction',
                  'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot']
@@ -163,7 +165,7 @@ class SnapshotBinjaToServer(TypedDict, total=False):
     cfgId: Optional[CfgId]
 
 class ServerToBinjaTotal(TypedDict, total=True):
-    tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshotMsg']
+    tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshot']
 
 class ServerToBinja(ServerToBinjaTotal, total=False):
     bndbHash: Optional[BinaryHash]
