@@ -58,11 +58,3 @@ loadBndb bm h = loadVersionFromCache bm h >>= \case
     Right bv -> do
       cacheBinaryView bm h bv
       return $ Right bv
-
--- loadLatest :: MonadIO m => BinaryManager -> m (Either BinaryManagerError (BNBinaryView, BinaryHash))
--- loadLatest bm = do
---   h <- liftIO . atomically . readTVar $ bm ^. #latestVersion
---   er <- loadBndb bm h
---   return $ (,h) <$> er
-
-  

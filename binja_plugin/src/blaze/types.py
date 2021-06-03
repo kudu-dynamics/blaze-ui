@@ -16,6 +16,7 @@ CfgId = UUID
 ClientId = UUID
 BinaryHash = str
 HostBinaryPath = str
+Unit = Any
 
 BINARYNINJAUI_CUSTOM_EVENT = 0xfff6
 
@@ -116,7 +117,7 @@ class SnapshotInfo(TypedDict):
 
     
 class ServerBranchTree(TypedDict):
-    edges: List[Tuple[CfgId, CfgId]] # actually (e, (n, n)), but e is (), so...
+    edges: List[Tuple[Unit, Tuple[CfgId, CfgId]]]
     nodes: List[Tuple[CfgId, Optional[SnapshotInfo]]]
 
 class BranchTree(TypedDict):
@@ -139,14 +140,16 @@ class ServerBranch(TypedDict):
 
     
 class SnapshotServerToBinja(TypedDict, total=False):
-    tag: Literal['SnapshotBranch', 'BranchesOfFunction', 'BranchesOfBinary']
+    tag: Literal['SnapshotBranch', 'BranchesOfFunction', 'BranchesOfBinary', 'BranchesOfClient']
     branchId: Optional[BranchId]
     funcAddress: Optional[Address]
+    hostBinaryPath: Optional[HostBinaryPath]
     branch: Optional[ServerBranch]
     branches: Optional[List[Tuple[BranchId, ServerBranch]]]
+    branchesOfClient: Optional[List[Tuple[HostBinaryPath, List[Tuple[BranchId, ServerBranch]]]]]
 
 class SnapshotBinjaToServer(TypedDict, total=False):
-    tag: Literal['GetAllBranches', 'GetBranchesOfFunction', 'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot']
+    tag: Literal['GetAllBranchesOfClient', 'GetBranchesOfBinary', 'GetBranchesOfFunction', 'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot']
     originFuncAddr: Optional[Address]
     branchId: Optional[BranchId]
     name: Optional[str]
@@ -154,6 +157,7 @@ class SnapshotBinjaToServer(TypedDict, total=False):
     
 class ServerToBinja(TypedDict, total=False):
     tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshotMsg']
+    bndbHash: Optional[BinaryHash]
     message: Optional[str]
     cfgId: Optional[CfgId]
     cfg: Optional[ServerCfg]
@@ -176,7 +180,6 @@ class BinjaToServer(TypedDict, total=False):
 class BinjaMessage(TypedDict):
     clientId: ClientId
     hostBinaryPath: HostBinaryPath
-    bndbHash: BinaryHash
     action: Union[BinjaToServer, ServerToBinja]
 
 

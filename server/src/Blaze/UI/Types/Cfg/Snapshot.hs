@@ -2,13 +2,10 @@ module Blaze.UI.Types.Cfg.Snapshot where
 
 import Blaze.Prelude hiding (Symbol)
 
-import qualified Data.HashMap.Strict as HashMap
 import System.Random (Random)
-import Blaze.Types.Cfg (PilCfg)
 import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.Types.Graph.Alga (AlgaGraph)
 import Data.Time.Clock (UTCTime)
-import Control.Concurrent.STM.TMVar (TMVar)
 import Database.Selda.SqlType ( Lit(LCustom)
                               , SqlTypeRep(TBlob)
                               , SqlType
@@ -28,39 +25,6 @@ instance SqlType BranchId where
    sqlType _ = TBlob
    fromSql x = BranchId $ Sql.fromSql x
    defaultValue = LCustom TBlob (Sql.defaultValue :: Lit UUID)
-
--- ACTIVE cfgs are mutable, AUTO saved
-data ActiveCfg = ActiveCfg
-  { branchId :: BranchId
-  , cfg :: TMVar PilCfg
-  } deriving (Eq, Generic)
-
--- one SnapState per binary and user
-data SnapState = SnapState
-  { branches :: HashMap BranchId (Branch BranchTree)
-  -- active cfg's are unsaved/snapped and can be mutated
-  , activeCfgs :: HashMap CfgId ActiveCfg
-  -- immutable Cfgs
-  , savedCfgs :: HashMap CfgId PilCfg
-  } deriving (Eq, Generic)
-
-emptySnapState :: SnapState
-emptySnapState = SnapState
-  { branches = HashMap.empty
-  , activeCfgs = HashMap.empty
-  , savedCfgs = HashMap.empty
-  }
-
--- Persistence :
--- eventually, store working cfg map and snapshots in db
-
--- Info maps:
--- CfgId -> Maybe BranchId (nothing means it's an origin)
--- CfgId -> Cfg
--- CfgId -> ActiveCfg
-
--- Active CFGs map has CfgId -> WorkingCfg
--- ActiveCfg = parentId, branchId
 
 data ServerToBinja
   = SnapshotBranch

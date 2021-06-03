@@ -6,7 +6,7 @@ module Blaze.UI.Db
 import Blaze.UI.Prelude hiding ((:*:))
 
 import qualified Prelude as P
-import Blaze.UI.Types.Db as Exports
+import Blaze.UI.Types.Db as Exports hiding (cfg)
 import Database.Selda
 import Database.Selda.SQLite
 import Blaze.UI.Types.Cfg (CfgId)
@@ -51,9 +51,9 @@ saveNewCfgAndBranch clientId' hpath bhash originFuncAddr' pcfg = do
 
 -- | use `saveNewCfgAndBranch` instead
 saveNewCfg_ :: MonadDb m => BranchId -> CfgId -> PilCfg -> m ()
-saveNewCfg_ bid cid cfg' = withDb $ do
+saveNewCfg_ bid cid cfg = withDb $ do
   insert_ cfgTable
-    [ SavedCfg cid bid . Blob $ Cfg.toTransport identity cfg' ]
+    [ SavedCfg cid bid . Blob $ Cfg.toTransport identity cfg ]
 
 setCfgName :: MonadDb m => BranchId -> CfgId -> Text -> m ()
 setCfgName bid cid name' = modifyBranchTree bid
@@ -72,12 +72,12 @@ setCfg cid pcfg = withDb $ do
 getSavedCfg :: MonadDb m => CfgId -> m [SavedCfg]
 getSavedCfg cid = withDb $ do
   query $ do
-    cfg' <- select cfgTable
-    restrict (cfg' ! #cfgId .== literal cid)
-    return $ cfg'
+    cfg <- select cfgTable
+    restrict (cfg ! #cfgId .== literal cid)
+    return cfg
 
 getCfg :: MonadDb m => CfgId -> m (Maybe PilCfg)
-getCfg cid = (fmap $ view #cfg) <$> getSavedCfg cid >>= \case
+getCfg cid = fmap (view #cfg) <$> getSavedCfg cid >>= \case
   [] -> return Nothing
   [Blob x] -> return . Just . Cfg.fromTransport $ x
   _ -> -- hopefully impossible
@@ -86,10 +86,10 @@ getCfg cid = (fmap $ view #cfg) <$> getSavedCfg cid >>= \case
 getCfgBinaryHash :: MonadDb m => CfgId -> m (Maybe BinaryHash)
 getCfgBinaryHash cid = withDb $ do
   xs <- query $ do
-    cfg' <- select cfgTable
-    restrict (cfg' ! #cfgId .== literal cid)
+    cfg <- select cfgTable
+    restrict (cfg ! #cfgId .== literal cid)
     branch <- select snapshotBranchTable
-    restrict (branch ! #branchId .== cfg' ! #branchId)
+    restrict (branch ! #branchId .== cfg ! #branchId)
     return $ branch ! #bndbHash
   case xs of
     [] -> return Nothing
@@ -99,9 +99,9 @@ getCfgBinaryHash cid = withDb $ do
 getCfgBranchId :: MonadDb m => CfgId -> m (Maybe BranchId)
 getCfgBranchId cid = withDb $ do
   xs <- query $ do
-    cfg' <- select cfgTable
-    restrict (cfg' ! #cfgId .== literal cid)
-    return $ cfg' ! #branchId
+    cfg <- select cfgTable
+    restrict (cfg ! #cfgId .== literal cid)
+    return $ cfg ! #branchId
   case xs of
     [] -> return Nothing
     [h] -> return $ Just h

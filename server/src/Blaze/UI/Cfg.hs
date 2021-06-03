@@ -11,8 +11,8 @@ import Blaze.Types.Pil (Stmt)
 import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.Types.Cfg (Cfg)
 
--- | just changes cfgid, but leaves graph the same
--- used whenever an auto-saved cfg is turned into a snapshot
+-- | Changes CfgId key in graph cache.
+-- Used whenever an auto-saved cfg is turned into a snapshot
 changeCfgId :: CfgId -> CfgId -> EventLoop ()
 changeCfgId oldCid newCid = do
   cfgMapTVar <- view #cfgs <$> ask
@@ -26,16 +26,16 @@ changeCfgId oldCid newCid = do
           $ HashMap.delete oldCid m
 
 addCfg :: CfgId -> Cfg [Stmt] -> EventLoop ()
-addCfg cid cfg' = do
+addCfg cid cfg = do
   cfgMapTVar <- view #cfgs <$> ask
   liftIO . atomically $ do
     m <- readTVar cfgMapTVar
     case HashMap.lookup cid m of
       Nothing -> do
-        cfgTVar <- newTVar cfg'
+        cfgTVar <- newTVar cfg
         writeTVar cfgMapTVar $ HashMap.insert cid cfgTVar m
       Just cfgTMVar -> do
-        writeTVar cfgTMVar cfg'
+        writeTVar cfgTMVar cfg
   return ()
 
 getCfg :: CfgId -> EventLoop (Maybe (Cfg [Stmt]))

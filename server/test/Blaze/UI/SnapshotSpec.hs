@@ -10,6 +10,7 @@ import qualified Blaze.UI.Types.BinaryHash as BinaryHash
 import Blaze.Util.Spec (mkUuid1)
 import Test.Hspec
 
+
 utc :: Int -> UTCTime
 utc n = UTCTime (toEnum n) (toEnum n)
 
@@ -17,19 +18,16 @@ mkId :: Int -> CfgId
 mkId = CfgId . mkUuid1
 
 mkBranchTree :: [(Int, SnapshotInfo)] -> [(Int, Int)] -> BranchTree
-mkBranchTree nodes' edges'
+mkBranchTree nodes'
   = G.addNodesWithAttrs (over _1 mkId <$> nodes')
   .  G.fromEdges
-  . fmap G.fromTupleLEdge
-  . fmap (\(a, b) -> ((), (mkId a, mkId b)))
-  $ edges'
+  . fmap (G.fromTupleLEdge . (\(a, b) -> ((), (mkId a, mkId b))))
 
 branchTree0 :: BranchTree
 branchTree0 = mkBranchTree nodes' edges'
   where
     nodes' = [(0, SnapshotInfo (Just "a") (utc 0) Autosave)]
     edges' = []
-
 
 branch1 :: Branch BranchTree
 branch1 = Branch
@@ -40,8 +38,7 @@ branch1 = Branch
   , rootNode = mkId 0
   , tree = G.addNodesWithAttrs nodes'
     .  G.fromEdges
-    . fmap G.fromTupleLEdge
-    . fmap (\(a, b) -> ((), (mkId a, mkId b)))
+    . fmap (G.fromTupleLEdge . (\(a, b) -> ((), (mkId a, mkId b))))
     $ edges'
   }
   where
@@ -58,8 +55,6 @@ branch1 = Branch
              , (2, 4)
              , (4, 5)
              ]
-
-
 
 spec :: Spec
 spec = describe "Blaze.UI.Snapshot" $ do

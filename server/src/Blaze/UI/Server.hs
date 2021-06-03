@@ -17,7 +17,7 @@ import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
 import qualified Blaze.Import.Source.BinaryNinja.Cfg as BnCfg
 import qualified Blaze.Types.Cfg as Cfg
-import Blaze.Types.Cfg (Cfg)
+import Blaze.Types.Cfg (Cfg, PilCfg)
 import qualified Blaze.Cfg.Analysis as CfgA
 import qualified Blaze.UI.Cfg as CfgUI
 import qualified Data.Set as Set
@@ -27,14 +27,12 @@ import qualified Blaze.Cfg.Interprocedural as ICfg
 import Blaze.Pretty (prettyIndexedStmts, showHex)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
-import Blaze.UI.Types.Cfg (convertPilCfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, Branch, BranchTree)
 import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Blaze.UI.Db as Db
-import Blaze.Types.Cfg (PilCfg)
-import Blaze.UI.Types.Cfg (CfgId)
+import Blaze.UI.Types.Cfg (CfgId, convertPilCfg)
 import qualified Blaze.UI.BinaryManager as BM
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session ( SessionId
@@ -51,7 +49,6 @@ receiveJSON conn = do
 sendJSON :: ToJSON a => WS.Connection -> a -> IO ()
 sendJSON conn x =
   WS.sendTextData conn (Aeson.encode x :: LBS.ByteString)
-
 
 data SessionError
   = InvalidSessionId Text
@@ -107,11 +104,6 @@ createWebOutbox conn ss = do
     $ HashMap.insert t q
   return t
 
--- sendToBinja_ :: BinaryHash -> ServerToBinja -> EventLoop ()
--- sendToBinja_ bhash msg = ask >>= \ctx -> liftIO . atomically $ do
---   qs <- fmap HashMap.elems . readTVar $ ctx ^. #binjaOutboxes
---   mapM_ (`writeTQueue` (bhash, msg)) qs
-
 sendToBinja :: ServerToBinja -> EventLoop ()
 sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
   qs <- fmap HashMap.elems . readTVar $ ctx ^. #binjaOutboxes
@@ -121,10 +113,6 @@ sendToWeb :: ServerToWeb -> EventLoop ()
 sendToWeb msg = ask >>= \ctx -> liftIO . atomically $ do
   qs <- fmap HashMap.elems . readTVar $ ctx ^. #webOutboxes
   mapM_ (`writeTQueue` msg) qs
-
--- TODO: log warning to binja, web, and console
--- logWarn :: Text -> EventLoop ()
--- logWarn = 
 
 -- | Websocket message handler for binja.
 -- This handles messages for multiple binaries to/from single binja.
@@ -165,27 +153,11 @@ binjaApp localOutboxThreads st conn = do
               pushEvent >> binjaApp localOutboxThreads st conn
 
         True -> do
-          logInfo $ "Connected:"
+          logInfo "Connected:"
           spawnEventHandler cid st ss
           outboxThread <- createBinjaOutbox conn ss cid hpath
           pushEvent
           binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
-
-              -- BM.loadBndb bm bhash >>= \case
-              --   Left err -> do
-              --     reply . SBLogError $ "Blaze cannot open binary: " <> show err
-              --     putText $ "Cannot open binary: " <> show err
-              --     atomically . modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
-              --     -- TODO: maybe send explicit disconnect?
-              --     return ()
-              --   Right bv -> do
-              --     logInfo $ "Loaded binary: " <> cs hpath
-              --     -- logInfo "For web plugin, go here:"
-              --     -- logInfo $ webUri (st ^. #serverConfig) sid
-              --     spawnEventHandler st ss
-              --     outboxThread <- createBinjaOutbox conn ss cid hpath
-              --     pushEvent
-              --     binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
 
 spawnEventHandler :: ClientId -> AppState -> SessionState -> IO ()
 spawnEventHandler cid st ss = do
@@ -211,55 +183,13 @@ spawnEventHandler cid st ss = do
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
       putText "Spawned event handlers"
 
--- webUri :: ServerConfig -> SessionId -> Text
--- webUri cfg (SessionId sid) = "http://"
---   <> serverHost cfg
---   <> ":" <> show (serverHttpPort cfg)
---   <> "/" <> cs sid
-
 webApp :: AppState -> SessionId -> WS.Connection -> IO ()
 webApp _st _sid _conn = do
   return ()
-  -- let fatalError t = do
-  --       sendJSON conn . SWLogError $ t
-  --       removeSessionState sid st
-  --       WS.sendClose conn t
-  --     logInfo = sendJSON conn . SWLogInfo
-  -- getSessionState sid st >>= \case
-  --   Left serr -> putText $ "Session Error: " <> show serr
-  --   Right (justCreated, ss) -> do
-  --     case justCreated of
-  --       True -> do
-  --         let efp = sessionIdToBinaryPath sid
-  --         case efp of
-  --           Left err -> fatalError err
-  --           Right fp -> do
-  --             logInfo $ "Fresh Web client connected sans binja. Loading binary: " <> cs fp
-  --             ebv <- BN.getBinaryView fp
-  --             case ebv of
-  --               Left err -> fatalError err
-  --               Right bv -> do
-  --                 BN.updateAnalysisAndWait bv
-  --                 logInfo $ "Loaded binary: " <> cs fp
-  --                 atomically $ putTMVar (ss ^. #binaryView) bv
-  --                 spawnEventHandler (cs fp) st ss
-  --       False -> return ()
-      
-  --     -- TODO: pass outboxThread in with event
-  --     _outboxThread <- createWebOutbox conn ss
-
-  --     forever $ do
-  --       er <- receiveJSON conn :: IO (Either Text WebToServer)
-  --       case er of
-  --         Left err -> do
-  --           putText $ "Error parsing JSON: " <> show err
-  --         Right x -> do
-  --           atomically . writeTQueue (ss ^. #eventInbox) . WebEvent $ x
 
 app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case splitPath of
   ["binja"] -> WS.acceptRequest pconn >>= binjaApp HashMap.empty st
-  -- ["web", sid] -> WS.acceptRequest pconn >>= webApp st (SessionId $ cs sid)
   _ -> do
     putText $ "Rejected request to invalid path: " <> cs path
     WS.rejectRequest pconn $ "Invalid path: " <> path
@@ -269,13 +199,12 @@ app st pconn = case splitPath of
 
 run :: ServerConfig -> IO ()
 run cfg = do
-  st <- emptyAppState cfg
+  st <- initAppState cfg
   putText $ "Starting Blaze UI Server at "
     <> serverHost cfg
     <> ":"
     <> show (serverWsPort cfg)
   WS.runServer (cs $ serverHost cfg) (serverWsPort cfg) (app st)
-
 
 testClient :: BinjaMessage BinjaToServer -> WS.Connection -> IO (BinjaMessage ServerToBinja)
 testClient msg conn = do
@@ -285,12 +214,6 @@ testClient msg conn = do
 
 runClient :: ServerConfig -> (WS.Connection -> IO a) -> IO a
 runClient cfg = WS.runClient (cs $ serverHost cfg) (serverWsPort cfg) ""
-
--- saveNewCfg :: PilCfg -> EventLoop CfgId
--- saveNewCfg pcfg = do
---   cid <- Db.saveNewCfg pcfg
---   CfgUI.addCfg cid pcfg
---   return cid
 
 setCfg :: CfgId -> PilCfg -> EventLoop ()
 setCfg cid pcfg = do
@@ -542,7 +465,7 @@ handleBinjaEvent = \case
 
           -- change CfgId in cache to new auto-saved cfg
           CfgUI.changeCfgId cid newAutoCid
-          utc <- liftIO $ getCurrentTime
+          utc <- liftIO getCurrentTime
           let updatedTree = Snapshot.immortalizeAutosave cid newAutoCid utc $ b ^. #tree
               updatedBranch = b & #tree .~ updatedTree
           Db.setBranchTree bid updatedTree
@@ -579,7 +502,7 @@ handleBinjaEvent = \case
 
       b <- getBranch bid
 
-      utc <- liftIO $ getCurrentTime
+      utc <- liftIO getCurrentTime
       let updatedTree = Snapshot.immortalizeAutosave cid newAutoCid utc $ b ^. #tree
           updatedBranch = b & #tree .~ updatedTree
       Db.setBranchTree bid updatedTree

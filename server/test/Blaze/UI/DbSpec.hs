@@ -19,7 +19,7 @@ import Blaze.Types.Cfg as Cfg
 import qualified Data.Set as Set
 import Blaze.Util.Spec (mkUuid1)
 import qualified Blaze.UI.Types.BinaryManager as BM
-import Blaze.UI.Types.Session (ClientId(ClientId)) 
+import Blaze.UI.Types.Session (ClientId(ClientId))
 import Test.Hspec
 
 
@@ -75,7 +75,7 @@ spec = describe "Blaze.UI.Db" $ do
     mRetrievedCfg2 <- runIO . mockEventLoop $ do
       let firstCfg = Cfg.removeEdges
             (Set.toList $ Cfg.succEdges (originalCfg ^. #root) originalCfg)
-            $ originalCfg
+            originalCfg
       Db.saveNewCfg_ bid cid firstCfg
       Db.setCfg cid originalCfg
       Db.getCfg cid

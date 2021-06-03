@@ -20,7 +20,7 @@ from PySide2.QtWidgets import QApplication, QWidget
 from websockets.client import WebSocketClientProtocol
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
-from .types import BinjaMessage, BinjaToServer, CfgId, ServerCfg, ServerToBinja, BlazeConfig, ClientId, BinaryHash
+from .types import BinjaMessage, BinjaToServer, CfgId, ServerCfg, ServerToBinja, BlazeConfig, ClientId, BinaryHash, SnapshotBinjaToServer
 from .snapshot import snapshot_message_handler
 
 LOG_LEVEL = 'INFO'
@@ -41,21 +41,16 @@ def register_for_function(action, description):
 
 def get_blaze_config() -> BlazeConfig:
     "Gets config from .blaze, or creates it"
-    blaze_file = user_plugin_path() + "/.blaze"
-    try:
-        f = open(blaze_file, "r")
-        data = f.read()
-        cfg = json.loads(data)
-        return cfg
-    except IOError:
-        f = open(blaze_file, "w")
-        cfg = {'client_id': str(uuid.uuid4())}
-        data = json.dumps(cfg)
-        f.write(data)
-        log.info("Created .blaze config file")
-        f.close()
-    finally:
-        f.close()
+    blaze_file = os.path.join(user_plugin_path(),  ".blaze")
+
+    if not os.path.isfile(blaze_file):
+        with open(blaze_file, 'w') as f:
+            json.dump({'client_id': str(uuid.uuid4())}, f)
+            log.info("Created .blaze config file")
+
+    with open(blaze_file, 'r') as f:
+        return json.load(f)
+    
 
 def register(action, description):
     def wrapper(f):
@@ -150,9 +145,9 @@ class BlazePlugin():
         if (not bv.file.filename.endswith('.bndb')):
             bndb_filename = bv.file.filename + '.bndb'
             if (os.path.isfile(bndb_filename)):
-                msg = "Is it ok to overwrite existing analysis database " + bndb_filename + " ? If not, please manually load bndb and try again."
+                msg = f"Is it ok to overwrite existing analysis database {bndb_filename}? If not, please manually load bndb and try again."
             else:
-                msg = "Is it ok to save analysis database to " + bndb_filename + " ?"
+                msg = f"Is it ok to save analysis database to {bndb_filename}?"
             to_save: Optional[MessageBoxButtonResult] = show_message_box(
                 "Blaze",
                 msg,
@@ -176,7 +171,7 @@ class BlazePlugin():
         # temp_bndb_name = tf.name + '.bndb'
         # tf.close()
         # bv.create_database(temp_bndb_name)
-        uri = "http://" + BLAZE_UI_HOST + ":" + BLAZE_UI_HTTP_PORT + "/upload"
+        uri = f"http://{BLAZE_UI_HOST}:{BLAZE_UI_HTTP_PORT}/upload"
         # handle = open(temp_bndb_name,'rb')
         handle = open(og_filename, 'rb')
         files = { 'bndb': handle }
@@ -292,9 +287,9 @@ class BlazePlugin():
             bndb_hash = cast(BinaryHash, msg['bndbHash'])
             cfg = cast(ServerCfg, msg['cfg'])
             self.icfg_dock_widget.icfg_widget.set_icfg(cfg_id, cfg_from_server(cfg))
-
+        
         elif tag == 'SBSnapshot':
-            snapshot_message_handler(msg['snapshotMsg'])
+            snapshot_message_handler(cast(msg['snapshotMsg'], SnapshotBinjaToServer))
 
         else:
             log.error("Blaze: unknown message type: %s", tag)
