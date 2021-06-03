@@ -164,7 +164,7 @@ class SnapshotBinjaToServer(TypedDict, total=False):
 
 
 class ServerToBinja(TypedDict, total=False):
-    tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshotMsg']
+    tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshot']
     bndbHash: Optional[BinaryHash]
     message: Optional[str]
     cfgId: Optional[CfgId]
