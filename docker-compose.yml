@@ -1,0 +1,21 @@
+version: "3"
+
+services:
+  blaze-server:
+    image: ${CI_REGISTRY}/${CI_PROJECT_NAMESPACE}/blaze-ui/blaze-service/squashed
+    # image: 077943246560.dkr.ecr.us-east-2.amazonaws.com/integrated_blaze_system/kudu/blaze-service
+    volumes:
+      - blaze:/blaze/persistent
+    ports:
+      - 31337:31337
+      - 31338:31338
+    command:
+      - /blaze/bin/blaze-server
+      - 0.0.0.0
+      - "31337"
+      - "31338"
+      - /blaze/persistent/blaze.sqlite
+      - /blaze/persistent/bndbs
+
+volumes:
+  blaze:

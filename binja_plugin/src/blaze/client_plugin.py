@@ -5,23 +5,28 @@ import logging as _logging
 import os
 import os.path
 import queue
+import requests
+import tempfile
 import threading
-from typing import Dict, Literal, Optional, Union, cast
+from typing import Dict, Literal, Optional, Union, cast, Callable
+import uuid
 
 import websockets
-from binaryninja import BinaryView, PluginCommand
+from binaryninja import BinaryView, PluginCommand, user_plugin_path
 from binaryninjaui import DockHandler, ViewFrame
+from binaryninja.interaction import show_message_box, MessageBoxButtonSet, MessageBoxIcon, MessageBoxButtonResult
 from PySide2.QtCore import Qt
 from PySide2.QtWidgets import QApplication, QWidget
 from websockets.client import WebSocketClientProtocol
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
-from .types import BinjaMessage, BinjaToServer, CfgId, ServerCfg, ServerToBinja
+from .types import BinjaMessage, BinjaToServer, CfgId, ServerCfg, ServerToBinja, BlazeConfig, ClientId, BinaryHash, SnapshotBinjaToServer, SnapshotServerToBinja
+from .snapshot import snapshot_message_handler
 
 LOG_LEVEL = 'INFO'
 BLAZE_UI_HOST = os.environ.get('BLAZE_UI_HOST', 'localhost')
 BLAZE_UI_WS_PORT = os.environ.get('BLAZE_UI_WS_PORT', '31337')
-
+BLAZE_UI_HTTP_PORT = os.environ.get('BLAZE_UI_HTTP_PORT', '31338')
 BLAZE_WS_SHUTDOWN = 'SHUTDOWN'
 
 log = _logging.getLogger(__name__)
@@ -33,6 +38,19 @@ def register_for_function(action, description):
         return f
 
     return wrapper
+
+
+def get_blaze_config() -> BlazeConfig:
+    "Gets config from .blaze, or creates it"
+    blaze_file = os.path.join(user_plugin_path(), ".blaze")
+
+    if not os.path.isfile(blaze_file):
+        with open(blaze_file, 'w') as f:
+            json.dump({'client_id': str(uuid.uuid4())}, f)
+            log.info("Created .blaze config file")
+
+    with open(blaze_file, 'r') as f:
+        return json.load(f)
 
 
 def register(action, description):
@@ -48,9 +66,20 @@ class BlazeInstance():
         self.bv: BinaryView = bv
         self.blaze: 'BlazePlugin' = blaze
         self.graph: Optional[ICFGFlowGraph] = None
+        self.bndbHash: Optional[BinaryHash] = None
 
     def send(self, msg: BinjaToServer):
         self.blaze.send(self.bv, msg)
+
+    def with_bndb_hash(self, callback: Callable[[BinaryHash], None]) -> None:
+        def set_hash_and_do_callback(h: BinaryHash) -> None:
+            self.bndbHash = h
+            callback(h)
+
+        if self.bndbHash == None or self.bv.file.analysis_changed or self.bv.file.modified:
+            blaze.upload_bndb(self.bv, set_hash_and_do_callback)
+        else:
+            callback(self.bndbHash)
 
 
 class BlazePlugin():
@@ -87,6 +116,9 @@ class BlazePlugin():
             False
         )
 
+        self.config = get_blaze_config()
+        self.client_id = self.config['client_id']
+
     def _init_thread(self) -> None:
         if not self.websocket_thread or not self.websocket_thread.is_alive():
             log.info('Starting or restarting websocket thread')
@@ -109,6 +141,55 @@ class BlazePlugin():
             if self.websocket_thread.is_alive():
                 log.warn('websocket thread is still alive after timeout')
 
+    def upload_bndb(self, bv: BinaryView, callback: Callable[[BinaryHash], None]) -> None:
+        if (not bv.file.filename.endswith('.bndb')):
+            bndb_filename = bv.file.filename + '.bndb'
+            if (os.path.isfile(bndb_filename)):
+                msg = f"Is it ok to overwrite existing analysis database {bndb_filename}? If not, please manually load bndb and try again."
+            else:
+                msg = f"Is it ok to save analysis database to {bndb_filename}?"
+            to_save: Optional[MessageBoxButtonResult] = show_message_box(
+                "Blaze",
+                msg,
+                buttons=MessageBoxButtonSet.YesNoButtonSet,
+                icon=MessageBoxIcon.WarningIcon)
+
+            if to_save == MessageBoxButtonResult.NoButton:
+                log.error("failed to send analysis database because it is not yet saved")
+                return
+            else:
+                bv.create_database(bndb_filename)
+
+        # by now, bv is saved as bndb and bv.file.filename is bndb
+        og_filename = bv.file.filename
+
+        if bv.file.analysis_changed:
+            bv.create_database(og_filename)
+
+        # tf = tempfile.NamedTemporaryFile()
+        # temp_bndb_name = tf.name + '.bndb'
+        # tf.close()
+        # bv.create_database(temp_bndb_name)
+        uri = f"http://{BLAZE_UI_HOST}:{BLAZE_UI_HTTP_PORT}/upload"
+        # handle = open(temp_bndb_name,'rb')
+        handle = open(og_filename, 'rb')
+        files = {'bndb': handle}
+        post_data = {
+            'hostBinaryPath': og_filename,
+            'clientId': self.client_id,
+        }
+
+        # TODO: run the following in a thread
+        r = requests.post(uri, data=post_data, files=files)
+
+        handle.close()
+        rj = r.json()
+        log.info(str(rj))
+
+        # os.remove(temp_bndb_name)
+        # bv.create_database(og_filename)
+        callback(rj)
+
     def ensure_instance(self, bv: BinaryView) -> BlazeInstance:
         if (instance := BlazePlugin.instances.get(bv.file.filename)) is not None:
             return instance
@@ -120,7 +201,8 @@ class BlazePlugin():
     def send(self, bv: BinaryView, msg: BinjaToServer) -> None:
         self._init_thread()
         self.ensure_instance(bv)
-        new_msg = BinjaMessage(bvFilePath=bv.file.filename, action=msg)
+
+        new_msg = BinjaMessage(clientId=self.client_id, hostBinaryPath=bv.file.filename, action=msg)
         # log.debug('enqueueing %s', new_msg)
         self.out_queue.put(new_msg)
 
@@ -151,7 +233,7 @@ class BlazePlugin():
                 log.exception('malformed message')
                 continue
 
-            instance: Optional[BlazeInstance] = self.instances.get(msg['bvFilePath'])
+            instance: Optional[BlazeInstance] = self.instances.get(msg['hostBinaryPath'])
             if instance is None:
                 log.error("couldn't find blaze instance in mapping for %s", msg)
                 continue
@@ -185,21 +267,25 @@ class BlazePlugin():
         # log.debug('Got message: %s', json.dumps(msg, indent=2))
 
         if tag == 'SBLogInfo':
-            log.info(msg['message'])
+            log.info(msg.get('message'))
 
         elif tag == 'SBLogWarn':
-            log.warn(msg['message'])
+            log.warn(msg.get('message'))
 
         elif tag == 'SBLogError':
-            log.error(msg['message'])
+            log.error(msg.get('message'))
 
         elif tag == 'SBNoop':
             log.info("got Noop")
 
         elif tag == 'SBCfg':
-            cfg_id = cast(CfgId, msg['cfgId'])
-            cfg = cast(ServerCfg, msg['cfg'])
+            cfg_id = cast(CfgId, msg.get('cfgId'))
+            bndb_hash = cast(BinaryHash, msg.get('bndbHash'))
+            cfg = cast(ServerCfg, msg.get('cfg'))
             self.icfg_dock_widget.icfg_widget.set_icfg(cfg_id, cfg_from_server(cfg))
+
+        elif tag == 'SBSnapshot':
+            snapshot_message_handler(cast(SnapshotServerToBinja, msg.get('snapshotMsg')))
 
         else:
             log.error("Blaze: unknown message type: %s", tag)
@@ -225,7 +311,10 @@ class Action(str, enum.Enum):
 @register_for_function(Action.START_CFG, 'Create ICFG')
 def start_cfg(bv, func):
     blaze.icfg_dock_widget.icfg_widget.recenter_node_id = None
-    blaze.send(bv, BinjaToServer(tag='BSCfgNew', startFuncAddress=func.start))
+    blaze_instance = blaze.ensure_instance(bv)
+    blaze_instance.with_bndb_hash(
+        lambda h: blaze_instance.send(
+            BinjaToServer(tag='BSCfgNew', startFuncAddress=func.start, bndbHash=h)))
 
 
 def listen_start(bv):

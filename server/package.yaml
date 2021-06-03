@@ -22,14 +22,17 @@ dependencies:
   - aeson
   - async
   - base >= 4.7 && < 5
+  - base16-bytestring
   - base64
   - binary-analysis
   - binaryninja
   - blaze
   - bytestring
   - containers
+  - cryptohash-md5
   - directory
   - envy
+  - exceptions
   - extra
   - generic-lens
   - hashable
@@ -42,14 +45,19 @@ dependencies:
   - random
   - resource-pool
   - scotty
+  - selda
+  - selda-sqlite
   - stm
   - streamly
   - string-conversions
   - template-haskell
+  - temporary
   - text
+  - time
   - transformers
   - unordered-containers
   - uuid
+  - wai-extra
   - websockets
 
 default-extensions:
@@ -91,10 +99,22 @@ library:
   source-dirs:
   - src
   exposed-modules:
+  - Blaze.UI.BinaryManager
+  - Blaze.UI.Cfg
+  - Blaze.UI.Cfg.Snapshot
+  - Blaze.UI.Db
   - Blaze.UI.Prelude
   - Blaze.UI.Server
   - Blaze.UI.Types
+  - Blaze.UI.Types.BinaryHash
+  - Blaze.UI.Types.BinaryManager
+  - Blaze.UI.Types.Cfg
+  - Blaze.UI.Types.Cfg.Snapshot
+  - Blaze.UI.Types.Session
   - Blaze.UI.Web.Server
+
+  
+  
 
 include-dirs:
   - "src"

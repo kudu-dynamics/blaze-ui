@@ -11,7 +11,15 @@ T = List[str]
 Address = int
 Word64 = int
 UUID = str
+BranchId = UUID
 CfgId = UUID
+ClientId = UUID
+BinaryHash = str
+HostBinaryPath = str
+
+# What Aeson encodes the unit value `()` as
+# NOTE: we might want `Literal[[]]` instead
+Unit = Any
 
 BINARYNINJAUI_CUSTOM_EVENT = 0xfff6
 
@@ -19,6 +27,10 @@ BINARYNINJAUI_CUSTOM_EVENT = 0xfff6
 class Symbol(TypedDict):
     _symbolName: str
     _symbolRawName: str
+
+
+class BlazeConfig(TypedDict):
+    client_id: ClientId
 
 
 FuncParamInfo = Any
@@ -103,26 +115,84 @@ class ServerCfg(TypedDict):
     nodes: List[Tuple[CfNode, CfNode]]
 
 
-class ServerToBinja(TypedDict, total=False):
-    tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop']
+class SnapshotInfo(TypedDict):
+    name: Optional[str]
+    date: Any  # TODO: utc time
+    snapshotType: Literal['Autosave', 'Immutable']
+
+
+class ServerBranchTree(TypedDict):
+    edges: List[Tuple[Unit, Tuple[CfgId, CfgId]]]
+    nodes: List[Tuple[CfgId, Optional[SnapshotInfo]]]
+
+
+class BranchTree(TypedDict):
+    edges: List[Tuple[CfgId, CfgId]]  # actually (e, (n, n)), but e is (), so...
+    attrs: Dict[CfgId, SnapshotInfo]
+
+
+class Branch(TypedDict):
+    bndbHash: BinaryHash
+    originFuncAddr: Address
+    branchName: Optional[str]
+    rootNode: CfgId
+    tree: BranchTree
+
+
+class ServerBranch(TypedDict):
+    bndbHash: BinaryHash
+    originFuncAddr: Address
+    branchName: Optional[str]
+    rootNode: CfgId
+    tree: ServerBranchTree
+
+
+class SnapshotServerToBinja(TypedDict, total=False):
+    tag: Literal['SnapshotBranch', 'BranchesOfFunction', 'BranchesOfBinary', 'BranchesOfClient']
+    branchId: Optional[BranchId]
+    funcAddress: Optional[Address]
+    hostBinaryPath: Optional[HostBinaryPath]
+    branch: Optional[ServerBranch]
+    branches: Optional[List[Tuple[BranchId, ServerBranch]]]
+    branchesOfClient: Optional[List[Tuple[HostBinaryPath, List[Tuple[BranchId, ServerBranch]]]]]
+
+class SnapshotBinjaToServer(TypedDict, total=False):
+    tag: Literal['GetAllBranchesOfClient', 'GetAllBranchesOfBinary', 'GetBranchesOfFunction',
+                 'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot']
+    originFuncAddr: Optional[Address]
+    branchId: Optional[BranchId]
+    name: Optional[str]
+    cfgId: Optional[CfgId]
+
+class ServerToBinjaTotal(TypedDict, total=True):
+    tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshot']
+
+class ServerToBinja(ServerToBinjaTotal, total=False):
+    bndbHash: Optional[BinaryHash]
     message: Optional[str]
     cfgId: Optional[CfgId]
     cfg: Optional[ServerCfg]
+    snapshotMsg: Optional[SnapshotServerToBinja]
 
 
-class BinjaToServer(TypedDict, total=False):
+class BinjaToServerTotal(TypedDict, total=True):
     tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
-                 'BSCfgRemoveBranch', 'BSNoop']
+                 'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop']
+    
+class BinjaToServer(BinjaToServerTotal, total=False):
     message: Optional[str]
+    bndbHash: Optional[BinaryHash]
     address: Optional[Word64]
     startFuncAddress: Optional[Word64]
     cfgId: Optional[CfgId]
     callNode: Optional[CallNode]
     edge: Optional[Tuple[CfNode, CfNode]]
+    snapshotMsg: Optional[SnapshotBinjaToServer]
 
 
 class BinjaMessage(TypedDict):
-    bvFilePath: str
+    clientId: ClientId
+    hostBinaryPath: HostBinaryPath
     action: Union[BinjaToServer, ServerToBinja]
 
 
