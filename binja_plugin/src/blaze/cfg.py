@@ -75,10 +75,7 @@ def get_edge_type(edge: CfEdge, cfg: Cfg) -> Tuple[BranchType, Optional[EdgeStyl
 
 
 def is_conditional_edge(edge: Union[CfEdge, FlowGraphEdge]) -> bool:
-    conditional_types = (
-        'TrueBranch', 'FalseBranch',
-        BranchType.TrueBranch, BranchType.FalseBranch
-    )
+    conditional_types = ('TrueBranch', 'FalseBranch', BranchType.TrueBranch, BranchType.FalseBranch)
     edge_type = edge.type if isinstance(edge, FlowGraphEdge) else edge.get('branchType')
     return edge_type in conditional_types
 
@@ -330,7 +327,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             return
 
         node = self.get_cf_node(self.clicked_node)
-        if not is_call_node(node): #node or node['tag'] != 'Call':
+        if not is_call_node(node):  #node or node['tag'] != 'Call':
             log.error(f'Did not right-click on a Call node')
             return
 

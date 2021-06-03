@@ -43,5 +43,5 @@ VERBOSE = False
 log = _logging.getLogger(__name__)
 
 
-def snapshot_message_handler (msg: SnapshotServerToBinja) -> None:
+def snapshot_message_handler(msg: SnapshotServerToBinja) -> None:
     log.info(msg)
