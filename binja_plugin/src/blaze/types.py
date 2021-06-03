@@ -16,6 +16,9 @@ CfgId = UUID
 ClientId = UUID
 BinaryHash = str
 HostBinaryPath = str
+
+# What Aeson encodes the unit value `()` as
+# NOTE: we might want `Literal[[]]` instead
 Unit = Any
 
 BINARYNINJAUI_CUSTOM_EVENT = 0xfff6
