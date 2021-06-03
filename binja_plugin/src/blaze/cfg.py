@@ -74,10 +74,9 @@ def get_edge_type(edge: CfEdge, cfg: Cfg) -> Tuple[BranchType, Optional[EdgeStyl
     }[edge['branchType']]
 
 
-def is_conditional_edge(edge: Union[CfEdge, FlowGraphEdge]) -> bool:
+def is_conditional_edge(edge: FlowGraphEdge) -> bool:
     conditional_types = ('TrueBranch', 'FalseBranch', BranchType.TrueBranch, BranchType.FalseBranch)
-    edge_type = edge.get('branchType') if isinstance(edge, CfEdge) else edge.type
-    return edge_type in conditional_types
+    return edge.type in conditional_types
 
 
 def is_call_node(node: CfNode) -> bool:
@@ -261,6 +260,10 @@ class ICFGWidget(FlowGraphWidget, QObject):
             log.error('Did not right-click on an edge')
             return
 
+        if not is_conditional_edge(self.clicked_edge):
+            log.error('Not a conditional branch')
+            return
+
         source_node = self.get_cf_node(self.clicked_edge.source)
         dest_node = self.get_cf_node(self.clicked_edge.target)
         if source_node is None or dest_node is None:
@@ -270,10 +273,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
             source_node['contents']['uuid'], dest_node['contents']['uuid'])
         if not edge:
             raise RuntimeError('Missing edge!')
-
-        if not is_conditional_edge(edge):
-            log.error('Not a conditional branch')
-            return
 
         log.debug(
             'Double click on %s edge from %s to %s',
