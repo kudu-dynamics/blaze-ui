@@ -76,7 +76,7 @@ def get_edge_type(edge: CfEdge, cfg: Cfg) -> Tuple[BranchType, Optional[EdgeStyl
 
 def is_conditional_edge(edge: Union[CfEdge, FlowGraphEdge]) -> bool:
     conditional_types = ('TrueBranch', 'FalseBranch', BranchType.TrueBranch, BranchType.FalseBranch)
-    edge_type = edge.type if isinstance(edge, FlowGraphEdge) else edge.get('branchType')
+    edge_type = edge.get('branchType') if isinstance(edge, CfEdge) else edge.type
     return edge_type in conditional_types
 
 
@@ -194,10 +194,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             BNAction(
                 'Blaze', 'Expand Call Node', MenuOrder.EARLY,
                 activate =self.context_menu_action_expand_call,
-                isValid = (
-                    lambda ctx: isinstance(self.clicked_node, FlowGraphNode) \
-                        and is_call_node(self.get_cf_node(self.clicked_node))
-                ),
+                isValid = self._clicked_node_is_call_node,
             ),
         ]
 
@@ -327,7 +324,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             return
 
         node = self.get_cf_node(self.clicked_node)
-        if not is_call_node(node):  #node or node['tag'] != 'Call':
+        if not node or not is_call_node(node):
             log.error(f'Did not right-click on a Call node')
             return
 
@@ -391,8 +388,19 @@ class ICFGWidget(FlowGraphWidget, QObject):
     def notifyOffsetChanged(self, view_frame: ViewFrame, offset: int) -> None:
         pass
 
-    def get_cf_node(self, node: FlowGraphNode) -> CfNode:
+    def get_cf_node(self, node: FlowGraphNode) -> Optional[CfNode]:
         return self.blaze_instance.graph.node_mapping.get(node)
+
+    def _clicked_node_is_call_node(self, ctx: UIActionContext) -> bool:
+        '''
+        Helper function for checking if the node just clicked is a call node
+        Used for context menu validation
+        '''
+        valid = isinstance(self.clicked_node, FlowGraphNode)
+        if valid:
+            cf_node = self.get_cf_node(self.clicked_node)
+            valid = cf_node is not None and is_call_node(cf_node)
+        return valid
 
 
 class ICFGDockWidget(QWidget, DockContextHandler):
