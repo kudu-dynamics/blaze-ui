@@ -149,7 +149,8 @@ class SnapshotServerToBinja(TypedDict, total=False):
     branchesOfClient: Optional[List[Tuple[HostBinaryPath, List[Tuple[BranchId, ServerBranch]]]]]
 
 class SnapshotBinjaToServer(TypedDict, total=False):
-    tag: Literal['GetAllBranchesOfClient', 'GetBranchesOfBinary', 'GetBranchesOfFunction', 'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot']
+    tag: Literal['GetAllBranchesOfClient', 'GetAllBranchesOfBinary', 'GetBranchesOfFunction',
+                 'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot']
     originFuncAddr: Optional[Address]
     branchId: Optional[BranchId]
     name: Optional[str]
@@ -169,6 +170,7 @@ class BinjaToServer(TypedDict, total=False):
     tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
                  'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop']
     message: Optional[str]
+    bndbHash: Optional[BinaryHash]
     address: Optional[Word64]
     startFuncAddress: Optional[Word64]
     cfgId: Optional[CfgId]
