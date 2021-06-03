@@ -162,9 +162,10 @@ class SnapshotBinjaToServer(TypedDict, total=False):
     name: Optional[str]
     cfgId: Optional[CfgId]
 
-
-class ServerToBinja(TypedDict, total=False):
+class ServerToBinjaTotal(TypedDict, total=True):
     tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshotMsg']
+
+class ServerToBinja(ServerToBinjaTotal, total=False):
     bndbHash: Optional[BinaryHash]
     message: Optional[str]
     cfgId: Optional[CfgId]
@@ -172,9 +173,11 @@ class ServerToBinja(TypedDict, total=False):
     snapshotMsg: Optional[SnapshotServerToBinja]
 
 
-class BinjaToServer(TypedDict, total=False):
+class BinjaToServerTotal(TypedDict, total=True):
     tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
                  'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop']
+    
+class BinjaToServer(BinjaToServerTotal, total=False):
     message: Optional[str]
     bndbHash: Optional[BinaryHash]
     address: Optional[Word64]

@@ -279,8 +279,8 @@ class BlazePlugin():
             log.info("got Noop")
 
         elif tag == 'SBCfg':
-            cfg_id = cast(CfgId, msg['cfgId'])
-            bndb_hash = cast(BinaryHash, msg['bndbHash'])
+            cfg_id = cast(CfgId, msg.get('cfgId'))
+            bndb_hash = cast(BinaryHash, msg.get('bndbHash'))
             cfg = cast(ServerCfg, msg['cfg'])
             self.icfg_dock_widget.icfg_widget.set_icfg(cfg_id, cfg_from_server(cfg))
 
