@@ -371,6 +371,10 @@ class ICFGWidget(FlowGraphWidget, QObject):
         if event.button() != Qt.MouseButton.RightButton:
             return super().mousePressEvent(event)
 
+        if self.blaze_instance.graph is None:
+            log.info('Right-click in ICFG widget, but no ICFG was created')
+            return
+
         self.clicked_node = self.getNodeForMouseEvent(event)
         if (fg_edge := self.getEdgeForMouseEvent(event)):
             fg_edge, swapped = fg_edge
