@@ -180,22 +180,27 @@ class ICFGWidget(FlowGraphWidget, QObject):
         self.recenter_node_id: Optional[UUID] = None
 
         # Bind actions to their callbacks
-
+        # yapf: disable
         actions: List[BNAction] = [
             BNAction(
                 'Blaze', 'Prune', MenuOrder.FIRST,
-                activate = self.context_menu_action_prune,
-                isValid = (
-                    lambda ctx: isinstance(self.clicked_edge, FlowGraphEdge) \
-                        and is_conditional_edge(self.clicked_edge)
-                ),
+                activate=self.context_menu_action_prune,
+                isValid=
+                    lambda ctx: self.clicked_edge is not None
+                        and is_conditional_edge(self.clicked_edge),
+            ),
+            BNAction(
+                'Blaze', 'Focus', MenuOrder.EARLY,
+                activate=self.context_menu_action_focus,
+                isValid=lambda ctx: self.clicked_node is not None
             ),
             BNAction(
                 'Blaze', 'Expand Call Node', MenuOrder.EARLY,
-                activate =self.context_menu_action_expand_call,
-                isValid = self._clicked_node_is_call_node,
+                activate=self.context_menu_action_expand_call,
+                isValid=self._clicked_node_is_call_node,
             ),
         ]
+        # yapf: enable
 
         bind_actions(self.action_handler, actions)
         add_actions(self.context_menu, actions)
@@ -311,6 +316,15 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 return
 
         self.prune(from_node, to_node)
+
+    def context_menu_action_focus(self, context: UIActionContext) -> None:
+        '''
+        Context menu action to call `self.focus`. Assumes `self.clicked_node` has already
+        been set by `self.mousePressEvent`
+        '''
+
+        # FIXME implement focus
+        log.warn('Focus is not implemented yet')
 
     def context_menu_action_expand_call(self, context: UIActionContext):
         '''
