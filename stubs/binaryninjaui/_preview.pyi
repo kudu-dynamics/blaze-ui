@@ -1,0 +1,6 @@
+from PySide2.QtGui import QWheelEvent
+
+
+class PreviewScrollHandler:
+    def __init__(self): ...
+    def sendWheelEvent(self, event: QWheelEvent, /) -> None: ...
