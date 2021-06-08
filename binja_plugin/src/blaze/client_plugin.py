@@ -191,11 +191,25 @@ class BlazePlugin():
         callback(rj)
 
     def ensure_instance(self, bv: BinaryView) -> BlazeInstance:
-        if (instance := BlazePlugin.instances.get(bv.file.filename)) is not None:
+        '''
+        Get the `BlazeInstance` associated with `bv`, or create one if none exists.
+        Additionally, two `bv`s will be associated with the same `BlazeInstance`
+        if they have the same filename, or if one of their filenames is the same as
+        the other, but with `'.bndb'` appended. This way, for example,
+        ``'/home/test/bash'`` and ``'/home/test/bash.bndb'`` will associate with
+        the same `BlazeInstance`
+
+        :return: the `BlazeInstance` for this `bv`, or if none exists, the one
+            that was created
+        '''
+
+        instance_key = bv.file.filename if bv.file.filename.endswith('.bndb') else bv.file.filename + '.bndb'
+        
+        if (instance := BlazePlugin.instances.get(instance_key)) is not None:
             return instance
 
         instance = BlazeInstance(bv, self)
-        BlazePlugin.instances[bv.file.filename] = instance
+        BlazePlugin.instances[instance_key] = instance
         return instance
 
     def send(self, bv: BinaryView, msg: BinjaToServer) -> None:
