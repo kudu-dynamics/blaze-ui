@@ -1,5 +1,6 @@
 import logging as _logging
-from typing import Set, TYPE_CHECKING, List, Optional, Tuple, Union, cast
+from typing import TYPE_CHECKING, List, Optional, Set, Tuple, Union, cast
+
 from binaryninjaui import (
     ContextMenuManager,
     DockContextHandler,
@@ -8,32 +9,25 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-from PySide2.QtGui import (
-    QMouseEvent
-)
-from PySide2.QtWidgets import (
-    QTreeWidget,
-    QTreeWidgetItem,
-    QWidget,
-    QVBoxLayout,
-)
+from PySide2.QtGui import QMouseEvent
+from PySide2.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 
 from .types import (
     BINARYNINJAUI_CUSTOM_EVENT,
+    UUID,
+    BinjaToServer,
     Branch,
+    BranchId,
     BranchTree,
     BranchTreeListItem,
     CfgId,
-    SnapshotInfo,
-    UUID,
-    BinjaToServer,
-    SnapshotBinjaToServer,
-    BranchId,
     HostBinaryPath,
     MenuOrder,
     ServerBranch,
-    ServerBranchTree,
     ServerBranchesOfClient,
+    ServerBranchTree,
+    SnapshotBinjaToServer,
+    SnapshotInfo,
     SnapshotServerToBinja,
 )
 
@@ -141,9 +135,8 @@ class SnapTreeBranchListItem(SnapTreeItem):
             text = (f"Snapshot: {name}")
         SnapTreeItem.__init__(self, parent, None, (text,))
 
-    def process_children(self, children: List[BranchTreeListItem]):
-        for x in children:
-            self.addChild(SnapTreeBranchListItem(self, self.branch_id, x))
+        for child in item['children']:
+            self.addChild(SnapTreeBranchListItem(self, self.branch_id, child))
 
 
 class SnapTreeBranchItem(SnapTreeItem):
