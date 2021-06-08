@@ -20,8 +20,19 @@ from PySide2.QtWidgets import QApplication, QWidget
 from websockets.client import WebSocketClientProtocol
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
-from .types import BinjaMessage, BinjaToServer, CfgId, ServerCfg, ServerToBinja, BlazeConfig, ClientId, BinaryHash, SnapshotBinjaToServer, SnapshotServerToBinja
-from .snapshot import snapshot_message_handler
+from .snaptree import SnapTreeDockWidget
+from .types import (
+    BinjaMessage,
+    BinjaToServer,
+    CfgId,
+    ServerCfg,
+    ServerToBinja,
+    BlazeConfig,
+    ClientId,
+    BinaryHash,
+    SnapshotBinjaToServer,
+    SnapshotServerToBinja,
+)
 
 LOG_LEVEL = 'INFO'
 BLAZE_UI_HOST = os.environ.get('BLAZE_UI_HOST', 'localhost')
@@ -97,6 +108,8 @@ class BlazePlugin():
             self.dock_handler = main_window.findChild(DockHandler, '__DockHandler')
         assert self.dock_handler
 
+        # -- Add ICFG View
+
         self.icfg_dock_widget: ICFGDockWidget
 
         def create_icfg_widget(name: str, parent: ViewFrame, bv: BinaryView) -> QWidget:
@@ -113,7 +126,29 @@ class BlazePlugin():
             create_icfg_widget,
             Qt.DockWidgetArea.RightDockWidgetArea,
             Qt.Orientation.Vertical,
-            False
+            False  # default visibility
+        )
+
+        # -- Add SnapTree View
+
+        self.snaptree_dock_widget: SnapTreeDockWidget
+
+        def create_snaptree_widget(name: str, parent: ViewFrame, bv: BinaryView) -> QWidget:
+            dock_handler = DockHandler.getActiveDockHandler()
+            self.snaptree_dock_widget = SnapTreeDockWidget(
+                name=name,
+                view_frame=dock_handler.getViewFrame(),
+                parent=parent,
+                blaze_instance=self.ensure_instance(bv)
+            )
+            return self.snaptree_dock_widget
+
+        self.dock_handler.addDockWidget(
+            "Blaze Snapshot Tree",
+            create_snaptree_widget,
+            Qt.DockWidgetArea.LeftDockWidgetArea,
+            Qt.Orientation.Vertical,
+            False  # default visibility
         )
 
         self.config = get_blaze_config()
@@ -299,7 +334,8 @@ class BlazePlugin():
             self.icfg_dock_widget.icfg_widget.set_icfg(cfg_id, cfg_from_server(cfg))
 
         elif tag == 'SBSnapshot':
-            snapshot_message_handler(cast(SnapshotServerToBinja, msg.get('snapshotMsg')))
+            snap_msg = cast(SnapshotServerToBinja, msg.get('snapshotMsg'))
+            self.snaptree_dock_widget.handle_server_msg(snap_msg)
 
         else:
             log.error("Blaze: unknown message type: %s", tag)

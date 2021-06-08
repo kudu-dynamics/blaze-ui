@@ -131,7 +131,7 @@ binjaApp localOutboxThreads st conn = do
           hpath = x ^. #hostBinaryPath
           sid = mkSessionId cid hpath
           reply = sendJSON conn . BinjaMessage cid hpath
-          logInfo txt = do
+          logInfo' txt = do
             reply . SBLogInfo $ txt
             putText txt
       (justCreated, ss) <- getSessionState sid st
@@ -145,7 +145,7 @@ binjaApp localOutboxThreads st conn = do
             False -> do
               outboxThread <- createBinjaOutbox conn ss cid hpath
               pushEvent
-              logInfo $ "Blaze Connected. Attached to existing session for binary: " <> show hpath
+              logInfo' $ "Blaze Connected. Attached to existing session for binary: " <> show hpath
               -- logInfo "For web plugin, go here:"
               -- logInfo $ webUri (st ^. #serverConfig) sid
               binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
@@ -153,7 +153,7 @@ binjaApp localOutboxThreads st conn = do
               pushEvent >> binjaApp localOutboxThreads st conn
 
         True -> do
-          logInfo "Connected:"
+          logInfo' "Connected:"
           spawnEventHandler cid st ss
           outboxThread <- createBinjaOutbox conn ss cid hpath
           pushEvent
@@ -231,6 +231,16 @@ getCfg cid = CfgUI.getCfg cid >>= \case
       CfgUI.addCfg cid pcfg
       return pcfg
 
+sendLatestSnapshots :: EventLoop ()
+sendLatestSnapshots = do
+  ctx <- ask
+  branches <- HashMap.toList <$> Db.getAllBranchesForClient (ctx ^. #clientId) :: EventLoop [(HostBinaryPath, [(BranchId, Snapshot.Branch Snapshot.BranchTree)])]
+  sendToBinja
+    . SBSnapshot
+    . Snapshot.BranchesOfClient
+    . fmap (over _2 (fmap (over _2 Snapshot.toTransport)))
+    $ branches
+
 ------------------------------------------
 --- main event handler
 
@@ -246,6 +256,11 @@ logWarn :: Text -> EventLoop ()
 logWarn warnMsg = do
   sendToBinja . SBLogWarn $ warnMsg
   putText $ "WARNING: " <> warnMsg
+
+logInfo :: Text -> EventLoop ()
+logInfo infoMsg = do
+  sendToBinja . SBLogInfo $ infoMsg
+  putText infoMsg
 
 getCfgBinaryView :: CfgId -> EventLoop (BNBinaryView, BinaryHash)
 getCfgBinaryView cid = Db.getCfgBinaryHash cid >>= \case
@@ -332,17 +347,14 @@ handleBinjaEvent = \case
           Just r -> do
             ctx <- ask
             let pcfg = r ^. #result
-            (bid, cid, snapBranch) <- Db.saveNewCfgAndBranch
+            (_bid, cid, _snapBranch) <- Db.saveNewCfgAndBranch
               (ctx ^. #clientId)
               (ctx ^. #hostBinaryPath)
               bhash
               (func ^. #address)
               pcfg
             CfgUI.addCfg cid pcfg 
-            -- TODO: this calls convertPilCfg and Snapshot.toTransport twice
-            -- instead, do it once and pass converted cfg to db saving func
-            sendToBinja . SBSnapshot . Snapshot.SnapshotBranch bid
-              $ Snapshot.toTransport snapBranch
+            sendLatestSnapshots
             sendToBinja . SBCfg cid bhash $ convertPilCfg pcfg
         debug "Created new branch and added auto-cfg."
 
@@ -408,14 +420,7 @@ handleBinjaEvent = \case
   BSNoop -> debug "Binja noop"
 
   BSSnapshot snapMsg -> case snapMsg of
-    Snapshot.GetAllBranchesOfClient -> do
-      ctx <- ask
-      branches <- HashMap.toList <$> Db.getAllBranchesForClient (ctx ^. #clientId) :: EventLoop [(HostBinaryPath, [(BranchId, Snapshot.Branch Snapshot.BranchTree)])]
-      sendToBinja
-        . SBSnapshot
-        . Snapshot.BranchesOfClient
-        . fmap (over _2 (fmap (over _2 Snapshot.toTransport)))
-        $ branches
+    Snapshot.GetAllBranchesOfClient -> sendLatestSnapshots
       
     Snapshot.GetAllBranchesOfBinary -> do
       ctx <- ask
@@ -444,10 +449,7 @@ handleBinjaEvent = \case
       Db.setBranchName bid (Just name')
       Db.getBranch bid >>= \case
         Nothing -> logError $ "Could not find snapshot with id: " <> show bid
-        Just br -> sendToBinja
-                   . SBSnapshot
-                   $ Snapshot.SnapshotBranch bid
-                   (Snapshot.toTransport br)
+        Just _br -> sendLatestSnapshots
 
     -- load directly if autosave, otherwise create autosave branch
     Snapshot.LoadSnapshot bid cid -> do
@@ -467,11 +469,9 @@ handleBinjaEvent = \case
           CfgUI.changeCfgId cid newAutoCid
           utc <- liftIO getCurrentTime
           let updatedTree = Snapshot.immortalizeAutosave cid newAutoCid utc $ b ^. #tree
-              updatedBranch = b & #tree .~ updatedTree
           Db.setBranchTree bid updatedTree
-              
-          sendToBinja . SBSnapshot . Snapshot.SnapshotBranch bid
-            $ Snapshot.toTransport updatedBranch
+
+          sendLatestSnapshots
           return (newAutoCid, cfg')
       sendToBinja . SBCfg newCid (b ^. #bndbHash) . convertPilCfg $ cfg'
 
@@ -504,11 +504,13 @@ handleBinjaEvent = \case
 
       utc <- liftIO getCurrentTime
       let updatedTree = Snapshot.immortalizeAutosave cid newAutoCid utc $ b ^. #tree
-          updatedBranch = b & #tree .~ updatedTree
       Db.setBranchTree bid updatedTree
 
-      sendToBinja . SBSnapshot . Snapshot.SnapshotBranch bid
-        $ Snapshot.toTransport updatedBranch
+      logInfo $ "Saved iCfg: " <> show cid
+
+      sendLatestSnapshots
+      -- sendToBinja . SBSnapshot . Snapshot.SnapshotBranch bid
+      --   $ Snapshot.toTransport updatedBranch
 
     -- -- Renames previously saved immutable cfg
     Snapshot.RenameSnapshot cid name' -> do

@@ -131,14 +131,6 @@ class BranchTree(TypedDict):
     attrs: Dict[CfgId, SnapshotInfo]
 
 
-class Branch(TypedDict):
-    bndbHash: BinaryHash
-    originFuncAddr: Address
-    branchName: Optional[str]
-    rootNode: CfgId
-    tree: BranchTree
-
-
 class ServerBranch(TypedDict):
     bndbHash: BinaryHash
     originFuncAddr: Address
@@ -147,18 +139,41 @@ class ServerBranch(TypedDict):
     tree: ServerBranchTree
 
 
-class SnapshotServerToBinja(TypedDict, total=False):
+class Branch(TypedDict, total=True):
+    bndbHash: BinaryHash
+    originFuncAddr: Address
+    branchName: Optional[str]
+    rootNode: CfgId
+    tree: BranchTree
+
+
+class BranchTreeListItem(TypedDict, total=True):
+    cfgId: CfgId
+    snapshotInfo: SnapshotInfo
+    children: List['BranchTreeListItem']
+
+
+BranchTreeList = List[BranchTreeListItem]
+
+
+class SnapshotServerToBinjaTotal(TypedDict, total=True):
     tag: Literal['SnapshotBranch', 'BranchesOfFunction', 'BranchesOfBinary', 'BranchesOfClient']
+
+ServerBranchesOfClient = List[Tuple[HostBinaryPath, List[Tuple[BranchId, ServerBranch]]]]
+
+class SnapshotServerToBinja(SnapshotServerToBinjaTotal, total=False):
     branchId: Optional[BranchId]
     funcAddress: Optional[Address]
     hostBinaryPath: Optional[HostBinaryPath]
     branch: Optional[ServerBranch]
     branches: Optional[List[Tuple[BranchId, ServerBranch]]]
-    branchesOfClient: Optional[List[Tuple[HostBinaryPath, List[Tuple[BranchId, ServerBranch]]]]]
+    branchesOfClient: Optional[ServerBranchesOfClient]
 
-class SnapshotBinjaToServer(TypedDict, total=False):
+class SnapshotBinjaToServerTotal(TypedDict, total=True):
     tag: Literal['GetAllBranchesOfClient', 'GetAllBranchesOfBinary', 'GetBranchesOfFunction',
                  'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot']
+    
+class SnapshotBinjaToServer(SnapshotBinjaToServerTotal, total=False):
     originFuncAddr: Optional[Address]
     branchId: Optional[BranchId]
     name: Optional[str]
@@ -178,7 +193,7 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
 class BinjaToServerTotal(TypedDict, total=True):
     tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
                  'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop']
-    
+
 class BinjaToServer(BinjaToServerTotal, total=False):
     message: Optional[str]
     bndbHash: Optional[BinaryHash]

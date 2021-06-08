@@ -38,6 +38,7 @@ from .types import (
     LeaveFuncNode,
     MenuOrder,
     ServerCfg,
+    SnapshotBinjaToServer,
 )
 from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge
 
@@ -91,11 +92,11 @@ def format_block_header(node: CfNode) -> str:
         node_contents = cast(BasicBlockNode, node['contents'])
         return f'{node_contents["start"]:#x} (id {node_id}) BasicBlockNode' if VERBOSE else f'{node_contents["start"]:#x}'
 
-    if node_tag == 'Call':
+    elif node_tag == 'Call':
         node_contents = cast(CallNode, node['contents'])
         return f'{node_contents["start"]:#x} (id {node_id}) CallNode' if VERBOSE else f'{node_contents["start"]:#x} Call'
 
-    if node_tag == 'EnterFunc':
+    elif node_tag == 'EnterFunc':
         node_contents = cast(EnterFuncNode, node['contents'])
         prevFun = node_contents['prevCtx']['func']['name']
         nextFun = node_contents['nextCtx']['func']['name']
@@ -196,9 +197,19 @@ class ICFGWidget(FlowGraphWidget, QObject):
             ),
             BNAction(
                 'Blaze', 'Expand Call Node', MenuOrder.EARLY,
+
+                # activate = self.context_menu_action_expand_call,
+                # isValid = self._clicked_node_is_call_node,
                 activate=self.context_menu_action_expand_call,
                 isValid=self._clicked_node_is_call_node,
             ),
+            BNAction(
+                'Blaze', 'Save ICfg Snapshot', MenuOrder.EARLY,
+                activate = self.context_menu_action_save_icfg_snapshot,
+                # how would you check to see an icfg is loaded?
+                isValid = lambda ctx: True,
+            ),
+
         ]
         # yapf: enable
 
@@ -209,6 +220,15 @@ class ICFGWidget(FlowGraphWidget, QObject):
         self.blaze_instance.graph = ICFGFlowGraph(self.blaze_instance.bv, cfg, cfg_id)
         self.setGraph(self.blaze_instance.graph)
 
+    def save_icfg(self):
+        snapshot_msg = SnapshotBinjaToServer(
+            tag='SaveSnapshot',
+            cfgId=self.blaze_instance.graph.pil_icfg_id)
+        self.blaze_instance.send(
+            BinjaToServer(
+                tag='BSSnapshot',
+                snapshotMsg=snapshot_msg))        
+        
     def prune(self, from_node: CfNode, to_node: CfNode):
         '''
         Send a request to the backend that the edge between `from_node` and
@@ -346,6 +366,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
         call_node = cast(CallNode, node['contents'])
         self.expand_call(call_node)
 
+    def context_menu_action_save_icfg_snapshot(self, context: UIActionContext):
+        self.save_icfg()
+
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any
@@ -389,7 +412,10 @@ class ICFGWidget(FlowGraphWidget, QObject):
             log.info('Right-click in ICFG widget, but no ICFG was created')
             return
 
+
+        # self.clicked_node: Optional[FlowGraphNode] = self.getNodeForMouseEvent(event)
         self.clicked_node = self.getNodeForMouseEvent(event)
+
         if (fg_edge := self.getEdgeForMouseEvent(event)):
             fg_edge, swapped = fg_edge
             self.clicked_edge = fix_flowgraph_edge(fg_edge, swapped)
