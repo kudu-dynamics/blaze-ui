@@ -7,7 +7,7 @@ Add or modify the message actions that the plugin can take by changing the `Serv
 
 ## Known Requirements:
 
-`pip install websockets`
+`pip install websockets requests`
 
 
 ## Installation
