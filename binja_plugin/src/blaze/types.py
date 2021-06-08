@@ -134,6 +134,7 @@ class BranchTree(TypedDict):
 class ServerBranch(TypedDict):
     bndbHash: BinaryHash
     originFuncAddr: Address
+    originFuncName: str
     branchName: Optional[str]
     rootNode: CfgId
     tree: ServerBranchTree

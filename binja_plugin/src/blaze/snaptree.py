@@ -285,6 +285,7 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
                         ('a', ServerBranch(
                             bndbHash="bndbHash",
                             originFuncAddr=0xdeadbeef,
+                            originFuncName="foo",
                             branchName="branchName",
                             rootNode="rootNode",
                             tree=ServerBranchTree(
@@ -295,6 +296,7 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
                         ('c', ServerBranch(
                             bndbHash="bndbHash",
                             originFuncAddr=0xdeadbeef,
+                            originFuncName="bar",
                             branchName="branchName",
                             rootNode="rootNode",
                             tree=ServerBranchTree(
@@ -308,6 +310,7 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
                     "HostBinaryPath:2", [('b', ServerBranch(
                         bndbHash="bndbHash",
                         originFuncAddr=0xdeadbeef,
+                        originFuncName="bazzzzzzzzz",
                         branchName="branchName",
                         rootNode="rootNode",
                         tree=ServerBranchTree(
