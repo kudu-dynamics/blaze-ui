@@ -352,6 +352,7 @@ handleBinjaEvent = \case
               (ctx ^. #hostBinaryPath)
               bhash
               (func ^. #address)
+              (func ^. #name)
               pcfg
             CfgUI.addCfg cid pcfg 
             sendLatestSnapshots

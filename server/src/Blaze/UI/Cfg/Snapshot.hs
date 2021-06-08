@@ -39,11 +39,20 @@ isAutosave cid bt = is #_Autosave . view #snapshotType <$> G.getNodeAttr cid bt
 renameSnapshot :: CfgId -> Text -> BranchTree -> BranchTree
 renameSnapshot id name' = G.updateNodeAttr (over #name $ const (Just name')) id
 
-singletonBranch :: HostBinaryPath -> BinaryHash -> Address -> Maybe Text -> CfgId -> SnapshotInfo -> Branch BranchTree
-singletonBranch hpath bhash originFuncAddr' mname rootNode' rootNodeInfo = Branch
+singletonBranch
+  :: HostBinaryPath
+  -> BinaryHash
+  -> Address
+  -> Text
+  -> Maybe Text
+  -> CfgId
+  -> SnapshotInfo
+  -> Branch BranchTree
+singletonBranch hpath bhash originFuncAddr' originFuncName' mname rootNode' rootNodeInfo = Branch
   { hostBinaryPath = hpath
   , bndbHash = bhash
   , originFuncAddr = originFuncAddr'
+  , originFuncName = originFuncName'
   , branchName = mname
   , rootNode = rootNode'
   , tree = G.setNodeAttr rootNodeInfo rootNode'

@@ -150,8 +150,9 @@ class SnapTreeBranchItem(SnapTreeItem):
         self.branch_id = branch_id
         self.branch = branch_from_server(branch_data)
         self.branch_tree_list_item = branch_to_list_item(self.branch)
+        origin_func_name = self.branch.get('originFuncName')
         
-        text = (f"Branch {branch_id}:",) # {str(branch_data)}",)
+        text = (f"Branch {origin_func_name}:",) # {str(branch_data)}",)
         SnapTreeItem.__init__(self, parent, predecessor, text)
 
         self.addChild(SnapTreeBranchListItem(self, branch_id, self.branch_tree_list_item))

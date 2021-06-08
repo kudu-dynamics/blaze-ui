@@ -65,6 +65,7 @@ data SnapshotBranch = SnapshotBranch
   , hostBinaryPath :: HostBinaryPath
   , bndbHash :: BinaryHash
   , originFuncAddr :: Address
+  , originFuncName :: Text
   , branchName :: Maybe Text
   , rootNode :: CfgId
   , tree :: Blob (GraphTransport () SnapshotInfo CfgId)

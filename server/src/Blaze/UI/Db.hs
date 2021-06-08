@@ -34,20 +34,20 @@ saveNewCfgAndBranch :: MonadDb m
                     -> HostBinaryPath
                     -> BinaryHash
                     -> Address
+                    -> Text
                     -> PilCfg
                     -> m ( BranchId
                          , CfgId
                          , Snapshot.Branch BranchTree)
-saveNewCfgAndBranch clientId' hpath bhash originFuncAddr' pcfg = do
+saveNewCfgAndBranch clientId' hpath bhash originFuncAddr' originFuncName' pcfg = do
   cid <- liftIO randomIO
   bid <- liftIO randomIO
   utc <- liftIO getCurrentTime
   saveNewCfg_ bid cid pcfg
-  let b = Snapshot.singletonBranch hpath bhash originFuncAddr' Nothing cid
+  let b = Snapshot.singletonBranch hpath bhash originFuncAddr' originFuncName' Nothing cid
           $ SnapshotInfo Nothing utc Snapshot.Autosave
   saveNewBranch_ bid clientId' hpath bhash b
   return (bid, cid, b)
-    
 
 -- | use `saveNewCfgAndBranch` instead
 saveNewCfg_ :: MonadDb m => BranchId -> CfgId -> PilCfg -> m ()
@@ -125,6 +125,7 @@ saveNewBranch_ bid cid hpath h b = withDb $
       hpath
       h
       (b ^. #originFuncAddr)
+      (b ^. #originFuncName)
       (b ^. #branchName)
       (b ^. #rootNode)
       . Blob
@@ -154,9 +155,9 @@ getBranch bid = withDb $ do
     return branch
   case xs of
     [] -> return Nothing
-    [SnapshotBranch _ _ hpath bhash originFuncAddr' mname rootNode' (Blob tree')] -> return
+    [SnapshotBranch _ _ hpath bhash originFuncAddr' fname mname rootNode' (Blob tree')] -> return
       . Just 
-      . Snapshot.Branch hpath bhash originFuncAddr' mname rootNode'
+      . Snapshot.Branch hpath bhash originFuncAddr' fname mname rootNode'
       . graphFromTransport
       $ tree'
     _ -> -- hopefully impossible
@@ -180,9 +181,9 @@ getBranchesForFunction cid hpath funcAddr = fmap (fmap f) . withDb . query $ do
   return branch
   where
     f :: SnapshotBranch -> (BranchId, Snapshot.Branch BranchTree)
-    f (SnapshotBranch bid _ _ bhash faddr mname root (Blob tree')) =
+    f (SnapshotBranch bid _ _ bhash faddr fname mname root (Blob tree')) =
       ( bid
-      , Snapshot.Branch hpath bhash faddr mname root $ graphFromTransport tree'
+      , Snapshot.Branch hpath bhash faddr fname mname root $ graphFromTransport tree'
       )
 
 getAllBranchesForBinary :: MonadDb m => ClientId -> HostBinaryPath -> m [(BranchId, Snapshot.Branch BranchTree)]
@@ -194,9 +195,9 @@ getAllBranchesForBinary cid hpath = fmap (fmap f) . withDb . query $ do
   return branch
   where
     f :: SnapshotBranch -> (BranchId, Snapshot.Branch BranchTree)
-    f (SnapshotBranch bid _ _ bhash faddr mname root (Blob tree')) =
+    f (SnapshotBranch bid _ _ bhash faddr fname mname root (Blob tree')) =
       ( bid
-      , Snapshot.Branch hpath bhash faddr mname root $ graphFromTransport tree'
+      , Snapshot.Branch hpath bhash faddr fname mname root $ graphFromTransport tree'
       )
 
 getAllBranchesForClient :: MonadDb m => ClientId -> m (HashMap HostBinaryPath [(BranchId, Snapshot.Branch BranchTree)])
@@ -206,10 +207,10 @@ getAllBranchesForClient cid = fmap (HashMap.fromListWith (<>) . fmap f) . withDb
   return branch
   where
     f :: SnapshotBranch -> (HostBinaryPath, [(BranchId, Snapshot.Branch BranchTree)])
-    f (SnapshotBranch bid _ hpath bhash faddr mname root (Blob tree')) =
+    f (SnapshotBranch bid _ hpath bhash faddr fname mname root (Blob tree')) =
       ( hpath
       , [( bid
-         , Snapshot.Branch hpath bhash faddr mname root $ graphFromTransport tree'
+         , Snapshot.Branch hpath bhash faddr fname mname root $ graphFromTransport tree'
          )]
       )
 

@@ -96,6 +96,7 @@ data Branch a = Branch
   { hostBinaryPath :: HostBinaryPath
   , bndbHash :: BinaryHash
   , originFuncAddr :: Address
+  , originFuncName :: Text
   , branchName :: Maybe Text
   , rootNode :: CfgId
   , tree :: a
