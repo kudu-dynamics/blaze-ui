@@ -94,6 +94,7 @@ class BlazeInstance():
         else:
             callback(self.bndbHash)
 
+
 class BlazePlugin():
     instances: Dict[str, BlazeInstance] = {}
     out_queue: "queue.Queue[Union[Literal['SHUTDOWN'], BinjaMessage]]"
