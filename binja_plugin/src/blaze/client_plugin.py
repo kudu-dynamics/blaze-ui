@@ -71,6 +71,8 @@ def register(action, description):
 
     return wrapper
 
+def bv_key(bv: BinaryView) -> str:
+    return bv.file.filename if bv.file.filename.endswith('.bndb') else bv.file.filename + '.bndb'
 
 class BlazeInstance():
     def __init__(self, bv: BinaryView, blaze: 'BlazePlugin'):
@@ -238,7 +240,7 @@ class BlazePlugin():
             that was created
         '''
 
-        instance_key = bv.file.filename if bv.file.filename.endswith('.bndb') else bv.file.filename + '.bndb'
+        instance_key = bv_key(bv)
         
         if (instance := BlazePlugin.instances.get(instance_key)) is not None:
             return instance
@@ -251,7 +253,7 @@ class BlazePlugin():
         self._init_thread()
         self.ensure_instance(bv)
 
-        new_msg = BinjaMessage(clientId=self.client_id, hostBinaryPath=bv.file.filename, action=msg)
+        new_msg = BinjaMessage(clientId=self.client_id, hostBinaryPath=bv_key(bv), action=msg)
         # log.debug('enqueueing %s', new_msg)
         self.out_queue.put(new_msg)
 
