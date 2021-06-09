@@ -19,10 +19,6 @@
 .env.production.local
 .dir-locals-2.el
 
-__pycache__/
-*.pyc
-.python-version
-
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -30,3 +26,4 @@ yarn-error.log*
 *.egg-info
 *.pyc
 __pycache__/
+.python-version
