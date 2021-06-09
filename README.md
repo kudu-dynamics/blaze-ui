@@ -10,12 +10,12 @@ It consists of three components:
 
 ## Requirements
 
-* Binary Ninja `^2.3.2753-dev`
+* Binary Ninja `>=2.3.2753-dev,<2.4.2851-dev`
 * Python `^3.8`
   * It is recommended you use a virtualenv. [See here for more instructions][wiki-virtualenv]
 * Either
   * [Blaze](../../../../blaze), and all its transitive deps (so Haskell Stack, binaryninja-api, binaryninja-haskell, etc), or
-  * Docker (or any other OCI container executor)
+  * Docker and docker-compose (or any other OCI container executor)
 
 [wiki-virtualenv]: https://wiki.kududyn.com/s/bhc9a4h4cn3e3taiv8b0/aawg-analysis/d/btvjpj6l9dtngo7latgg/binary-ninja?currentPageId=c23hthul9dtilsqib800
 
@@ -31,18 +31,34 @@ Follow the installation instructions for the binja plugin [here](./binja_plugin/
 ```sh
 $ cd server
 $ stack build
-$ stack run localhost 31337 31338
+$ mkdir -p "$HOME/.local/share/blaze"
+$ BLAZE_UI_HOST=localhost \
+  BLAZE_UI_WS_PORT=31337 \
+  BLAZE_UI_HTTP_PORT=31338 \
+  BLAZE_UI_SQLITE_FILEPATH="$HOME/.local/share/blaze/blaze.sqlite" \
+  BLAZE_UI_BNDB_STORAGE_DIR="$HOME/.local/share/blaze/bndbs" \
+  stack run
+# OR
+$ export BLAZE_UI_HOST=localhost
+$ export BLAZE_UI_WS_PORT=31337
+$ export BLAZE_UI_HTTP_PORT=31338
+$ export BLAZE_UI_SQLITE_FILEPATH="$HOME/.local/share/blaze/blaze.sqlite"
+$ export BLAZE_UI_BNDB_STORAGE_DIR="$HOME/.local/share/blaze/bndbs"
+$ stack run
+# OR
+$ stack run localhost 31337 31338 "$HOME/.local/share/blaze/blaze.sqlite" "$HOME/.local/share/blaze/bndbs"
 ```
 
 ### Using docker
 
+- Edit docker-compose.yml if needed:
+  - Forward the desired ports for the WebSocket and HTTP services
+  - Switch between the GitLab (authoritative) repository or AWS ECR (fast) repository
+  - Edit docker volume(s)
+
 ```sh
-$ docker run --pull --rm -it \
-    -v $HOME:$HOME \
-    -p 31337:31337 \
-    -p 31338:31338 \
-    ${CI_REGISTRY}/${CI_PROJECT_NAMESPACE}/blaze-ui/blaze-service/squashed \
-    /blaze/bin/blaze-server 0.0.0.0 31337 31338
+$ docker-compose pull
+$ docker-compose up
 ```
 
 ## Using Blaze
