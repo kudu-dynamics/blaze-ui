@@ -19,10 +19,10 @@ main = do
 
     [host, wsPort, httpPort, sqliteFilePath, bndbDir ] -> return $ ServerConfig (cs host) (P.read wsPort) (P.read httpPort) sqliteFilePath (BM.BinaryManagerStorageDir bndbDir)
     _ -> do
-      putText "Emample with env vars:"
-      putText "BLAZE_UI_HOST='localhost' BLAZE_UI_WS_PORT='1234' BLAZE_UI_HTTP_PORT='2345' BLAZE_UI_SQLITE_FILEPATH='blaze.sqlite` BLAZE_UI_BNDB_STORAGE_DIR=`/opt/blaze` blaze-ui-server"
+      putText "USAGE:"
+      putText "BLAZE_UI_HOST=localhost BLAZE_UI_WS_PORT=1234 BLAZE_UI_HTTP_PORT=2345 BLAZE_UI_SQLITE_FILEPATH=blaze.sqlite BLAZE_UI_BNDB_STORAGE_DIR=/opt/blaze blaze-ui-server"
       putText "or"
-      putText "blaze-ui-server [host] [websockets port] [http port] [sqlite filepath] [bndb dir]"
+      putText "blaze-ui-server <host> <websockets port> <http port> <sqlite filepath> <bndb dir>"
       P.error "Invalid args"
   Db.init $ cfg ^. #sqliteFilePath
   void . forkIO $ WebServer.run cfg
