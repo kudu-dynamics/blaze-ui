@@ -9,13 +9,13 @@ services:
     ports:
       - 31337:31337
       - 31338:31338
-    command:
-      - /blaze/bin/blaze-server
-      - 0.0.0.0
-      - "31337"
-      - "31338"
-      - /blaze/persistent/blaze.sqlite
-      - /blaze/persistent/bndbs
+    environment:
+      - BLAZE_UI_HOST=0.0.0.0
+      - BLAZE_UI_WS_PORT=31337
+      - BLAZE_UI_HTTP_PORT=31338
+      - BLAZE_UI_SQLITE_FILEPATH=/blaze/persistent/blaze.sqlite
+      - BLAZE_UI_BNDB_STORAGE_DIR=/blaze/persistent/bndbs
+    command: ["/blaze/bin/blaze-server"]
 
 volumes:
   blaze:
