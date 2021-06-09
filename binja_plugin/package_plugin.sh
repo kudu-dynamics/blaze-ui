@@ -52,7 +52,7 @@ python3 -m build -o $DIST_DIR
 # 1.1 Get wheel name
 wheel_name="$(ls -1t $DIST_DIR | grep whl | head -n 1)"
 # 1.2 Get wheel dependencies
-dependencies="$(pkginfo $DIST_DIR/$wheel_name -f requires_dist --single --sequence-delim=\\\n)"
+dependencies="$(pkginfo $DIST_DIR/$wheel_name -f requires_dist --single --sequence-delim="\\\\n")"
 
 
 # 2. Copy JSONs into dist
