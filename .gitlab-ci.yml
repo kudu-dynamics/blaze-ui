@@ -2,8 +2,7 @@ stages:
   - lint
   - build
   - test
-  - push
-  - docs
+  - deploy
 
 # FIXME it would be _nice_ if we could run branch pipelines _until_ branches become MRs, in which
 # case we run MR pipelines. Cf. https://gitlab.com/gitlab-org/gitlab/-/issues/34756#note_282820625
@@ -92,29 +91,42 @@ build:branch:
     - if: $CI_MERGE_REQUEST_IID == null
   needs: []
   script:
-    - image=${REPO_DOCKER_REGISTRY}/blaze-service
+    - blaze_image=${REPO_DOCKER_REGISTRY}/blaze-service
+    - squashed_blaze_image=${REPO_DOCKER_REGISTRY}/blaze-service/squashed
+    - wheel_server_image=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
 
+    # Pull images for layer caching
     - echo -e "section_start:`date +%s`:docker-pull[collapsed=true]\r\e[0KPull docker images for caching"
     - docker login -u "${CI_REGISTRY_USER}" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
-    - docker pull "${image}:branch-${CI_COMMIT_REF_SLUG}" ||
-      docker pull "${image}:latest" ||
+    - docker pull "${blaze_image}:branch-${CI_COMMIT_REF_SLUG}" ||
+      docker pull "${blaze_image}:latest" ||
+      true
+    - docker pull "${wheel_server_image}:branch-${CI_COMMIT_REF_SLUG}" ||
+      docker pull "${wheel_server_image}:latest" ||
       true
     - echo -e "section_end:`date +%s`:docker-pull\r\e[0K"
 
-    - echo -e "section_start:`date +%s`:docker-build\r\e[0KBuild docker image"
-    - \time -v docker build --pull . -f Dockerfile --target main
-      -t "${image}:commit-${CI_COMMIT_SHA}"
-      -t "${image}:branch-${CI_COMMIT_REF_SLUG}"
-    - \time -v docker build --squash --pull . -f Dockerfile --target minimal
-      -t "${image}/squashed:commit-${CI_COMMIT_SHA}"
-      -t "${image}/squashed:branch-${CI_COMMIT_REF_SLUG}"
+    # Build images
+    - echo -e "section_start:`date +%s`:docker-build\r\e[0KBuild docker images"
+    - docker build --pull . -f Dockerfile --target main
+      -t "${blaze_image}:commit-${CI_COMMIT_SHA}"
+      -t "${blaze_image}:branch-${CI_COMMIT_REF_SLUG}"
+    - docker build --squash --pull . -f Dockerfile --target minimal
+      -t "${squashed_blaze_image}:commit-${CI_COMMIT_SHA}"
+      -t "${squashed_blaze_image}:branch-${CI_COMMIT_REF_SLUG}"
+    - docker build --pull . -f Dockerfile --target wheel-server
+      -t "${wheel_server_image}:commit-${CI_COMMIT_SHA}"
+      -t "${wheel_server_image}:branch-${CI_COMMIT_REF_SLUG}"
     - echo -e "section_end:`date +%s`:docker-build\r\e[0K"
 
-    - echo -e "section_start:`date +%s`:docker-push[collapsed=true]\r\e[0KPush new docker image"
-    - docker push "${image}:commit-${CI_COMMIT_SHA}"
-    - docker push "${image}:branch-${CI_COMMIT_REF_SLUG}"
-    - docker push "${image}/squashed:commit-${CI_COMMIT_SHA}"
-    - docker push "${image}/squashed:branch-${CI_COMMIT_REF_SLUG}"
+    # Push images
+    - echo -e "section_start:`date +%s`:docker-push[collapsed=true]\r\e[0KPush new docker images"
+    - docker push "${blaze_image}:commit-${CI_COMMIT_SHA}"
+    - docker push "${blaze_image}:branch-${CI_COMMIT_REF_SLUG}"
+    - docker push "${squashed_blaze_image}:commit-${CI_COMMIT_SHA}"
+    - docker push "${squashed_blaze_image}:branch-${CI_COMMIT_REF_SLUG}"
+    - docker push "${wheel_server_image}:commit-${CI_COMMIT_SHA}"
+    - docker push "${wheel_server_image}:branch-${CI_COMMIT_REF_SLUG}"
 
 build:detached:
   stage: build
@@ -123,25 +135,36 @@ build:detached:
     - if: $CI_MERGE_REQUEST_IID
   needs: []
   script:
-    - image=${REPO_DOCKER_REGISTRY}/blaze-service
+    - blaze_image=${REPO_DOCKER_REGISTRY}/blaze-service
+    - squashed_blaze_image=${REPO_DOCKER_REGISTRY}/blaze-service/squashed
+    - wheel_server_image=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
 
+    # Pull images for layer caching
     - echo -e "section_start:`date +%s`:docker-pull[collapsed=true]\r\e[0KPull docker images for caching"
     - docker login -u "${CI_REGISTRY_USER}" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
-    - docker pull "${image}:merge-${CI_MERGE_REQUEST_IID}" ||
-      docker pull "${image}:latest" ||
+    - docker pull "${blaze_image}:merge-${CI_MERGE_REQUEST_IID}" ||
+      docker pull "${blaze_image}:latest" ||
+      true
+    - docker pull "${wheel_server_image}:merge-${CI_MERGE_REQUEST_IID}" ||
+      docker pull "${wheel_server_image}:latest" ||
       true
     - echo -e "section_end:`date +%s`:docker-pull\r\e[0K"
 
-    - echo -e "section_start:`date +%s`:docker-build\r\e[0KBuild docker image"
-    - \time -v docker build --pull . -f Dockerfile --target main
-      -t "${image}:merge-${CI_MERGE_REQUEST_IID}"
-    - \time -v docker build --squash --pull . -f Dockerfile --target minimal
-      -t "${image}/squashed:merge-${CI_MERGE_REQUEST_IID}"
+    # Build images
+    - echo -e "section_start:`date +%s`:docker-build\r\e[0KBuild docker images"
+    - docker build --pull . -f Dockerfile --target main
+      -t "${blaze_image}:merge-${CI_MERGE_REQUEST_IID}"
+    - docker build --squash --pull . -f Dockerfile --target minimal
+      -t "${squashed_blaze_image}:merge-${CI_MERGE_REQUEST_IID}"
+    - docker build --squash --pull . -f Dockerfile --target wheel-server
+      -t "${wheel_server_image}:merge-${CI_MERGE_REQUEST_IID}"
     - echo -e "section_end:`date +%s`:docker-build\r\e[0K"
 
-    - echo -e "section_start:`date +%s`:docker-push[collapsed=true]\r\e[0KPush new docker image"
-    - docker push "${image}:merge-${CI_MERGE_REQUEST_IID}"
-    - docker push "${image}/squashed:merge-${CI_MERGE_REQUEST_IID}"
+    # Push images
+    - echo -e "section_start:`date +%s`:docker-push[collapsed=true]\r\e[0KPush new docker images"
+    - docker push "${blaze_image}:merge-${CI_MERGE_REQUEST_IID}"
+    - docker push "${squashed_blaze_image}:merge-${CI_MERGE_REQUEST_IID}"
+    - docker push "${wheel_server_image}:merge-${CI_MERGE_REQUEST_IID}"
     - echo -e "section_end:`date +%s`:docker-push\r\e[0K"
 
 # Likewise, we need 2 test jobs. The test:branch job uses the ${image}:commit-... image,
@@ -178,22 +201,25 @@ test:detached:
     - cd /blaze/blaze-ui/server
     - STACK_TEST_TIMEOUT=1800 ../.ci/scripts/run_stack_test.py
 
-# If we just pushed to the default branch, tag the image as :latest and push
+# If we just pushed to the default branch, tag the images as :latest and push
 
 push:latest:
-  stage: push
+  stage: deploy
   extends: .dind
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  needs:
-    - test:branch
+      when: on_success
+    - when: manual
+      allow_failure: true
   variables:
     <<: *variables
     GIT_STRATEGY: none
     GIT_CLEAN_FLAGS: none
   script:
-    - local_image=${REPO_DOCKER_REGISTRY}/blaze-service/squashed
-    - aws_image=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-service
+    - gitlab_blaze=${REPO_DOCKER_REGISTRY}/blaze-service/squashed
+    - aws_blaze=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-service
+    - gitlab_wheel_server=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
+    - aws_wheel_server=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-wheel-server
 
     # Set up AWS ECR credentials
     - echo -e "section_start:`date +%s`:aws-config[collapsed=true]\r\e[0KConfigure AWS credentials"
@@ -203,35 +229,39 @@ push:latest:
     - aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
     - echo -e "section_end:`date +%s`:aws-config\r\e[0K"
 
-    # Pull this pipeline's image
-    - echo -e "section_start:`date +%s`:docker-pull\r\e[0KPull latest docker image"
+    # Pull this pipeline's images
+    - echo -e "section_start:`date +%s`:docker-pull\r\e[0KPull latest docker images"
     - docker login -u "${CI_REGISTRY_USER}" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
-    - docker pull "${local_image}:commit-${CI_COMMIT_SHA}"
+    - docker pull "${gitlab_blaze}:commit-${CI_COMMIT_SHA}"
+    - docker pull "${gitlab_wheel_server}:commit-${CI_COMMIT_SHA}"
     - echo -e "section_end:`date +%s`:docker-pull\r\e[0K"
 
-    # Push :latest to internal gitlab registry
-    - echo -e "section_start:`date +%s`:docker-push-gitlab\r\e[0KPush latest docker image to gitlab"
-    - docker tag "${local_image}:commit-${CI_COMMIT_SHA}" "${local_image}:latest"
-    - docker push "${local_image}:latest"
+    # Push :latest images to internal gitlab registry
+    - echo -e "section_start:`date +%s`:docker-push-gitlab\r\e[0KPush latest docker images to gitlab"
+    - docker tag "${gitlab_blaze}:commit-${CI_COMMIT_SHA}" "${gitlab_blaze}:latest"
+    - docker push "${gitlab_blaze}:latest"
+    - docker tag "${gitlab_wheel_server}:commit-${CI_COMMIT_SHA}" "${gitlab_wheel_server}:latest"
+    - docker push "${gitlab_wheel_server}:latest"
     - echo -e "section_end:`date +%s`:docker-push-gitlab\r\e[0K"
 
-    # Push :latest to AWS ECR integration registry
-    - echo -e "section_start:`date +%s`:docker-push-aws\r\e[0KPush latest docker image to blaze AWS ECR registry"
+    # Push :latest images to AWS ECR integration registry
+    - echo -e "section_start:`date +%s`:docker-push-aws\r\e[0KPush latest docker images to blaze AWS ECR registry"
     - aws ecr get-login-password | docker login --username AWS --password-stdin "${AWS_ECR_REGISTRY}"
-    - docker tag "${local_image}:commit-${CI_COMMIT_SHA}" "${aws_image}:latest"
-    - docker push "${aws_image}:latest"
+    - docker tag "${gitlab_blaze}:commit-${CI_COMMIT_SHA}" "${aws_blaze}:latest"
+    - docker push "${aws_blaze}:latest"
+    - docker tag "${gitlab_wheel_server}:commit-${CI_COMMIT_SHA}" "${aws_wheel_server}:latest"
+    - docker push "${aws_wheel_server}:latest"
     - echo -e "section_end:`date +%s`:docker-push-aws\r\e[0K"
 
 pages:
   extends: .haskell-job
-  stage: docs
+  stage: deploy
   rules:
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_MERGE_REQUEST_ID == null
       when: on_success
     - if: $CI_MERGE_REQUEST_ID == null
       when: manual
-  needs:
-    - test:branch
+      allow_failure: true
   variables:
     <<: *variables
     GIT_STRATEGY: none
@@ -257,7 +287,6 @@ pages:
         echo '<h1>No haddocks created</h1>' > public/index.html
       fi
         
-  allow_failure: true
   artifacts:
     paths:
       - public
