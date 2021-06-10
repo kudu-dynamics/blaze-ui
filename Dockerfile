@@ -8,7 +8,8 @@ RUN --mount=type=cache,id=blaze-apt,target=/var/cache/apt,sharing=locked \
     apt install -yq \
         zlib1g-dev
 
-COPY ./ /blaze/blaze-ui
+COPY server/ /blaze/blaze-ui/server/
+COPY .ci/ /blaze/blaze-ui/.ci/
 WORKDIR /blaze/blaze-ui/server
 
 RUN stack build --test --no-run-tests --ghc-options -fdiagnostics-color=always
@@ -18,6 +19,7 @@ ENV BLAZE_UI_WS_PORT=5765
 ENV BLAZE_UI_HTTP_PORT=5766
 
 CMD ["stack", "exec", "blaze-server"]
+
 
 FROM main as minimal
 RUN cd /blaze/blaze-ui/server && stack install --copy-bins --local-bin-path /blaze/bin
@@ -53,3 +55,21 @@ RUN --mount=type=cache,id=blaze-apt,target=/var/cache/apt,sharing=locked \
 
 ENV PATH="/blaze/bin:${PATH}"
 CMD ["blaze-server"]
+
+
+FROM python:3.8 as wheel-builder
+COPY binja_plugin/ /binja_plugin/
+WORKDIR /binja_plugin
+RUN ./package_plugin.sh
+
+
+FROM abhin4v/hastatic:latest as hastatic
+
+
+FROM ubuntu:latest as wheel-server
+RUN apt update && apt install -y --no-install-recommends jq moreutils
+COPY --from=hastatic /usr/bin/hastatic /usr/bin/hastatic
+COPY --from=wheel-builder /binja_plugin/dist/*.whl /binja_plugin/dist/plugins.json /www/
+COPY .docker/wheel-server-entrypoint /usr/bin/wheel-server-entrypoint
+WORKDIR /www
+CMD ["/usr/bin/wheel-server-entrypoint"]

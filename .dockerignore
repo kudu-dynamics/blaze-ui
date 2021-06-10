@@ -9,5 +9,5 @@ server/.stack-work
 server/*.cabal
 server/**/dist-newstyle
 server/**/dist
-binja_plugin
+
 node_modules

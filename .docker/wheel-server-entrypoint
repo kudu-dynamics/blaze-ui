@@ -1,0 +1,26 @@
+#!/bin/bash
+
+set -euo pipefail
+
+if [[ -z $BLAZE_WHEEL_SERVER_URL ]]; then
+    echo "USAGE: BLAZE_WHEEL_SERVER_URL=<SERVER_URL> $0" >&2
+    exit 1
+fi
+
+base_url=$BLAZE_WHEEL_SERVER_URL
+wheels=(*.whl)
+if [[ ${#wheels[@]} -ne 1 ]]; then
+    echo "No wheels found, or too many wheels: ${wheels[*]}" >&2
+    exit 1
+fi
+wheel=${wheels[0]}
+url=$base_url/$wheel
+
+echo "Found wheel: $wheel"
+echo "Setting wheel URL: $url"
+
+jq --arg packageUrl "$url" '.[0].packageUrl = $packageUrl' <plugins.json \
+    | sponge plugins.json
+
+echo "Starting wheel server"
+exec /usr/bin/hastatic
