@@ -211,7 +211,6 @@ class SnapTreeWidget(QTreeWidget):
         log.info(f'Loading icfg {cfg_id}')
         snapshot_msg = SnapshotBinjaToServer(
             tag = 'LoadSnapshot',
-            branchId = snap.branch_id,
             cfgId = snap.item.get('cfgId'))
             
         self.blaze_instance.send(
