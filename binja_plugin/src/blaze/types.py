@@ -123,28 +123,31 @@ class SnapshotInfo(TypedDict):
 
 class ServerBranchTree(TypedDict):
     edges: List[Tuple[Unit, Tuple[CfgId, CfgId]]]
-    nodes: List[Tuple[CfgId, Optional[SnapshotInfo]]]
+    nodes: List[Tuple[CfgId, Unit]]
 
 
 class BranchTree(TypedDict):
-    edges: List[Tuple[CfgId, CfgId]]  # actually (e, (n, n)), but e is (), so...
-    attrs: Dict[CfgId, SnapshotInfo]
+    edges: List[Tuple[CfgId, CfgId]]
 
 
 class ServerBranch(TypedDict):
+    hostBinaryPath: HostBinaryPath
     bndbHash: BinaryHash
     originFuncAddr: Address
     originFuncName: str
     branchName: Optional[str]
     rootNode: CfgId
+    snapshotInfo: List[Tuple[CfgId, SnapshotInfo]]
     tree: ServerBranchTree
 
 
 class Branch(TypedDict, total=True):
+    hostBinaryPath: HostBinaryPath
     bndbHash: BinaryHash
     originFuncAddr: Address
     originFuncName: str
     branchName: Optional[str]
+    snapshotInfo: Dict[CfgId, SnapshotInfo]
     rootNode: CfgId
     tree: BranchTree
 

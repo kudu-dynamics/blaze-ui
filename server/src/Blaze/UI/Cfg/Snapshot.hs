@@ -6,38 +6,27 @@ import qualified Blaze.Graph as G
 import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.UI.Types.Cfg.Snapshot
 import qualified Blaze.UI.Types.Graph as Graph
-import Data.Time.Clock (UTCTime)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
+import qualified Data.HashMap.Strict as HashMap
 
+-- addSnapshotToBranch :: CfgId -> CfgId -> SnapshotInfo -> Branch BranchTree -> Branch BranchTree
+-- addSnapshotToBranch parentId' id info snap =
+--   snap & #tree %~ ( G.setNodeAttr info id
+--        . G.addEdge (G.LEdge () $ G.Edge parentId' id) )
+--        & #snapshotInfo %~
 
-addSnapshotToBranch :: CfgId -> CfgId -> SnapshotInfo -> Branch BranchTree -> Branch BranchTree
-addSnapshotToBranch parentId' id info snap =
-  snap & #tree %~
-    ( G.setNodeAttr info id
-    . G.addEdge (G.LEdge () $ G.Edge parentId' id) )
-
--- | Changes parent snapshot type to be `Immutable` and updates time.
 -- Adds `newChildAutoId` to tree as child of `autoId`.
-immortalizeAutosave :: CfgId -> CfgId -> UTCTime -> BranchTree -> BranchTree
-immortalizeAutosave autoId newChildAutoId saveTime bt
-  = G.setNodeAttr immortalizedNodeAttr autoId
-  . G.setNodeAttr newAutoNodeAttr newChildAutoId
-  . G.addEdge (G.LEdge () $ G.Edge autoId newChildAutoId)
-  $ bt
-  where
-    newAutoNodeAttr = SnapshotInfo Nothing saveTime Autosave
-    immortalizedNodeAttr = case G.getNodeAttr autoId bt of
-      Nothing -> SnapshotInfo Nothing saveTime Immutable
-      Just x -> x & #snapshotType .~ Immutable
+addChild :: CfgId -> CfgId -> BranchTree -> BranchTree
+addChild parent child = G.addEdge (G.LEdge () $ G.Edge parent child)
 
 
--- | Returns `Nothing` if `CfgId` is missing `SnapshotInfo`.
-isAutosave :: CfgId -> BranchTree -> Maybe Bool
-isAutosave cid bt = is #_Autosave . view #snapshotType <$> G.getNodeAttr cid bt
+-- -- | Returns `Nothing` if `CfgId` is missing `SnapshotInfo`.
+-- isAutosave :: CfgId -> BranchTree -> Maybe Bool
+-- isAutosave cid bt = is #_Autosave . view #snapshotType <$> G.getNodeAttr cid bt
 
-renameSnapshot :: CfgId -> Text -> BranchTree -> BranchTree
-renameSnapshot id name' = G.updateNodeAttr (over #name $ const (Just name')) id
+-- renameSnapshot :: CfgId -> Text -> BranchTree -> BranchTree
+-- renameSnapshot id name' = G.updateNodeAttr (over #name $ const (Just name')) id
 
 singletonBranch
   :: HostBinaryPath
@@ -55,8 +44,8 @@ singletonBranch hpath bhash originFuncAddr' originFuncName' mname rootNode' root
   , originFuncName = originFuncName'
   , branchName = mname
   , rootNode = rootNode'
-  , tree = G.setNodeAttr rootNodeInfo rootNode'
-           $ G.fromNode rootNode'
+  , snapshotInfo = HashMap.fromList [(rootNode', rootNodeInfo)]
+  , tree = G.fromNode rootNode'
   }
 
 toTransport :: Branch BranchTree -> Branch BranchTransport

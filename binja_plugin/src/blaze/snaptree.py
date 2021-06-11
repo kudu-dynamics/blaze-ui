@@ -1,5 +1,5 @@
 import logging as _logging
-from typing import TYPE_CHECKING, List, Optional, Set, Tuple, Union, cast
+from typing import TYPE_CHECKING, List, Optional, Set, Tuple, Union, cast, Dict
 
 from binaryninjaui import (
     ContextMenuManager,
@@ -46,32 +46,31 @@ class SnapTree():
         pass
 
 
-def branch_tree_from_server(branch_tree: ServerBranchTree) -> BranchTree:
-    attrs = {k: v for k, v in branch_tree['nodes'] if v is not None}
+def branch_tree_from_server(branch_tree: ServerBranchTree) -> BranchTree:  
     edges = [edge[1] for edge in branch_tree['edges']]
-    return BranchTree(attrs=attrs, edges=edges)
+    return BranchTree(edges=edges)
 
 
 def branch_from_server(branch: ServerBranch) -> Branch:
-    updated = {**branch, 'tree': branch_tree_from_server(branch['tree'])}
+    updated = {**branch, 'tree': branch_tree_from_server(branch['tree']), 'snapshotInfo': dict(branch['snapshotInfo'])}
     return Branch(**updated)
 
 
-def branch_tree_to_server(branch_tree: BranchTree) -> ServerBranchTree:
-    nodes = [(k, v) for k, v in branch_tree['attrs'].items()]
-    edges = [([], edge) for edge in branch_tree['edges']]
-    return ServerBranchTree(nodes=nodes, edges=edges)  # type: ignore
+# def branch_tree_to_server(branch_tree: BranchTree) -> ServerBranchTree:
+#     nodes = [(k, v) for k, v in branch_tree['attrs'].items()]
+#     edges = [([], edge) for edge in branch_tree['edges']]
+#     return ServerBranchTree(nodes=nodes, edges=edges)  # type: ignore
 
 
-def branch_to_server(branch: Branch) -> ServerBranch:
-    updated = {**branch, 'tree': branch_tree_to_server(branch['tree'])}
-    return ServerBranch(**updated)
+# def branch_to_server(branch: Branch) -> ServerBranch:
+#     updated = {**branch, 'tree': branch_tree_to_server(branch['tree'])}
+#     return ServerBranch(**updated)
 
 
-def branchtree_to_branchtreelistitem(bt: BranchTree, cfg_id: CfgId) -> BranchTreeListItem:
+def branchtree_to_branchtreelistitem(bt: BranchTree, snapInfo: Dict[CfgId, SnapshotInfo], cfg_id: CfgId) -> BranchTreeListItem:
     def recursor(bt: BranchTree, cfg_id: CfgId, visited: Set[CfgId]) -> BranchTreeListItem:
         children = []
-        snapshot_info = bt['attrs'][cfg_id]
+        snapshot_info = snapInfo[cfg_id]
 
         for child in (dest for src, dest in bt['edges'] if src == cfg_id and dest not in visited):
             visited.add(child)
@@ -83,9 +82,7 @@ def branchtree_to_branchtreelistitem(bt: BranchTree, cfg_id: CfgId) -> BranchTre
 
 
 def branch_to_list_item(branch: Branch) -> BranchTreeListItem:
-    log.info('\n\n\n\n--------------------------------------\n\n\n\n')
-    log.info(branch)
-    return branchtree_to_branchtreelistitem(branch.get('tree'), branch.get('rootNode'))
+    return branchtree_to_branchtreelistitem(branch.get('tree'), branch.get('snapshotInfo'), branch.get('rootNode'))
 
 
 class SnapTreeItem(QTreeWidgetItem):
@@ -127,8 +124,11 @@ class SnapTreeBranchListItem(SnapTreeItem):
     ):
         self.item = item
         self.branch_id = branch_id
-        date = item.get('snapshotInfo').get('date')
-        if item.get('snapshotInfo').get('type') == 'Autosave':
+        print("\n\n\n ------------------------- \n\n\n")
+        print(item)
+
+        date = item.get('snapshotInfo').get('created')
+        if item.get('snapshotInfo').get('snapshotType') == 'Autosave':
             text = (f"Autosave: {date}:")
         else:
             name = item.get('snapshotInfo').get('name') or (f"{date}")
@@ -200,6 +200,7 @@ class SnapTreeWidget(QTreeWidget):
         '''
         TODO more intelligent processing here, likely need to flush the tree first
         '''
+        self.clear()
         self.addTopLevelItems(
             [SnapTreeBinaryItem(self, bpath, branches) for bpath, branches in data]
         )
@@ -276,51 +277,51 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
 
         
 # >>> XXX testing
-        from .types import ServerBranchesOfClient, HostBinaryPath, ServerBranch, ServerBranchTree
-        snap_msg = SnapshotServerToBinja(
-            tag='BranchesOfClient',
-            branchesOfClient=[
-                (
-                    "HostBinaryPath:1", [
-                        ('a', ServerBranch(
-                            bndbHash="bndbHash",
-                            originFuncAddr=0xdeadbeef,
-                            originFuncName="foo",
-                            branchName="branchName",
-                            rootNode="rootNode",
-                            tree=ServerBranchTree(
-                                edges=[('Unit:1', ('CfgId:1', 'CfgId:2'))],
-                                nodes=[('CfgId:1', None)]
-                            ),
-                        )),
-                        ('c', ServerBranch(
-                            bndbHash="bndbHash",
-                            originFuncAddr=0xdeadbeef,
-                            originFuncName="bar",
-                            branchName="branchName",
-                            rootNode="rootNode",
-                            tree=ServerBranchTree(
-                                edges=[('Unit:1', ('CfgId:1', 'CfgId:2'))],
-                                nodes=[('CfgId:1', None)]
-                            ),
-                        ))
-                    ]
-                ),
-                (
-                    "HostBinaryPath:2", [('b', ServerBranch(
-                        bndbHash="bndbHash",
-                        originFuncAddr=0xdeadbeef,
-                        originFuncName="bazzzzzzzzz",
-                        branchName="branchName",
-                        rootNode="rootNode",
-                        tree=ServerBranchTree(
-                            edges=[('Unit:1', ('CfgId:1', 'CfgId:2'))],
-                            nodes=[('CfgId:1', None)]
-                        ),
-                    ))]
-                ),
-            ]
-        )
+        # from .types import ServerBranchesOfClient, HostBinaryPath, ServerBranch, ServerBranchTree
+        # snap_msg = SnapshotServerToBinja(
+        #     tag='BranchesOfClient',
+        #     branchesOfClient=[
+        #         (
+        #             "HostBinaryPath:1", [
+        #                 ('a', ServerBranch(
+        #                     bndbHash="bndbHash",
+        #                     originFuncAddr=0xdeadbeef,
+        #                     originFuncName="foo",
+        #                     branchName="branchName",
+        #                     rootNode="rootNode",
+        #                     tree=ServerBranchTree(
+        #                         edges=[('Unit:1', ('CfgId:1', 'CfgId:2'))],
+        #                         nodes=[('CfgId:1', None)]
+        #                     ),
+        #                 )),
+        #                 ('c', ServerBranch(
+        #                     bndbHash="bndbHash",
+        #                     originFuncAddr=0xdeadbeef,
+        #                     originFuncName="bar",
+        #                     branchName="branchName",
+        #                     rootNode="rootNode",
+        #                     tree=ServerBranchTree(
+        #                         edges=[('Unit:1', ('CfgId:1', 'CfgId:2'))],
+        #                         nodes=[('CfgId:1', None)]
+        #                     ),
+        #                 ))
+        #             ]
+        #         ),
+        #         (
+        #             "HostBinaryPath:2", [('b', ServerBranch(
+        #                 bndbHash="bndbHash",
+        #                 originFuncAddr=0xdeadbeef,
+        #                 originFuncName="bazzzzzzzzz",
+        #                 branchName="branchName",
+        #                 rootNode="rootNode",
+        #                 tree=ServerBranchTree(
+        #                     edges=[('Unit:1', ('CfgId:1', 'CfgId:2'))],
+        #                     nodes=[('CfgId:1', None)]
+        #                 ),
+        #             ))]
+        #         ),
+        #     ]
+        # )
         # self.handle_server_msg(snap_msg)
 # <<< XXX testing
 

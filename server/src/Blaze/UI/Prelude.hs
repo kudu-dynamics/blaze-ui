@@ -14,6 +14,7 @@ import Control.Concurrent.STM.TQueue as Exports
 import Control.Concurrent.STM.TVar as Exports
 import Control.Concurrent.STM.TMVar as Exports
 import Data.String.Conversions as Exports (ConvertibleStrings)
+import Data.Aeson as Exports (ToJSONKey, FromJSONKey)
 
 writeManyTQueue :: TQueue a -> [a] -> STM ()
 writeManyTQueue q = mapM_ $ writeTQueue q

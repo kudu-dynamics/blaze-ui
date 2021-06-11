@@ -15,7 +15,7 @@ import Database.Selda.SqlType ( Lit(LBlob, LText, LCustom)
                               , SqlValue(SqlBlob, SqlString)
                               )
 import Blaze.UI.Types.Graph (GraphTransport)
-import Blaze.UI.Types.Cfg.Snapshot (BranchId, SnapshotInfo)
+import Blaze.UI.Types.Cfg.Snapshot (BranchId, SnapshotType)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
@@ -51,10 +51,11 @@ instance SqlType Address where
 
 data SavedCfg = SavedCfg
   { cfgId :: CfgId
-  -- , name :: Maybe Text
-  -- , created :: UTCTime
-  -- , modified :: UTCTime
   , branchId :: BranchId
+  , name :: Maybe Text
+  , created :: UTCTime
+  , modified :: UTCTime
+  , snapshotType :: SnapshotType
   , cfg :: Blob (CfgTransport [Stmt])
   } deriving Generic
 instance SqlRow SavedCfg
@@ -68,7 +69,7 @@ data SnapshotBranch = SnapshotBranch
   , originFuncName :: Text
   , branchName :: Maybe Text
   , rootNode :: CfgId
-  , tree :: Blob (GraphTransport () SnapshotInfo CfgId)
+  , tree :: Blob (GraphTransport () () CfgId)
   } deriving Generic
 instance SqlRow SnapshotBranch
 
