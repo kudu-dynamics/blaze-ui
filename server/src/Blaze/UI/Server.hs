@@ -281,6 +281,11 @@ sendLatestBinarySnapshots = do
     . fmap (over _2 Snapshot.toTransport)
     $ branches
 
+-- | Called whenever snapshots change.
+-- TODO: change to `sendLatestBinarySnapshots` when frontend is ready to handle it
+sendLatestSnapshots :: EventLoop ()
+sendLatestSnapshots = sendLatestClientSnapshots
+
 ------------------------------------------
 --- main event handler
 
@@ -395,8 +400,7 @@ handleBinjaEvent = \case
               (func ^. #name)
               pcfg
             CfgUI.addCfg cid pcfg 
-            -- sendLatestBinarySnapshots
-            sendLatestClientSnapshots
+            sendLatestSnapshots
             sendToBinja . SBCfg cid bhash $ convertPilCfg pcfg
         debug "Created new branch and added auto-cfg."
 
@@ -480,7 +484,7 @@ handleBinjaEvent = \case
       Db.setBranchName bid (Just name')
       Db.getBranch bid >>= \case
         Nothing -> logError $ "Could not find snapshot with id: " <> show bid
-        Just _br -> sendLatestClientSnapshots
+        Just _br -> sendLatestSnapshots
 
     Snapshot.LoadSnapshot cid -> do
       bhash <- getCfgBinaryHash cid
@@ -493,12 +497,12 @@ handleBinjaEvent = \case
 
       logInfo $ "Saved iCfg as immutable snapshot: " <> show cid
 
-      sendLatestClientSnapshots
+      sendLatestSnapshots
 
     Snapshot.RenameSnapshot cid name' -> do
       Db.setCfgName cid name'
       logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
-      sendLatestClientSnapshots
+      sendLatestSnapshots
 
 printPrunedStats :: (Ord a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printPrunedStats a b = do
