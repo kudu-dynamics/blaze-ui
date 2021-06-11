@@ -57,6 +57,9 @@ $ stack run localhost 31337 31338 "$HOME/.local/share/blaze/blaze.sqlite" "$HOME
   - Edit docker volume(s)
 
 ```sh
+# Login, if needed
+$ docker login ${CI_REGISTRY}
+# Pull the image and start the service
 $ docker-compose pull
 $ docker-compose up
 ```
