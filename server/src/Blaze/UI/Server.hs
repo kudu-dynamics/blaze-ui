@@ -39,7 +39,7 @@ import Blaze.UI.Types.Session ( SessionId
                               , ClientId
                               , mkSessionId
                               )
-import Data.Time.Clock (getCurrentTime)
+
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -278,7 +278,7 @@ sendLatestBinarySnapshots = do
   sendToBinja
     . SBSnapshot
     . Snapshot.BranchesOfBinary (ctx ^. #hostBinaryPath)
-    . (fmap (over _2 Snapshot.toTransport))
+    . fmap (over _2 Snapshot.toTransport)
     $ branches
 
 ------------------------------------------
