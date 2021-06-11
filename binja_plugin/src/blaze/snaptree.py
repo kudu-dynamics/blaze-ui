@@ -56,17 +56,6 @@ def branch_from_server(branch: ServerBranch) -> Branch:
     return Branch(**updated)
 
 
-# def branch_tree_to_server(branch_tree: BranchTree) -> ServerBranchTree:
-#     nodes = [(k, v) for k, v in branch_tree['attrs'].items()]
-#     edges = [([], edge) for edge in branch_tree['edges']]
-#     return ServerBranchTree(nodes=nodes, edges=edges)  # type: ignore
-
-
-# def branch_to_server(branch: Branch) -> ServerBranch:
-#     updated = {**branch, 'tree': branch_tree_to_server(branch['tree'])}
-#     return ServerBranch(**updated)
-
-
 def branchtree_to_branchtreelistitem(bt: BranchTree, snapInfo: Dict[CfgId, SnapshotInfo], cfg_id: CfgId) -> BranchTreeListItem:
     def recursor(bt: BranchTree, cfg_id: CfgId, visited: Set[CfgId]) -> BranchTreeListItem:
         children = []
@@ -124,8 +113,6 @@ class SnapTreeBranchListItem(SnapTreeItem):
     ):
         self.item = item
         self.branch_id = branch_id
-        print("\n\n\n ------------------------- \n\n\n")
-        print(item)
 
         date = item.get('snapshotInfo').get('created')
         if item.get('snapshotInfo').get('snapshotType') == 'Autosave':
