@@ -46,8 +46,5 @@ branch1 = Branch
              , (4, 5)
              ]
 
-
--- Note: the previous test was eliminated because the Snapshot module
--- was greatly simplified.
 spec :: Spec
 spec = return ()
