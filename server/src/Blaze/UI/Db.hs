@@ -80,8 +80,8 @@ setCfg :: MonadDb m => CfgId -> PilCfg -> m ()
 setCfg cid pcfg = withDb $ do
   utc <- liftIO getCurrentTime
   update_ cfgTable
-    (\cfg' -> cfg' ! #cfgId .== literal cid)
-    (\cfg' -> cfg' `with` [ #cfg := literal (Blob $ Cfg.toTransport identity pcfg)
+    (\cfg -> cfg ! #cfgId .== literal cid)
+    (\cfg -> cfg `with` [ #cfg := literal (Blob $ Cfg.toTransport identity pcfg)
                           , #modified := literal utc
                           ])
 
