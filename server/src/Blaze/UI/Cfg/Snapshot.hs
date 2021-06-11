@@ -10,23 +10,10 @@ import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import qualified Data.HashMap.Strict as HashMap
 
--- addSnapshotToBranch :: CfgId -> CfgId -> SnapshotInfo -> Branch BranchTree -> Branch BranchTree
--- addSnapshotToBranch parentId' id info snap =
---   snap & #tree %~ ( G.setNodeAttr info id
---        . G.addEdge (G.LEdge () $ G.Edge parentId' id) )
---        & #snapshotInfo %~
 
 -- Adds `newChildAutoId` to tree as child of `autoId`.
 addChild :: CfgId -> CfgId -> BranchTree -> BranchTree
 addChild parent child = G.addEdge (G.LEdge () $ G.Edge parent child)
-
-
--- -- | Returns `Nothing` if `CfgId` is missing `SnapshotInfo`.
--- isAutosave :: CfgId -> BranchTree -> Maybe Bool
--- isAutosave cid bt = is #_Autosave . view #snapshotType <$> G.getNodeAttr cid bt
-
--- renameSnapshot :: CfgId -> Text -> BranchTree -> BranchTree
--- renameSnapshot id name' = G.updateNodeAttr (over #name $ const (Just name')) id
 
 singletonBranch
   :: HostBinaryPath
