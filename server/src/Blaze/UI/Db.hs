@@ -184,19 +184,17 @@ getBranch :: MonadDb m => BranchId -> m (Maybe (Snapshot.Branch BranchTree))
 getBranch bid = do
   attrs <- getBranchAttrs bid
   withDb $ do
-    xs <- query $ do
+    fmap ((convertBranch attrs <$>) . onlyOne) . query $ do
       branch <- select snapshotBranchTable
       restrict (branch ! #branchId .== literal bid)
       return branch
-    case xs of
-      [] -> return Nothing
-      [SnapshotBranch _ _ hpath bhash originFuncAddr' fname mname rootNode' (Blob tree')] -> return
-        . Just 
-        . Snapshot.Branch hpath bhash originFuncAddr' fname mname rootNode' attrs
-        . graphFromTransport
-        $ tree'
-      _ -> -- hopefully impossible
-        P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show bid
+  where
+    convertBranch
+      attrs
+      (SnapshotBranch _ _ hpath bhash originFuncAddr' fname mname rootNode' (Blob tree'))
+      = Snapshot.Branch hpath bhash originFuncAddr' fname mname rootNode' attrs
+      . graphFromTransport
+      $ tree'
 
 -- | Gets all branches for specified branch ids. If a Branch cannot be found,
 -- that branch is discarded.
