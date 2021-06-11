@@ -422,11 +422,6 @@ handleBinjaEvent = \case
             printPrunedStats cfg' prunedCfg
             autosaveCfg cid prunedCfg
               >>= sendCfgAndSnapshots bhash prunedCfg cid
-              -- Nothing -> sendToBinja . SBCfg cid bhash . convertPilCfg $ prunedCfg
-              -- Just newCid -> do
-              --   sendToBinja . SBCfg newCid bhash . convertPilCfg $ prunedCfg
-            
-            
       Just _ -> do
         sendToBinja . SBLogError $ "Node must be a CallNode"
     
@@ -441,14 +436,12 @@ handleBinjaEvent = \case
       Just (fullNode1, fullNode2) -> do
         let cfg' = G.removeEdge (G.Edge fullNode1 fullNode2) cfg
             (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
-        -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
         printPrunedStats cfg' prunedCfg
         autosaveCfg cid prunedCfg
           >>= sendCfgAndSnapshots bhash prunedCfg cid
 
   BSCfgRemoveNode cid node' -> do
     debug "Binja remove node"
-    -- TODO: just get the bhash since bv isn't used
     bhash <- getCfgBinaryHash cid
     cfg <- getCfg cid
     case Cfg.getFullNodeMay cfg node' of
@@ -459,7 +452,6 @@ handleBinjaEvent = \case
         else do
           let cfg' = G.removeNode fullNode cfg
               (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
-          -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
           printPrunedStats cfg' prunedCfg
           autosaveCfg cid prunedCfg
             >>= sendCfgAndSnapshots bhash prunedCfg cid
@@ -489,60 +481,24 @@ handleBinjaEvent = \case
       Db.getBranch bid >>= \case
         Nothing -> logError $ "Could not find snapshot with id: " <> show bid
         Just _br -> sendLatestClientSnapshots
-        --sendLatestBinarySnapshots
 
     Snapshot.LoadSnapshot cid -> do
       bhash <- getCfgBinaryHash cid
       cfg <- getCfg cid
-      -- Nothing -> logError $ "Could not find in database: " <> show cid
-      -- Just 
-      -- b <- getBranch bid
-      
-      -- (newCid, cfg') <- case Snapshot.isAutosave cid (b ^. #tree) of
-      --   Nothing -> logError $ "Could not find snapshot info for: " <> show cid
-      --   Just True -> (cid,) <$> getCfg cid
-      --   Just False -> do
-      --     cfg' <- getCfg cid
-      --     newAutoCid <- liftIO randomIO
-      --     Db.saveNewCfg_ bid newAutoCid cfg'
-
-      --     -- TODO: is this necessary? should already be up to date
-      --     Db.setCfg cid cfg'
-
-      --     -- change CfgId in cache to new auto-saved cfg
-      --     CfgUI.changeCfgId cid newAutoCid
-      --     utc <- liftIO getCurrentTime
-      --     let updatedTree = Snapshot.addChild cid newAutoCid utc $ b ^. #tree
-      --     Db.setBranchTree bid updatedTree
-
-      --     sendLatestBinarySnapshots
-      --     return (newAutoCid, cfg')
       sendToBinja . SBCfg cid bhash . convertPilCfg $ cfg
 
         
     Snapshot.SaveSnapshot cid -> do
-      -- Already exists and this point:
-      --     * branch containing cid
-      --     * cid is in branch, saved as an autocfg
-      -- get cfg from sessionstate
-      -- DB: save old cid as immutables cfg
-      --     change cid in sessionstate to newly created autoCid
-      --     change cid attr to be immutable in snap branch tree
-      --     add autoCid as child of cid in snap branch tree
-      --     send back new autoCid cfg and updated branch
       Db.setCfgSnapshotType cid Snapshot.Immutable
 
       logInfo $ "Saved iCfg as immutable snapshot: " <> show cid
 
       sendLatestClientSnapshots
-      -- sendLatestBinarySnapshots
 
-      -- sendToBinja . SBSnapshot . Snapshot.SnapshotBranch bid
-      --   $ Snapshot.toTransport updatedBranch
-
-    -- -- Renames previously saved immutable cfg
     Snapshot.RenameSnapshot cid name' -> do
       Db.setCfgName cid name'
+      logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
+      sendLatestClientSnapshots
 
 printPrunedStats :: (Ord a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printPrunedStats a b = do
