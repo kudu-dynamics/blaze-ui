@@ -184,9 +184,6 @@ class SnapTreeWidget(QTreeWidget):
         self.itemDoubleClicked.connect(lambda item, c: self.load_icfg(item))
 
     def insert_branches_of_client(self, data: ServerBranchesOfClient):
-        '''
-        TODO more intelligent processing here, likely need to flush the tree first
-        '''
         self.clear()
         self.addTopLevelItems(
             [SnapTreeBinaryItem(self, bpath, branches) for bpath, branches in data]
