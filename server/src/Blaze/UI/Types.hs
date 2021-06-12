@@ -130,8 +130,8 @@ data BlazeToServer = BZNoop
                    | BZFunctionList [Function]
                    deriving (Eq, Ord, Show, Generic)
 
-data Event = BinjaEvent BinjaToServer
-           deriving (Eq, Ord, Show, Generic)
+newtype Event = BinjaEvent BinjaToServer
+              deriving (Eq, Ord, Show, Generic)
 
 -- TODO: Maybe we should just use SessionState since they are almost the same.
 data EventLoopCtx = EventLoopCtx
@@ -143,7 +143,7 @@ data EventLoopCtx = EventLoopCtx
   , sqliteFilePath :: FilePath
   } deriving (Generic)
 
-data EventLoopState = EventLoopState
+newtype EventLoopState = EventLoopState
   { binjaOutput :: [ServerToBinja]
   } deriving (Generic)
 
