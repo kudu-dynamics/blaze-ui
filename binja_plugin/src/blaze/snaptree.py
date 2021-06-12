@@ -71,7 +71,7 @@ def branchtree_to_branchtreelistitem(bt: BranchTree, snapInfo: Dict[CfgId, Snaps
 
 
 def branch_to_list_item(branch: Branch) -> BranchTreeListItem:
-    return branchtree_to_branchtreelistitem(branch.get('tree'), branch.get('snapshotInfo'), branch.get('rootNode'))
+    return branchtree_to_branchtreelistitem(branch['tree'], branch['snapshotInfo'], branch['rootNode'])
 
 
 class SnapTreeItem(QTreeWidgetItem):
@@ -114,11 +114,11 @@ class SnapTreeBranchListItem(SnapTreeItem):
         self.item = item
         self.branch_id = branch_id
 
-        date = item.get('snapshotInfo').get('created')
-        if item.get('snapshotInfo').get('snapshotType') == 'Autosave':
+        date = item['snapshotInfo']['created']
+        if item['snapshotInfo']['snapshotType'] == 'Autosave':
             text = (f"Autosave: {date}:")
         else:
-            name = item.get('snapshotInfo').get('name') or (f"{date}")
+            name = item['snapshotInfo']['name'] or (f"{date}")
             text = (f"Snapshot: {name}")
         SnapTreeItem.__init__(self, parent, None, (text,))
 
@@ -137,7 +137,7 @@ class SnapTreeBranchItem(SnapTreeItem):
         self.branch_id = branch_id
         self.branch = branch_from_server(branch_data)
         self.branch_tree_list_item = branch_to_list_item(self.branch)
-        origin_func_name = self.branch.get('originFuncName')
+        origin_func_name = self.branch['originFuncName']
         
         text = (f"Branch {origin_func_name}:",) # {str(branch_data)}",)
         SnapTreeItem.__init__(self, parent, predecessor, text)
@@ -207,11 +207,12 @@ class SnapTreeWidget(QTreeWidget):
     def load_icfg(self, x):
         # TODO: check for type to make sure it's a SnapTreeBranchListItem
         snap = cast(SnapTreeBranchListItem, x)
-        cfg_id = snap.item.get('cfgId')
+        cfg_id = snap.item['cfgId']
         log.info(f'Loading icfg {cfg_id}')
         snapshot_msg = SnapshotBinjaToServer(
             tag = 'LoadSnapshot',
-            cfgId = snap.item.get('cfgId'))
+            cfgId = snap.item['cfgId']
+            )
             
         self.blaze_instance.send(
             BinjaToServer(
@@ -317,7 +318,7 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
         '''
         log.info(snap_msg)
 
-        if snap_msg.get('tag') == 'BranchesOfClient':
+        if snap_msg['tag'] == 'BranchesOfClient':
             self.snaptree_widget.insert_branches_of_client(
                 cast(ServerBranchesOfClient, snap_msg.get('branchesOfClient'))
             )

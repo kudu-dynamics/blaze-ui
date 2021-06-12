@@ -117,7 +117,8 @@ class ServerCfg(TypedDict):
 
 class SnapshotInfo(TypedDict):
     name: Optional[str]
-    date: Any  # TODO: utc time
+    created: Any  # TODO: utc time
+    modified: Any # TODO: utc time
     snapshotType: Literal['Autosave', 'Immutable']
 
 
