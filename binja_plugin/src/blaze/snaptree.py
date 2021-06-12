@@ -216,17 +216,6 @@ class SnapTreeWidget(QTreeWidget):
                 tag='BSSnapshot',
                 snapshotMsg=snapshot_msg))    
 
-        
-        
-    # def itemPressed(self, item, column):
-    #     log.info(f'{item} : {column}')
-    
-    # def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-    #     pass
-
-    # def mousePressEvent(self, event: QMouseEvent) -> None:
-    #     pass
-
     def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', view_frame: ViewFrame):
         self.blaze_instance = blaze_instance
         self._view_frame = view_frame
@@ -258,57 +247,7 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
         layout.setSpacing(0)
         layout.addWidget(self.snaptree_widget)
         self.setLayout(layout)
-
         
-# >>> XXX testing
-        # from .types import ServerBranchesOfClient, HostBinaryPath, ServerBranch, ServerBranchTree
-        # snap_msg = SnapshotServerToBinja(
-        #     tag='BranchesOfClient',
-        #     branchesOfClient=[
-        #         (
-        #             "HostBinaryPath:1", [
-        #                 ('a', ServerBranch(
-        #                     bndbHash="bndbHash",
-        #                     originFuncAddr=0xdeadbeef,
-        #                     originFuncName="foo",
-        #                     branchName="branchName",
-        #                     rootNode="rootNode",
-        #                     tree=ServerBranchTree(
-        #                         edges=[('Unit:1', ('CfgId:1', 'CfgId:2'))],
-        #                         nodes=[('CfgId:1', None)]
-        #                     ),
-        #                 )),
-        #                 ('c', ServerBranch(
-        #                     bndbHash="bndbHash",
-        #                     originFuncAddr=0xdeadbeef,
-        #                     originFuncName="bar",
-        #                     branchName="branchName",
-        #                     rootNode="rootNode",
-        #                     tree=ServerBranchTree(
-        #                         edges=[('Unit:1', ('CfgId:1', 'CfgId:2'))],
-        #                         nodes=[('CfgId:1', None)]
-        #                     ),
-        #                 ))
-        #             ]
-        #         ),
-        #         (
-        #             "HostBinaryPath:2", [('b', ServerBranch(
-        #                 bndbHash="bndbHash",
-        #                 originFuncAddr=0xdeadbeef,
-        #                 originFuncName="bazzzzzzzzz",
-        #                 branchName="branchName",
-        #                 rootNode="rootNode",
-        #                 tree=ServerBranchTree(
-        #                     edges=[('Unit:1', ('CfgId:1', 'CfgId:2'))],
-        #                     nodes=[('CfgId:1', None)]
-        #                 ),
-        #             ))]
-        #         ),
-        #     ]
-        # )
-        # self.handle_server_msg(snap_msg)
-# <<< XXX testing
-
     def handle_server_msg(self, snap_msg: SnapshotServerToBinja):
         '''
         this is where I delegate snapshot server messages
