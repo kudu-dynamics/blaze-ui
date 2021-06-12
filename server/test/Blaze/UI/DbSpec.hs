@@ -37,7 +37,6 @@ mockEventLoopCtx = EventLoopCtx cid hpath
   <$> atomically (BM.create bmdir cid hpath)
   <*> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
-  <*> newTVarIO HashMap.empty
   <*> emptySystemTempFile "blazeTest"
   where
     bmdir = "/tmp/blaze/bm"

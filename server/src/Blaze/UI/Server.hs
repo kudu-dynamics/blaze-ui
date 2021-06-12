@@ -92,26 +92,9 @@ createBinjaOutbox conn ss cid hpath = do
     $ HashMap.insert t q
   return t
 
-createWebOutbox :: WS.Connection
-                -> SessionState
-                -> IO ThreadId
-createWebOutbox conn ss = do
-  q <- newTQueueIO
-  t <- forkIO . forever $ do
-    msg <- atomically . readTQueue $ q
-    sendJSON conn msg
-  atomically . modifyTVar (ss ^. #webOutboxes)
-    $ HashMap.insert t q
-  return t
-
 sendToBinja :: ServerToBinja -> EventLoop ()
 sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
   qs <- fmap HashMap.elems . readTVar $ ctx ^. #binjaOutboxes
-  mapM_ (`writeTQueue` msg) qs
-
-sendToWeb :: ServerToWeb -> EventLoop ()
-sendToWeb msg = ask >>= \ctx -> liftIO . atomically $ do
-  qs <- fmap HashMap.elems . readTVar $ ctx ^. #webOutboxes
   mapM_ (`writeTQueue` msg) qs
 
 -- | Websocket message handler for binja.
@@ -173,7 +156,6 @@ spawnEventHandler cid st ss = do
                   (ss ^. #binaryPath)
                   (ss ^. #binaryManager)
                   (ss ^. #binjaOutboxes)
-                  (ss ^. #webOutboxes)
                   (ss ^. #cfgs)
                   (st ^. #serverConfig . #sqliteFilePath)
 
@@ -182,10 +164,6 @@ spawnEventHandler cid st ss = do
       
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
       putText "Spawned event handlers"
-
-webApp :: AppState -> SessionId -> WS.Connection -> IO ()
-webApp _st _sid _conn = do
-  return ()
 
 app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case splitPath of
@@ -338,12 +316,7 @@ getBranchId cid = Db.getCfgBranchId cid >>= \case
   Just bid -> return bid
 
 mainEventLoop :: Event -> EventLoop ()
-mainEventLoop (WebEvent msg) = handleWebEvent msg
 mainEventLoop (BinjaEvent msg) = handleBinjaEvent msg
-
-handleWebEvent :: WebToServer -> EventLoop ()
-handleWebEvent _msg =
-  debug "Web events currently not handled"
 
 handleBinjaEvent :: BinjaToServer -> EventLoop ()
 handleBinjaEvent = \case
@@ -352,7 +325,6 @@ handleBinjaEvent = \case
     debug $ "Message from binja: " <> t
     sendToBinja $ SBLogInfo "Got hello. Thanks."
     sendToBinja $ SBLogInfo "Working on finding an important integer..."
-    sendToWeb $ SWTextMessage "Binja says hello"
 
     -- demo forking
     forkEventLoop_ $ do
