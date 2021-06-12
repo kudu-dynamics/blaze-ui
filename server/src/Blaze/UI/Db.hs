@@ -3,7 +3,7 @@ module Blaze.UI.Db
   , module Exports
   ) where
 
-import Blaze.UI.Prelude hiding ((:*:))
+import Blaze.UI.Prelude hiding ((:*:), Selector)
 
 import qualified Prelude as P
 import Blaze.UI.Types.Db as Exports hiding (cfg)
@@ -14,7 +14,11 @@ import Blaze.Types.Cfg (PilCfg)
 import qualified Blaze.UI.Types.Cfg as Cfg
 import Data.Time.Clock (getCurrentTime)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
-import Blaze.UI.Types.Cfg.Snapshot (BranchId, BranchTree, SnapshotInfo(SnapshotInfo))
+import Blaze.UI.Types.Cfg.Snapshot ( BranchId
+                                   , BranchTree
+                                   , SnapshotInfo(SnapshotInfo)
+                                   , SnapshotType(Autosave)
+                                   )
 import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Graph as Graph
 import Blaze.UI.Types.BinaryHash (BinaryHash)
@@ -45,29 +49,41 @@ saveNewCfgAndBranch clientId' hpath bhash originFuncAddr' originFuncName' pcfg =
   utc <- liftIO getCurrentTime
   saveNewCfg_ bid cid pcfg
   let b = Snapshot.singletonBranch hpath bhash originFuncAddr' originFuncName' Nothing cid
-          $ SnapshotInfo Nothing utc Snapshot.Autosave
+          $ SnapshotInfo Nothing utc utc Snapshot.Autosave
   saveNewBranch_ bid clientId' hpath bhash b
   return (bid, cid, b)
 
 -- | use `saveNewCfgAndBranch` instead
 saveNewCfg_ :: MonadDb m => BranchId -> CfgId -> PilCfg -> m ()
 saveNewCfg_ bid cid cfg = withDb $ do
+  utc <- liftIO getCurrentTime
   insert_ cfgTable
-    [ SavedCfg cid bid . Blob $ Cfg.toTransport identity cfg ]
+    [ SavedCfg cid bid Nothing utc utc Autosave . Blob $ Cfg.toTransport identity cfg ]
 
-setCfgName :: MonadDb m => BranchId -> CfgId -> Text -> m ()
-setCfgName bid cid name' = modifyBranchTree bid
-  $ Snapshot.renameSnapshot cid name'  
+setCfgAttr :: (MonadDb m, SqlType a)
+           => Selector SavedCfg a
+           -> CfgId
+           -> a
+           -> m ()
+setCfgAttr selector cid x = withDb $ do
+  update_ cfgTable
+    (\cfg -> cfg ! #cfgId .== literal cid)
+    (\cfg -> cfg `with` [ selector := literal x])
 
+setCfgName :: MonadDb m => CfgId -> Text -> m ()
+setCfgName cid = setCfgAttr #name cid . Just
+
+setCfgSnapshotType :: MonadDb m => CfgId -> SnapshotType -> m ()
+setCfgSnapshotType = setCfgAttr #snapshotType
 
 setCfg :: MonadDb m => CfgId -> PilCfg -> m ()
 setCfg cid pcfg = withDb $ do
-  -- utc <- liftIO getCurrentTime
+  utc <- liftIO getCurrentTime
   update_ cfgTable
-    (\immCfg -> immCfg ! #cfgId .== literal cid)
-    (\immCfg -> immCfg `with` [ #cfg := literal (Blob $ Cfg.toTransport identity pcfg)
-                              -- , #modified := literal utc
-                              ])
+    (\cfg -> cfg ! #cfgId .== literal cid)
+    (\cfg -> cfg `with` [ #cfg := literal (Blob $ Cfg.toTransport identity pcfg)
+                          , #modified := literal utc
+                          ])
 
 getSavedCfg :: MonadDb m => CfgId -> m [SavedCfg]
 getSavedCfg cid = withDb $ do
@@ -83,31 +99,33 @@ getCfg cid = fmap (view #cfg) <$> getSavedCfg cid >>= \case
   _ -> -- hopefully impossible
     P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show cid
 
+onlyOne :: [a] -> Maybe a
+onlyOne [] = Nothing
+onlyOne [x] = Just x
+onlyOne _ = P.error "Expected only one result"
+
+getCfgType :: MonadDb m => CfgId -> m (Maybe SnapshotType)
+getCfgType cid = withDb $ do
+  fmap onlyOne . query $ do
+    cfg <- select cfgTable
+    restrict (cfg ! #cfgId .== literal cid)
+    return $ cfg ! #snapshotType
+
 getCfgBinaryHash :: MonadDb m => CfgId -> m (Maybe BinaryHash)
 getCfgBinaryHash cid = withDb $ do
-  xs <- query $ do
+  fmap onlyOne . query $ do
     cfg <- select cfgTable
     restrict (cfg ! #cfgId .== literal cid)
     branch <- select snapshotBranchTable
     restrict (branch ! #branchId .== cfg ! #branchId)
     return $ branch ! #bndbHash
-  case xs of
-    [] -> return Nothing
-    [h] -> return $ Just h
-    _ -> P.error "getCfgBinaryHash: returned multiple branch ids"
 
 getCfgBranchId :: MonadDb m => CfgId -> m (Maybe BranchId)
 getCfgBranchId cid = withDb $ do
-  xs <- query $ do
+  fmap onlyOne . query $ do
     cfg <- select cfgTable
     restrict (cfg ! #cfgId .== literal cid)
     return $ cfg ! #branchId
-  case xs of
-    [] -> return Nothing
-    [h] -> return $ Just h
-    _ -> P.error "getCfgBranchId: returned multiple branch ids"
-
-  
 
 -- | use `saveNewCfgAndBranch`
 saveNewBranch_ :: MonadDb m
@@ -146,22 +164,45 @@ setBranchName bid mname = withDb $ do
     (\b -> b ! #branchId .== literal bid)
     (\b -> b `with` [ #branchName := literal mname ])
 
+getBranchAttrs :: MonadDb m => BranchId -> m (HashMap CfgId SnapshotInfo)
+getBranchAttrs bid = withDb $ do
+  xs <- query $ do
+    cfg <- select cfgTable
+    restrict (cfg ! #branchId .== literal bid)
+    return (    cfg ! #cfgId
+            :*: cfg ! #name
+            :*: cfg ! #created
+            :*: cfg ! #modified
+            :*: cfg ! #snapshotType
+           )
+  return . HashMap.fromList $ f <$> xs
+  where
+    f (cid :*: name' :*: created' :*: modified' :*: snaptype)
+      = (cid, SnapshotInfo name' created' modified' snaptype)
 
 getBranch :: MonadDb m => BranchId -> m (Maybe (Snapshot.Branch BranchTree))
-getBranch bid = withDb $ do
-  xs <- query $ do
-    branch <- select snapshotBranchTable
-    restrict (branch ! #branchId .== literal bid)
-    return branch
-  case xs of
-    [] -> return Nothing
-    [SnapshotBranch _ _ hpath bhash originFuncAddr' fname mname rootNode' (Blob tree')] -> return
-      . Just 
-      . Snapshot.Branch hpath bhash originFuncAddr' fname mname rootNode'
+getBranch bid = do
+  attrs <- getBranchAttrs bid
+  withDb $ do
+    fmap ((convertBranch attrs <$>) . onlyOne) . query $ do
+      branch <- select snapshotBranchTable
+      restrict (branch ! #branchId .== literal bid)
+      return branch
+  where
+    convertBranch
+      attrs
+      (SnapshotBranch _ _ hpath bhash originFuncAddr' fname mname rootNode' (Blob tree'))
+      = Snapshot.Branch hpath bhash originFuncAddr' fname mname rootNode' attrs
       . graphFromTransport
       $ tree'
-    _ -> -- hopefully impossible
-      P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show bid
+
+-- | Gets all branches for specified branch ids. If a Branch cannot be found,
+-- that branch is discarded.
+getBranches :: forall m. MonadDb m => [BranchId] -> m [(BranchId, Snapshot.Branch BranchTree)]
+getBranches = fmap catMaybes . traverse f
+  where
+    f :: BranchId -> m (Maybe (BranchId, Snapshot.Branch BranchTree))
+    f bid = fmap (bid,) <$> getBranch bid
 
 -- TODO: Add a lock so branch can't be opened while being modified
 -- or make some abstraction were you just modify tvars and it updates the db
@@ -171,46 +212,39 @@ modifyBranchTree bid f = getBranch bid >>= \case
   Nothing -> return ()
   Just b -> setBranchTree bid (f $ b ^. #tree)
 
-getBranchesForFunction :: MonadDb m => ClientId -> HostBinaryPath -> Address -> m [(BranchId, Snapshot.Branch BranchTree)]
-getBranchesForFunction cid hpath funcAddr = fmap (fmap f) . withDb . query $ do
-  branch <- select snapshotBranchTable
-  restrict (branch ! #originFuncAddr .== literal funcAddr
-            .&& branch ! #clientId .== literal cid
-            .&& branch ! #hostBinaryPath .== literal hpath
-           )
-  return branch
-  where
-    f :: SnapshotBranch -> (BranchId, Snapshot.Branch BranchTree)
-    f (SnapshotBranch bid _ _ bhash faddr fname mname root (Blob tree')) =
-      ( bid
-      , Snapshot.Branch hpath bhash faddr fname mname root $ graphFromTransport tree'
-      )
+getBranchesForFunction :: forall m. MonadDb m => ClientId -> HostBinaryPath -> Address -> m [(BranchId, Snapshot.Branch BranchTree)]
+getBranchesForFunction cid hpath funcAddr = do
+  bids <- withDb . query $ do
+    branch <- select snapshotBranchTable
+    restrict (branch ! #originFuncAddr .== literal funcAddr
+              .&& branch ! #clientId .== literal cid
+              .&& branch ! #hostBinaryPath .== literal hpath
+             )
+    return $ branch ! #branchId
+  getBranches bids
 
 getAllBranchesForBinary :: MonadDb m => ClientId -> HostBinaryPath -> m [(BranchId, Snapshot.Branch BranchTree)]
-getAllBranchesForBinary cid hpath = fmap (fmap f) . withDb . query $ do
-  branch <- select snapshotBranchTable
-  restrict ( branch ! #clientId .== literal cid
-            .&& branch ! #hostBinaryPath .== literal hpath
-           )
-  return branch
-  where
-    f :: SnapshotBranch -> (BranchId, Snapshot.Branch BranchTree)
-    f (SnapshotBranch bid _ _ bhash faddr fname mname root (Blob tree')) =
-      ( bid
-      , Snapshot.Branch hpath bhash faddr fname mname root $ graphFromTransport tree'
-      )
+getAllBranchesForBinary cid hpath = do
+  bids <- withDb . query $ do
+    branch <- select snapshotBranchTable
+    restrict ( branch ! #clientId .== literal cid
+               .&& branch ! #hostBinaryPath .== literal hpath
+             )
+    return $ branch ! #branchId
+  getBranches bids
 
 getAllBranchesForClient :: MonadDb m => ClientId -> m (HashMap HostBinaryPath [(BranchId, Snapshot.Branch BranchTree)])
-getAllBranchesForClient cid = fmap (HashMap.fromListWith (<>) . fmap f) . withDb . query $ do
-  branch <- select snapshotBranchTable
-  restrict ( branch ! #clientId .== literal cid )
-  return branch
+getAllBranchesForClient cid = do
+  bids <- withDb . query $ do
+    branch <- select snapshotBranchTable
+    restrict ( branch ! #clientId .== literal cid )
+    return $ branch ! #branchId
+  branches <- getBranches bids
+  return . HashMap.fromListWith (<>) . fmap f $ branches
   where
-    f :: SnapshotBranch -> (HostBinaryPath, [(BranchId, Snapshot.Branch BranchTree)])
-    f (SnapshotBranch bid _ hpath bhash faddr fname mname root (Blob tree')) =
-      ( hpath
-      , [( bid
-         , Snapshot.Branch hpath bhash faddr fname mname root $ graphFromTransport tree'
-         )]
-      )
+    f :: (BranchId, Snapshot.Branch BranchTree)
+      -> (HostBinaryPath, [(BranchId, Snapshot.Branch BranchTree)])
+    f (bid, branch) = ( branch ^. #hostBinaryPath
+                       , [(bid, branch)])
+
 

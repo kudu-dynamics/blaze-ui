@@ -42,9 +42,7 @@ data ServerToBinja
     }
   | BranchesOfClient
     { branchesOfClient :: [(HostBinaryPath, [(BranchId, Branch BranchTransport)])] }
-  deriving (Eq, Ord, Show, Generic)
-instance ToJSON ServerToBinja
-instance FromJSON ServerToBinja
+  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 
 
 data BinjaToServer
@@ -58,7 +56,7 @@ data BinjaToServer
 
   -- loads a cfg snapshot
   -- if not an autosave, it creates one and returns that cfgid
-  | LoadSnapshot { branchId :: BranchId, cfgId :: CfgId }
+  | LoadSnapshot { cfgId :: CfgId }
 
   -- Copies current CFG into snapshot tree (new CfgId)
   -- returns updated snapshot tree
@@ -68,29 +66,25 @@ data BinjaToServer
   -- returns updated snapshot tree containing Cfg
   | RenameSnapshot { cfgId :: CfgId, name :: Text }
 
-  deriving (Eq, Ord, Show, Generic)
-instance ToJSON BinjaToServer
-instance FromJSON BinjaToServer
+  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
+
 
 data SnapshotType
   = Autosave
   | Immutable
-  deriving (Eq, Ord, Show, Generic, Bounded, ToJSON, FromJSON)
+  deriving (Eq, Ord, Read, Show, Generic, Enum, Bounded, ToJSON, FromJSON, SqlType)
 
 
 data SnapshotInfo = SnapshotInfo
   { name :: Maybe Text
-  , date :: UTCTime -- creation date
-  -- TODO: add modified date for autosave snapshots.
-  -- the problem currently is that updating things in the snapshot tree is
-  -- expensive because we just store it as a json blob
-  -- so I don't want to update the modified date each action
+  , created :: UTCTime
+  , modified :: UTCTime
   , snapshotType :: SnapshotType
   } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 
-type BranchTree = AlgaGraph () SnapshotInfo CfgId
+type BranchTree = AlgaGraph () () CfgId
 
-type BranchTransport = GraphTransport () SnapshotInfo CfgId
+type BranchTransport = GraphTransport () () CfgId
 
 data Branch a = Branch
   { hostBinaryPath :: HostBinaryPath
@@ -99,6 +93,7 @@ data Branch a = Branch
   , originFuncName :: Text
   , branchName :: Maybe Text
   , rootNode :: CfgId
+  , snapshotInfo :: HashMap CfgId SnapshotInfo
   , tree :: a
   } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Functor, Foldable, Traversable)
 

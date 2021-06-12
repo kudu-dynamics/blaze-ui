@@ -19,7 +19,7 @@ HostBinaryPath = str
 
 # What Aeson encodes the unit value `()` as
 # NOTE: we might want `Literal[[]]` instead
-Unit = Any
+Unit = Unit = Literal[[]]
 
 BINARYNINJAUI_CUSTOM_EVENT = 0xfff6
 
@@ -117,34 +117,38 @@ class ServerCfg(TypedDict):
 
 class SnapshotInfo(TypedDict):
     name: Optional[str]
-    date: Any  # TODO: utc time
+    created: Any  # TODO: utc time
+    modified: Any # TODO: utc time
     snapshotType: Literal['Autosave', 'Immutable']
 
 
 class ServerBranchTree(TypedDict):
     edges: List[Tuple[Unit, Tuple[CfgId, CfgId]]]
-    nodes: List[Tuple[CfgId, Optional[SnapshotInfo]]]
+    nodes: List[Tuple[CfgId, Unit]]
 
 
 class BranchTree(TypedDict):
-    edges: List[Tuple[CfgId, CfgId]]  # actually (e, (n, n)), but e is (), so...
-    attrs: Dict[CfgId, SnapshotInfo]
+    edges: List[Tuple[CfgId, CfgId]]
 
 
 class ServerBranch(TypedDict):
+    hostBinaryPath: HostBinaryPath
     bndbHash: BinaryHash
     originFuncAddr: Address
     originFuncName: str
     branchName: Optional[str]
     rootNode: CfgId
+    snapshotInfo: List[Tuple[CfgId, SnapshotInfo]]
     tree: ServerBranchTree
 
 
 class Branch(TypedDict, total=True):
+    hostBinaryPath: HostBinaryPath
     bndbHash: BinaryHash
     originFuncAddr: Address
     originFuncName: str
     branchName: Optional[str]
+    snapshotInfo: Dict[CfgId, SnapshotInfo]
     rootNode: CfgId
     tree: BranchTree
 

@@ -22,7 +22,7 @@ import qualified Database.Selda.SqlType as Sql
 newtype CfgId = CfgId UUID
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Random)
-  deriving anyclass (Hashable, ToJSON, FromJSON)
+  deriving anyclass (Hashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey)
 
 instance SqlType CfgId where
    mkLit (CfgId x) = LCustom TBlob $ Sql.mkLit x

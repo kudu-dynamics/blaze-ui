@@ -1,5 +1,5 @@
 import logging as _logging
-from typing import TYPE_CHECKING, List, Optional, Set, Tuple, Union, cast
+from typing import TYPE_CHECKING, List, Optional, Set, Tuple, Union, cast, Dict
 
 from binaryninjaui import (
     ContextMenuManager,
@@ -46,32 +46,20 @@ class SnapTree():
         pass
 
 
-def branch_tree_from_server(branch_tree: ServerBranchTree) -> BranchTree:
-    attrs = {k: v for k, v in branch_tree['nodes'] if v is not None}
+def branch_tree_from_server(branch_tree: ServerBranchTree) -> BranchTree:  
     edges = [edge[1] for edge in branch_tree['edges']]
-    return BranchTree(attrs=attrs, edges=edges)
+    return BranchTree(edges=edges)
 
 
 def branch_from_server(branch: ServerBranch) -> Branch:
-    updated = {**branch, 'tree': branch_tree_from_server(branch['tree'])}
+    updated = {**branch, 'tree': branch_tree_from_server(branch['tree']), 'snapshotInfo': dict(branch['snapshotInfo'])}
     return Branch(**updated)
 
 
-def branch_tree_to_server(branch_tree: BranchTree) -> ServerBranchTree:
-    nodes = [(k, v) for k, v in branch_tree['attrs'].items()]
-    edges = [([], edge) for edge in branch_tree['edges']]
-    return ServerBranchTree(nodes=nodes, edges=edges)  # type: ignore
-
-
-def branch_to_server(branch: Branch) -> ServerBranch:
-    updated = {**branch, 'tree': branch_tree_to_server(branch['tree'])}
-    return ServerBranch(**updated)
-
-
-def branchtree_to_branchtreelistitem(bt: BranchTree, cfg_id: CfgId) -> BranchTreeListItem:
+def branchtree_to_branchtreelistitem(bt: BranchTree, snapInfo: Dict[CfgId, SnapshotInfo], cfg_id: CfgId) -> BranchTreeListItem:
     def recursor(bt: BranchTree, cfg_id: CfgId, visited: Set[CfgId]) -> BranchTreeListItem:
         children = []
-        snapshot_info = bt['attrs'][cfg_id]
+        snapshot_info = snapInfo[cfg_id]
 
         for child in (dest for src, dest in bt['edges'] if src == cfg_id and dest not in visited):
             visited.add(child)
@@ -83,9 +71,7 @@ def branchtree_to_branchtreelistitem(bt: BranchTree, cfg_id: CfgId) -> BranchTre
 
 
 def branch_to_list_item(branch: Branch) -> BranchTreeListItem:
-    log.info('\n\n\n\n--------------------------------------\n\n\n\n')
-    log.info(branch)
-    return branchtree_to_branchtreelistitem(branch.get('tree'), branch.get('rootNode'))
+    return branchtree_to_branchtreelistitem(branch['tree'], branch['snapshotInfo'], branch['rootNode'])
 
 
 class SnapTreeItem(QTreeWidgetItem):
@@ -127,11 +113,12 @@ class SnapTreeBranchListItem(SnapTreeItem):
     ):
         self.item = item
         self.branch_id = branch_id
-        date = item.get('snapshotInfo').get('date')
-        if item.get('snapshotInfo').get('type') == 'Autosave':
+
+        date = item['snapshotInfo']['created']
+        if item['snapshotInfo']['snapshotType'] == 'Autosave':
             text = (f"Autosave: {date}:")
         else:
-            name = item.get('snapshotInfo').get('name') or (f"{date}")
+            name = item['snapshotInfo']['name'] or (f"{date}")
             text = (f"Snapshot: {name}")
         SnapTreeItem.__init__(self, parent, None, (text,))
 
@@ -150,7 +137,7 @@ class SnapTreeBranchItem(SnapTreeItem):
         self.branch_id = branch_id
         self.branch = branch_from_server(branch_data)
         self.branch_tree_list_item = branch_to_list_item(self.branch)
-        origin_func_name = self.branch.get('originFuncName')
+        origin_func_name = self.branch['originFuncName']
         
         text = (f"Branch {origin_func_name}:",) # {str(branch_data)}",)
         SnapTreeItem.__init__(self, parent, predecessor, text)
@@ -197,9 +184,7 @@ class SnapTreeWidget(QTreeWidget):
         self.itemDoubleClicked.connect(lambda item, c: self.load_icfg(item))
 
     def insert_branches_of_client(self, data: ServerBranchesOfClient):
-        '''
-        TODO more intelligent processing here, likely need to flush the tree first
-        '''
+        self.clear()
         self.addTopLevelItems(
             [SnapTreeBinaryItem(self, bpath, branches) for bpath, branches in data]
         )
@@ -219,28 +204,17 @@ class SnapTreeWidget(QTreeWidget):
     def load_icfg(self, x):
         # TODO: check for type to make sure it's a SnapTreeBranchListItem
         snap = cast(SnapTreeBranchListItem, x)
-        cfg_id = snap.item.get('cfgId')
+        cfg_id = snap.item['cfgId']
         log.info(f'Loading icfg {cfg_id}')
         snapshot_msg = SnapshotBinjaToServer(
             tag = 'LoadSnapshot',
-            branchId = snap.branch_id,
-            cfgId = snap.item.get('cfgId'))
+            cfgId = snap.item['cfgId']
+            )
             
         self.blaze_instance.send(
             BinjaToServer(
                 tag='BSSnapshot',
                 snapshotMsg=snapshot_msg))    
-
-        
-        
-    # def itemPressed(self, item, column):
-    #     log.info(f'{item} : {column}')
-    
-    # def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-    #     pass
-
-    # def mousePressEvent(self, event: QMouseEvent) -> None:
-    #     pass
 
     def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', view_frame: ViewFrame):
         self.blaze_instance = blaze_instance
@@ -273,64 +247,14 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
         layout.setSpacing(0)
         layout.addWidget(self.snaptree_widget)
         self.setLayout(layout)
-
         
-# >>> XXX testing
-        from .types import ServerBranchesOfClient, HostBinaryPath, ServerBranch, ServerBranchTree
-        snap_msg = SnapshotServerToBinja(
-            tag='BranchesOfClient',
-            branchesOfClient=[
-                (
-                    "HostBinaryPath:1", [
-                        ('a', ServerBranch(
-                            bndbHash="bndbHash",
-                            originFuncAddr=0xdeadbeef,
-                            originFuncName="foo",
-                            branchName="branchName",
-                            rootNode="rootNode",
-                            tree=ServerBranchTree(
-                                edges=[('Unit:1', ('CfgId:1', 'CfgId:2'))],
-                                nodes=[('CfgId:1', None)]
-                            ),
-                        )),
-                        ('c', ServerBranch(
-                            bndbHash="bndbHash",
-                            originFuncAddr=0xdeadbeef,
-                            originFuncName="bar",
-                            branchName="branchName",
-                            rootNode="rootNode",
-                            tree=ServerBranchTree(
-                                edges=[('Unit:1', ('CfgId:1', 'CfgId:2'))],
-                                nodes=[('CfgId:1', None)]
-                            ),
-                        ))
-                    ]
-                ),
-                (
-                    "HostBinaryPath:2", [('b', ServerBranch(
-                        bndbHash="bndbHash",
-                        originFuncAddr=0xdeadbeef,
-                        originFuncName="bazzzzzzzzz",
-                        branchName="branchName",
-                        rootNode="rootNode",
-                        tree=ServerBranchTree(
-                            edges=[('Unit:1', ('CfgId:1', 'CfgId:2'))],
-                            nodes=[('CfgId:1', None)]
-                        ),
-                    ))]
-                ),
-            ]
-        )
-        # self.handle_server_msg(snap_msg)
-# <<< XXX testing
-
     def handle_server_msg(self, snap_msg: SnapshotServerToBinja):
         '''
         this is where I delegate snapshot server messages
         '''
         log.info(snap_msg)
 
-        if snap_msg.get('tag') == 'BranchesOfClient':
+        if snap_msg['tag'] == 'BranchesOfClient':
             self.snaptree_widget.insert_branches_of_client(
                 cast(ServerBranchesOfClient, snap_msg.get('branchesOfClient'))
             )
