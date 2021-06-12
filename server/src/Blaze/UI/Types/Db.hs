@@ -57,8 +57,7 @@ data SavedCfg = SavedCfg
   , modified :: UTCTime
   , snapshotType :: SnapshotType
   , cfg :: Blob (CfgTransport [Stmt])
-  } deriving Generic
-instance SqlRow SavedCfg
+  } deriving (Generic, SqlRow)
 
 data SnapshotBranch = SnapshotBranch
   { branchId :: BranchId
@@ -70,8 +69,7 @@ data SnapshotBranch = SnapshotBranch
   , branchName :: Maybe Text
   , rootNode :: CfgId
   , tree :: Blob (GraphTransport () () CfgId)
-  } deriving Generic
-instance SqlRow SnapshotBranch
+  } deriving (Generic, SqlRow)
 
 cfgTable :: Table SavedCfg
 cfgTable = table "cfg" [#cfgId :- primary]

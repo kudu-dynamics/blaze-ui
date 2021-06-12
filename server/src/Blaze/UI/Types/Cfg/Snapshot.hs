@@ -42,9 +42,7 @@ data ServerToBinja
     }
   | BranchesOfClient
     { branchesOfClient :: [(HostBinaryPath, [(BranchId, Branch BranchTransport)])] }
-  deriving (Eq, Ord, Show, Generic)
-instance ToJSON ServerToBinja
-instance FromJSON ServerToBinja
+  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 
 
 data BinjaToServer
@@ -68,16 +66,14 @@ data BinjaToServer
   -- returns updated snapshot tree containing Cfg
   | RenameSnapshot { cfgId :: CfgId, name :: Text }
 
-  deriving (Eq, Ord, Show, Generic)
-instance ToJSON BinjaToServer
-instance FromJSON BinjaToServer
+  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
+
 
 data SnapshotType
   = Autosave
   | Immutable
-  deriving (Eq, Ord, Read, Show, Generic, Enum, Bounded, ToJSON, FromJSON)
+  deriving (Eq, Ord, Read, Show, Generic, Enum, Bounded, ToJSON, FromJSON, SqlType)
 
-instance SqlType SnapshotType
 
 data SnapshotInfo = SnapshotInfo
   { name :: Maybe Text
