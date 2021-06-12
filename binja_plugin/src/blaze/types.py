@@ -19,7 +19,7 @@ HostBinaryPath = str
 
 # What Aeson encodes the unit value `()` as
 # NOTE: we might want `Literal[[]]` instead
-Unit = Any
+Unit = Unit = Literal[[]]
 
 BINARYNINJAUI_CUSTOM_EVENT = 0xfff6
 
