@@ -8,7 +8,6 @@ import Web.Scotty ( ScottyM
                   , File
                   , get
                   , post
-                  , file
                   , files
                   , json
                   , setHeader
@@ -28,10 +27,6 @@ server :: ServerConfig -> ScottyM ()
 server cfg = do
   get "/" showErrorPage
   post "/upload" $ uploadBinary cfg
-  get "/js/main.js" $ file "./res/js/main.js"
-
--- curl to upload example file:
--- curl -X POST -F 'binaryName=exampleBin' -F 'binaryHash=1234' -F 'bndb=@/tmp/example.bndb' http://localhost:31338/upload
 
 uploadBinary :: ServerConfig -> ActionM ()
 uploadBinary cfg = do

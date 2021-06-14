@@ -2,7 +2,6 @@
 
 module Blaze.UI.Types
   ( module Blaze.UI.Types
-  , module WebMessages
   ) where
 
 import Blaze.UI.Prelude
@@ -13,7 +12,6 @@ import qualified Blaze.Types.Pil.Checker as Ch
 import Blaze.Types.Pil (Stmt)
 import qualified Binja.Function as BNFunc
 import qualified Data.Aeson.Types as Aeson
-import Blaze.UI.Types.WebMessages as WebMessages
 import Blaze.Function (Function)
 import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
 import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
@@ -132,9 +130,8 @@ data BlazeToServer = BZNoop
                    | BZFunctionList [Function]
                    deriving (Eq, Ord, Show, Generic)
 
-data Event = WebEvent WebToServer
-           | BinjaEvent BinjaToServer
-           deriving (Eq, Ord, Show, Generic)
+newtype Event = BinjaEvent BinjaToServer
+              deriving (Eq, Ord, Show, Generic)
 
 -- TODO: Maybe we should just use SessionState since they are almost the same.
 data EventLoopCtx = EventLoopCtx
@@ -142,14 +139,12 @@ data EventLoopCtx = EventLoopCtx
   , hostBinaryPath :: HostBinaryPath
   , binaryManager :: BinaryManager
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
-  , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
   , sqliteFilePath :: FilePath
   } deriving (Generic)
 
-data EventLoopState = EventLoopState
+newtype EventLoopState = EventLoopState
   { binjaOutput :: [ServerToBinja]
-  , webOutput :: [ServerToWeb]
   } deriving (Generic)
 
 newtype EventLoopError = EventLoopError Text
@@ -190,7 +185,6 @@ data SessionState = SessionState
   , binaryManager :: BinaryManager
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
-  , webOutboxes :: TVar (HashMap ThreadId (TQueue ServerToWeb))
   , eventHandlerThread :: TMVar ThreadId
   , eventInbox :: TQueue Event
   } deriving (Generic)
@@ -199,7 +193,6 @@ emptySessionState :: HostBinaryPath -> BinaryManager -> STM SessionState
 emptySessionState binPath bm
   = SessionState binPath bm
     <$> newTVar HashMap.empty
-    <*> newTVar HashMap.empty
     <*> newTVar HashMap.empty
     <*> newEmptyTMVar
     <*> newTQueue
