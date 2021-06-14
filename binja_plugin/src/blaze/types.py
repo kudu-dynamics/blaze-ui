@@ -18,8 +18,7 @@ BinaryHash = str
 HostBinaryPath = str
 
 # What Aeson encodes the unit value `()` as
-# NOTE: we might want `Literal[[]]` instead
-Unit = Unit = Literal[[]]
+Unit = Literal[[]]
 
 BINARYNINJAUI_CUSTOM_EVENT = 0xfff6
 
@@ -118,7 +117,7 @@ class ServerCfg(TypedDict):
 class SnapshotInfo(TypedDict):
     name: Optional[str]
     created: Any  # TODO: utc time
-    modified: Any # TODO: utc time
+    modified: Any  # TODO: utc time
     snapshotType: Literal['Autosave', 'Immutable']
 
 
@@ -165,7 +164,9 @@ BranchTreeList = List[BranchTreeListItem]
 class SnapshotServerToBinjaTotal(TypedDict, total=True):
     tag: Literal['SnapshotBranch', 'BranchesOfFunction', 'BranchesOfBinary', 'BranchesOfClient']
 
+
 ServerBranchesOfClient = List[Tuple[HostBinaryPath, List[Tuple[BranchId, ServerBranch]]]]
+
 
 class SnapshotServerToBinja(SnapshotServerToBinjaTotal, total=False):
     branchId: Optional[BranchId]
@@ -175,18 +176,22 @@ class SnapshotServerToBinja(SnapshotServerToBinjaTotal, total=False):
     branches: Optional[List[Tuple[BranchId, ServerBranch]]]
     branchesOfClient: Optional[ServerBranchesOfClient]
 
+
 class SnapshotBinjaToServerTotal(TypedDict, total=True):
     tag: Literal['GetAllBranchesOfClient', 'GetAllBranchesOfBinary', 'GetBranchesOfFunction',
                  'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot']
-    
+
+
 class SnapshotBinjaToServer(SnapshotBinjaToServerTotal, total=False):
     originFuncAddr: Optional[Address]
     branchId: Optional[BranchId]
     name: Optional[str]
     cfgId: Optional[CfgId]
 
+
 class ServerToBinjaTotal(TypedDict, total=True):
     tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshot']
+
 
 class ServerToBinja(ServerToBinjaTotal, total=False):
     bndbHash: Optional[BinaryHash]
@@ -199,6 +204,7 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
 class BinjaToServerTotal(TypedDict, total=True):
     tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
                  'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop']
+
 
 class BinjaToServer(BinjaToServerTotal, total=False):
     message: Optional[str]
