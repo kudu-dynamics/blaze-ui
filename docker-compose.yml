@@ -4,6 +4,9 @@ services:
   blaze-server:
     image: ${CI_REGISTRY}/${CI_PROJECT_NAMESPACE}/blaze-ui/blaze-service/squashed
     # image: 077943246560.dkr.ecr.us-east-2.amazonaws.com/integrated_blaze_system/kudu/blaze-service
+    build:
+      context: .
+      target: minimal
     volumes:
       - blaze:/blaze/persistent
     ports:
@@ -15,7 +18,18 @@ services:
       - BLAZE_UI_HTTP_PORT=31338
       - BLAZE_UI_SQLITE_FILEPATH=/blaze/persistent/blaze.sqlite
       - BLAZE_UI_BNDB_STORAGE_DIR=/blaze/persistent/bndbs
-    command: ["/blaze/bin/blaze-server"]
+
+  wheel-server:
+    image: ${CI_REGISTRY}/${CI_PROJECT_NAMESPACE}/blaze-ui/blaze-wheel-server
+    # image: 077943246560.dkr.ecr.us-east-2.amazonaws.com/integrated_blaze_system/kudu/blaze-wheel-server
+    build:
+      context: .
+      target: wheel-server
+    ports:
+      - 8000:3000
+    environment:
+      - BLAZE_WHEEL_SERVER_URL=http://blazecicd1.apogee-research.com:8000
+      # - BLAZE_WHEEL_SERVER_URL=http://localhost:8000
 
 volumes:
   blaze:

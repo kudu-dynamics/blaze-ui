@@ -26,7 +26,13 @@ Follow the installation instructions for the binja plugin [here](./binja_plugin/
 
 ## Running server
 
+You can use either Stack (useful during development) or Docker (useful in
+production) to run the backend server. Additionally, to install the UI plugin in
+BinaryNinja, you can use Docker to serve the plugin.
+
 ### Using Stack
+
+Start the backend server:
 
 ```sh
 $ cd server
@@ -38,20 +44,42 @@ $ BLAZE_UI_HOST=localhost \
   BLAZE_UI_SQLITE_FILEPATH="$HOME/.local/share/blaze/blaze.sqlite" \
   BLAZE_UI_BNDB_STORAGE_DIR="$HOME/.local/share/blaze/bndbs" \
   stack run
-# OR
+```
+or
+```sh
 $ export BLAZE_UI_HOST=localhost
 $ export BLAZE_UI_WS_PORT=31337
 $ export BLAZE_UI_HTTP_PORT=31338
 $ export BLAZE_UI_SQLITE_FILEPATH="$HOME/.local/share/blaze/blaze.sqlite"
 $ export BLAZE_UI_BNDB_STORAGE_DIR="$HOME/.local/share/blaze/bndbs"
 $ stack run
-# OR
+```
+or
+```sh
 $ stack run localhost 31337 31338 "$HOME/.local/share/blaze/blaze.sqlite" "$HOME/.local/share/blaze/bndbs"
 ```
+
+And then start the plugin server:
+
+- Edit docker-compose.yml if needed:
+  - Forward the desired port for the wheel server
+  - Edit `BLAZE_WHEEL_SERVER_URL` (most likely you'll want `http://localhost:$PORT`)
+  - Switch between the GitLab (authoritative) repository or AWS ECR (fast) repository
+-
+  ```sh
+  # Login, if needed
+  $ docker login ${CI_REGISTRY}
+  # Pull the image and start the service
+  $ docker-compose pull
+  $ docker-compose build wheel-server  # only if modifications have been made
+  $ docker-compose up wheel-server
+  ```
 
 ### Using docker
 
 - Edit docker-compose.yml if needed:
+  - Forward the desired port for the wheel server
+  - Edit `BLAZE_WHEEL_SERVER_URL` (most likely you'll want `http://localhost:$PORT`)
   - Forward the desired ports for the WebSocket and HTTP services
   - Switch between the GitLab (authoritative) repository or AWS ECR (fast) repository
   - Edit docker volume(s)
@@ -61,7 +89,24 @@ $ stack run localhost 31337 31338 "$HOME/.local/share/blaze/blaze.sqlite" "$HOME
 $ docker login ${CI_REGISTRY}
 # Pull the image and start the service
 $ docker-compose pull
+$ docker-compose build  # only if modifications have been made
 $ docker-compose up
+```
+
+## Installing Blaze in BinaryNinja
+
+After starting the wheel server (which also functions as a BinaryNinja plugin repository), open BinaryNinja and edit these settings (Edit > Preferences > Settings):
+
+- `Plugin Manager > Unofficial 3rd Party Plugin Repository Display Name` can be set to anything. Example: `localhost`
+- `Plugin Manager > Unofficial 3rd Party Plugin Repository URL` should be the value of `BLAZE_WHEEL_SERVER_URL`
+
+Then when starting BinaryNinja, the following environment variables should be exported:
+
+```sh
+$ export BLAZE_UI_HOST=localhost
+$ export BLAZE_UI_WS_PORT=31337
+$ export BLAZE_UI_HTTP_PORT=31338
+$ binaryninja
 ```
 
 ## Using Blaze
@@ -85,7 +130,3 @@ $ docker-compose up
   away. This essentially says "I want this edge to be impossible". Blaze will then remove that
   edge and any newly unreachable blocks, and (in a future version) update the solver
   with this new information to propagate new constraints
-
-## Purescript client
-
-See `/web/README.md`
