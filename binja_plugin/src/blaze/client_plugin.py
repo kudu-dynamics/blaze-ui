@@ -198,11 +198,12 @@ class BlazePlugin():
             }
             r = requests.post(uri, data=post_data, files=files)
 
-        rj = r.json()
-        log.info(str(rj))
+        if r.status_code != requests.codes['ok']:
+            log.error('Backend server returned error (HTTP status %s): %r', r.status_code, r.text)
+            return
 
-        # os.remove(temp_bndb_name)
-        # bv.create_database(og_filename)
+        rj = r.json()
+
         callback(rj)
 
     def ensure_instance(self, bv: BinaryView) -> BlazeInstance:
