@@ -2,12 +2,12 @@
 '''
 Run `stack test [ARGUMENTS...]` but don't wait for the spec to exit. Instead,
 search the output for either /examples?, 0 failure/ or /examples?, [1-9][0-9]* failure/
-and determine the correct exit code based on that. Then promptly killall stack and blaze-ui-server-test,
+and determine the correct exit code based on that. Then promptly killall stack and blaze-server-test,
 because otherwise killing just stack leaves orphaned processes that would otherwise never
 exit.
 
 For this reason, it is recommended to not run this script on a dev machine locally,
-as any process matching `stack` or `blaze-ui-server-test` will be killed, not necessarily just
+as any process matching `stack` or `blaze-server-test` will be killed, not necessarily just
 children of this process. If you really want to anyway, set the environment variable
 CI=true
 '''
@@ -47,8 +47,8 @@ def cleanup_and_exit(retcode):
 
     print('killall stack')
     subprocess.run(['killall', 'stack'])
-    print('killall blaze-ui-server-test')
-    subprocess.run(['killall', 'blaze-ui-server-test'])
+    print('killall blaze-server-test')
+    subprocess.run(['killall', 'blaze-server-test'])
     print('done!')
 
     exit(retcode)
