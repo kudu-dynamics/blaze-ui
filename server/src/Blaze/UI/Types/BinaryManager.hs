@@ -9,7 +9,6 @@ import System.Directory (createDirectoryIfMissing)
 import qualified Data.ByteString as BS
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import qualified Blaze.UI.Types.HostBinaryPath as HBP
-import qualified Data.UUID as UUID
 import Blaze.UI.Types.Session (ClientId(ClientId))
 
 
@@ -46,7 +45,7 @@ getBndbVersionsDir :: BinaryManagerStorageDir
 getBndbVersionsDir (BinaryManagerStorageDir bmdir) (ClientId cid) p = BndbVersionsDir $
   bmdir
   <> "/"
-  <> cs (UUID.toText cid)
+  <> cs cid
   <> "/"
   <> HBP.encode p
 

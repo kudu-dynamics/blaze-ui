@@ -2,8 +2,8 @@ module Blaze.UI.Types.Session where
 
 import Blaze.UI.Prelude
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
+
 import Web.Scotty (Parsable(parseParam))
-import qualified Data.UUID as UUID
 import Database.Selda.SqlType ( Lit(LCustom)
                               , SqlTypeRep(TBlob)
                               , SqlType
@@ -11,14 +11,12 @@ import Database.Selda.SqlType ( Lit(LCustom)
 import qualified Database.Selda.SqlType as Sql
 
 
-newtype ClientId = ClientId UUID
+newtype ClientId = ClientId Text
   deriving (Eq, Ord, Read, Show, Generic)
   deriving anyclass (FromJSON, ToJSON, Hashable)
 
 instance Parsable ClientId where
-  parseParam = maybe (Left "Could not parse ClientId") (Right . ClientId)
-    . UUID.fromText
-    . cs
+  parseParam = Right . ClientId . cs
 
 instance SqlType ClientId where
    mkLit (ClientId x) = LCustom TBlob $ Sql.mkLit x

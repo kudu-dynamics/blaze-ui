@@ -21,6 +21,8 @@ import Blaze.Util.Spec (mkUuid1)
 import qualified Blaze.UI.Types.BinaryManager as BM
 import Blaze.UI.Types.Session (ClientId(ClientId))
 import Test.Hspec
+import qualified Data.UUID as UUID
+import qualified Data.Text as Text
 
 
 diveBin :: FilePath
@@ -41,7 +43,7 @@ mockEventLoopCtx = EventLoopCtx cid hpath
   where
     bmdir = "/tmp/blaze/bm"
     hpath = "/tmp/blaze/spec"
-    cid = ClientId $ mkUuid1 (0 :: Int)
+    cid = ClientId . Text.append "testuser_" . UUID.toText $ mkUuid1 (0 :: Int)
 
 mockEventLoop :: EventLoop a -> IO a
 mockEventLoop m = do
