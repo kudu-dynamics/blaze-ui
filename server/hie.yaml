@@ -3,6 +3,6 @@ cradle:
     - path: "src/"
       component: "blaze-ui-server:lib"
     - path: "test/"
-      component: "blaze-ui-server:test:blaze-ui-server-test"
+      component: "blaze-ui-server:test:blaze-server-test"
     - path: "app/"
-      component: "blaze-ui-server:exe:blaze-ui-server"
+      component: "blaze-ui-server:exe:blaze-server"
