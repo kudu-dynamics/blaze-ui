@@ -2,7 +2,6 @@ import enum
 import getpass
 import json
 from typing import Any, Callable, List, Literal, OrderedDict, Sequence, Tuple, TypedDict, Union
-from typing_extensions import Annotated
 import uuid
 
 from binaryninja.settings import Settings
@@ -40,7 +39,8 @@ class BlazeSettings:
         UPLOAD_ENABLED = 'blaze.upload_enabled'
         CLIENT_ID = 'blaze.client_id'
 
-    _group_config: List[Tuple[Annotated[str, 'group'], Annotated[str, 'title']]] = [
+    # [(group, title), ...]
+    _group_config: List[Tuple[str, str]] = [
         ('blaze', 'Blaze'),
     ]
 
