@@ -5,39 +5,38 @@ import logging as _logging
 import os
 import os.path
 import queue
-import requests
-import tempfile
 import threading
-from typing import Dict, Literal, Optional, Union, cast, Callable
 import uuid
+from typing import Callable, Dict, Literal, Optional, Union, cast
 
+import requests
 import websockets
 from binaryninja import BinaryView, PluginCommand, user_plugin_path
+from binaryninja.interaction import (
+    MessageBoxButtonResult,
+    MessageBoxButtonSet,
+    MessageBoxIcon,
+    show_message_box,
+)
 from binaryninjaui import DockHandler, ViewFrame
-from binaryninja.interaction import show_message_box, MessageBoxButtonSet, MessageBoxIcon, MessageBoxButtonResult
 from PySide2.QtCore import Qt
 from PySide2.QtWidgets import QApplication, QWidget
 from websockets.client import WebSocketClientProtocol
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
+from .settings import BlazeSettings
 from .snaptree import SnapTreeDockWidget
 from .types import (
+    BinaryHash,
     BinjaMessage,
     BinjaToServer,
     CfgId,
     ServerCfg,
     ServerToBinja,
-    BlazeConfig,
-    ClientId,
-    BinaryHash,
-    SnapshotBinjaToServer,
     SnapshotServerToBinja,
 )
 
 LOG_LEVEL = 'INFO'
-BLAZE_UI_HOST = os.environ.get('BLAZE_UI_HOST', 'localhost')
-BLAZE_UI_WS_PORT = os.environ.get('BLAZE_UI_WS_PORT', '31337')
-BLAZE_UI_HTTP_PORT = os.environ.get('BLAZE_UI_HTTP_PORT', '31338')
 BLAZE_WS_SHUTDOWN = 'SHUTDOWN'
 
 log = _logging.getLogger(__name__)
@@ -51,19 +50,6 @@ def register_for_function(action, description):
     return wrapper
 
 
-def get_blaze_config() -> BlazeConfig:
-    "Gets config from .blaze, or creates it"
-    blaze_file = os.path.join(user_plugin_path(), ".blaze")
-
-    if not os.path.isfile(blaze_file):
-        with open(blaze_file, 'w') as f:
-            json.dump({'client_id': str(uuid.uuid4())}, f)
-            log.info("Created .blaze config file")
-
-    with open(blaze_file, 'r') as f:
-        return json.load(f)
-
-
 def register(action, description):
     def wrapper(f):
         PluginCommand.register(action, description, f)
@@ -71,8 +57,10 @@ def register(action, description):
 
     return wrapper
 
+
 def bv_key(bv: BinaryView) -> str:
     return bv.file.filename if bv.file.filename.endswith('.bndb') else bv.file.filename + '.bndb'
+
 
 class BlazeInstance():
     def __init__(self, bv: BinaryView, blaze: 'BlazePlugin'):
@@ -101,6 +89,7 @@ class BlazePlugin():
 
     def __init__(self) -> None:
         self.websocket_thread: Optional[threading.Thread] = None
+        self.settings: BlazeSettings = BlazeSettings()
 
         self.dock_handler: DockHandler
         if hasattr(DockHandler, 'getActiveDockHandler'):
@@ -141,8 +130,7 @@ class BlazePlugin():
                 name=name,
                 view_frame=dock_handler.getViewFrame(),
                 parent=parent,
-                blaze_instance=self.ensure_instance(bv)
-            )
+                blaze_instance=self.ensure_instance(bv))
             return self.snaptree_dock_widget
 
         self.dock_handler.addDockWidget(
@@ -152,9 +140,6 @@ class BlazePlugin():
             Qt.Orientation.Vertical,
             False  # default visibility
         )
-
-        self.config = get_blaze_config()
-        self.client_id = self.config['client_id']
 
     def _init_thread(self) -> None:
         if not self.websocket_thread or not self.websocket_thread.is_alive():
@@ -203,28 +188,22 @@ class BlazePlugin():
         if bv.file.analysis_changed:
             bv.create_database(og_filename)
 
-        # tf = tempfile.NamedTemporaryFile()
-        # temp_bndb_name = tf.name + '.bndb'
-        # tf.close()
-        # bv.create_database(temp_bndb_name)
-        uri = f"http://{BLAZE_UI_HOST}:{BLAZE_UI_HTTP_PORT}/upload"
-        # handle = open(temp_bndb_name,'rb')
-        handle = open(og_filename, 'rb')
-        files = {'bndb': handle}
-        post_data = {
-            'hostBinaryPath': og_filename,
-            'clientId': self.client_id,
-        }
-
         # TODO: run the following in a thread
-        r = requests.post(uri, data=post_data, files=files)
+        uri = f'http://{self.settings.host}:{self.settings.http_port}/upload'
+        with open(og_filename, 'rb') as f:
+            files = {'bndb': f}
+            post_data = {
+                'hostBinaryPath': og_filename,
+                'clientId': self.settings.client_id,
+            }
+            r = requests.post(uri, data=post_data, files=files)
 
-        handle.close()
+        if r.status_code != requests.codes['ok']:
+            log.error('Backend server returned error (HTTP status %s): %r', r.status_code, r.text)
+            return
+
         rj = r.json()
-        log.info(str(rj))
 
-        # os.remove(temp_bndb_name)
-        # bv.create_database(og_filename)
         callback(rj)
 
     def ensure_instance(self, bv: BinaryView) -> BlazeInstance:
@@ -241,7 +220,7 @@ class BlazePlugin():
         '''
 
         instance_key = bv_key(bv)
-        
+
         if (instance := BlazePlugin.instances.get(instance_key)) is not None:
             return instance
 
@@ -253,12 +232,13 @@ class BlazePlugin():
         self._init_thread()
         self.ensure_instance(bv)
 
-        new_msg = BinjaMessage(clientId=self.client_id, hostBinaryPath=bv_key(bv), action=msg)
+        new_msg = BinjaMessage(
+            clientId=self.settings.client_id, hostBinaryPath=bv_key(bv), action=msg)
         # log.debug('enqueueing %s', new_msg)
         self.out_queue.put(new_msg)
 
     async def main_websocket_loop(self):
-        uri = "ws://" + BLAZE_UI_HOST + ":" + BLAZE_UI_WS_PORT + "/binja"
+        uri = f'ws://{self.settings.host}:{self.settings.ws_port}/binja'
 
         log.info('connecting to websocket...')
         async with websockets.connect(uri) as websocket:

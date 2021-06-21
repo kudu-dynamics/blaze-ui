@@ -222,13 +222,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
     def save_icfg(self):
         snapshot_msg = SnapshotBinjaToServer(
-            tag='SaveSnapshot',
-            cfgId=self.blaze_instance.graph.pil_icfg_id)
-        self.blaze_instance.send(
-            BinjaToServer(
-                tag='BSSnapshot',
-                snapshotMsg=snapshot_msg))        
-        
+            tag='SaveSnapshot', cfgId=self.blaze_instance.graph.pil_icfg_id)
+        self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snapshot_msg))
+
     def prune(self, from_node: CfNode, to_node: CfNode):
         '''
         Send a request to the backend that the edge between `from_node` and
@@ -412,7 +408,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
             log.info('Right-click in ICFG widget, but no ICFG was created')
             return
 
-
         # self.clicked_node: Optional[FlowGraphNode] = self.getNodeForMouseEvent(event)
         self.clicked_node = self.getNodeForMouseEvent(event)
 
@@ -439,11 +434,11 @@ class ICFGWidget(FlowGraphWidget, QObject):
         Helper function for checking if the node just clicked is a call node
         Used for context menu validation
         '''
-        valid = isinstance(self.clicked_node, FlowGraphNode)
-        if valid:
+        if isinstance(self.clicked_node, FlowGraphNode):
             cf_node = self.get_cf_node(self.clicked_node)
-            valid = cf_node is not None and is_call_node(cf_node)
-        return valid
+            return cf_node is not None and is_call_node(cf_node)
+
+        return False
 
 
 class ICFGDockWidget(QWidget, DockContextHandler):

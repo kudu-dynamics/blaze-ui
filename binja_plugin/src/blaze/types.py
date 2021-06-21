@@ -28,10 +28,6 @@ class Symbol(TypedDict):
     _symbolRawName: str
 
 
-class BlazeConfig(TypedDict):
-    client_id: ClientId
-
-
 FuncParamInfo = Any
 
 
