@@ -37,6 +37,7 @@ dependencies:
   - generic-lens
   - hashable
   - hashids
+  - http-types
   - lens
   - mtl
   - pretty-simple

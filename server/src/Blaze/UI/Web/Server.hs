@@ -13,7 +13,8 @@ import Data.List (lookup)
 import qualified Data.Text.Lazy
 import qualified Network.Wai.Parse as Wai
 import Web.Scotty (ActionM, File, ScottyM, files, get, json, post, scotty, setHeader)
-import Web.Scotty.Trans (ActionT, Parsable (parseParam), ScottyError (stringError), html, params)
+import Web.Scotty.Trans (ActionT, Parsable (parseParam), ScottyError (stringError), html, params, raiseStatus)
+import Network.HTTP.Types (badRequest400)
 
 server :: ServerConfig -> ScottyM ()
 server cfg = do
@@ -26,8 +27,8 @@ requiredParam :: (Parsable a, ScottyError e, Monad m) => Data.Text.Lazy.Text -> 
 requiredParam k = do
     ps <- params
     case lookup k ps of
-        Nothing -> throwError . stringError $ "Param: " ++ cs k ++ " not found!"
-        Just v  -> either (throwError . stringError . cs) return $ parseParam v
+        Nothing -> raiseStatus badRequest400 . stringError $ "Missing param: " ++ cs k
+        Just v  -> either (raiseStatus badRequest400 . stringError . cs) return $ parseParam v
 
 uploadBinary :: ServerConfig -> ActionM ()
 uploadBinary cfg = do
