@@ -20,9 +20,16 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-from PySide2.QtCore import QEvent, QObject, Qt
-from PySide2.QtGui import QContextMenuEvent, QMouseEvent
-from PySide2.QtWidgets import QVBoxLayout, QWidget
+
+import binaryninjaui
+if 'qt_major_version' in binaryninjaui.__dict__ and binaryninjaui.qt_major_version == 6:
+    from PySide6.QtCore import QEvent, QObject, Qt
+    from PySide6.QtGui import QContextMenuEvent, QMouseEvent
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+else:
+    from PySide2.QtCore import QEvent, QObject, Qt
+    from PySide2.QtGui import QContextMenuEvent, QMouseEvent
+    from PySide2.QtWidgets import QVBoxLayout, QWidget
 
 from .types import (
     BINARYNINJAUI_CUSTOM_EVENT,

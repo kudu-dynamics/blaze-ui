@@ -9,8 +9,14 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-from PySide2.QtGui import QMouseEvent
-from PySide2.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
+
+import binaryninjaui
+if 'qt_major_version' in binaryninjaui.__dict__ and binaryninjaui.qt_major_version == 6:
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget
+else:
+    from PySide2.QtGui import QMouseEvent
+    from PySide2.QtWidgets import QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget
 
 from .types import (
     BINARYNINJAUI_CUSTOM_EVENT,
@@ -46,7 +52,7 @@ class SnapTree():
         pass
 
 
-def branch_tree_from_server(branch_tree: ServerBranchTree) -> BranchTree:  
+def branch_tree_from_server(branch_tree: ServerBranchTree) -> BranchTree:
     edges = [edge[1] for edge in branch_tree['edges']]
     return BranchTree(edges=edges)
 
@@ -88,8 +94,8 @@ class SnapTreeItem(QTreeWidgetItem):
         # pyright doesn't seem to handle constructor overloading well?
         QTreeWidgetItem.__init__(
             self,
-            parent=parent,                          # type: ignore
-            after=predecessor,                      # type: ignore
+            parent,                          # type: ignore
+            predecessor,                      # type: ignore
             type=QTreeWidgetItem.UserType
         )
         for i, t in enumerate(text):
@@ -109,7 +115,7 @@ class SnapTreeBranchListItem(SnapTreeItem):
             self,
             parent: QTreeWidgetItem,
             branch_id: BranchId,
-            item: BranchTreeListItem,            
+            item: BranchTreeListItem,
     ):
         self.item = item
         self.branch_id = branch_id
@@ -138,7 +144,7 @@ class SnapTreeBranchItem(SnapTreeItem):
         self.branch = branch_from_server(branch_data)
         self.branch_tree_list_item = branch_to_list_item(self.branch)
         origin_func_name = self.branch['originFuncName']
-        
+
         text = (f"Branch {origin_func_name}:",) # {str(branch_data)}",)
         SnapTreeItem.__init__(self, parent, predecessor, text)
 
@@ -176,7 +182,7 @@ class SnapTreeWidget(QTreeWidget):
         self.context_menu = Menu()
         self.context_menu_manager = ContextMenuManager(self)
         self.blaze_instance = blaze_instance
-        
+
         # TODO this is temp data
         headers = ["test"]
         self.setHeaderLabels(headers)
@@ -191,7 +197,6 @@ class SnapTreeWidget(QTreeWidget):
         self._debug_()
 
     def _debug_(self):
-        from PySide2.QtWidgets import QTreeWidgetItemIterator
         it = QTreeWidgetItemIterator(self)
         while it.value():
             item = it.value()
@@ -210,11 +215,11 @@ class SnapTreeWidget(QTreeWidget):
             tag = 'LoadSnapshot',
             cfgId = snap.item['cfgId']
             )
-            
+
         self.blaze_instance.send(
             BinjaToServer(
                 tag='BSSnapshot',
-                snapshotMsg=snapshot_msg))    
+                snapshotMsg=snapshot_msg))
 
     def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', view_frame: ViewFrame):
         self.blaze_instance = blaze_instance
@@ -247,7 +252,7 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
         layout.setSpacing(0)
         layout.addWidget(self.snaptree_widget)
         self.setLayout(layout)
-        
+
     def handle_server_msg(self, snap_msg: SnapshotServerToBinja):
         '''
         this is where I delegate snapshot server messages
@@ -270,4 +275,3 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
 
     def notifyOffsetChanged(self, offset:int) -> None:
         self.snaptree_widget.notifyOffsetChanged(self._view_frame, offset)
-
