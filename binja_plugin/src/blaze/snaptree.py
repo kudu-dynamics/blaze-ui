@@ -206,15 +206,10 @@ class SnapTreeWidget(QTreeWidget):
         snap = cast(SnapTreeBranchListItem, x)
         cfg_id = snap.item['cfgId']
         log.info(f'Loading icfg {cfg_id}')
-        snapshot_msg = SnapshotBinjaToServer(
-            tag = 'LoadSnapshot',
-            cfgId = snap.item['cfgId']
-            )
-            
-        self.blaze_instance.send(
-            BinjaToServer(
-                tag='BSSnapshot',
-                snapshotMsg=snapshot_msg))    
+        snapshot_msg = SnapshotBinjaToServer(tag='LoadSnapshot', cfgId=snap.item['cfgId'])
+
+        self.blaze_instance.blaze.icfg_dock_widget.icfg_widget.recenter_node_id = None
+        self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snapshot_msg))
 
     def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', view_frame: ViewFrame):
         self.blaze_instance = blaze_instance
