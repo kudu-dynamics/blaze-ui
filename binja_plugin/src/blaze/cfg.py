@@ -22,7 +22,7 @@ from binaryninjaui import (
 )
 
 import binaryninjaui
-if 'qt_major_version' in binaryninjaui.__dict__ and binaryninjaui.qt_major_version == 6:
+if getattr(binaryninjaui, 'qt_major_version', None) == 6:
     from PySide6.QtCore import QEvent, QObject, Qt
     from PySide6.QtGui import QContextMenuEvent, QMouseEvent
     from PySide6.QtWidgets import QVBoxLayout, QWidget

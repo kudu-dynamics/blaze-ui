@@ -20,7 +20,7 @@ from binaryninja.interaction import (
 )
 
 import binaryninjaui
-if 'qt_major_version' in binaryninjaui.__dict__ and binaryninjaui.qt_major_version == 6:
+if getattr(binaryninjaui, 'qt_major_version', None) == 6:
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication, QWidget
 else:
