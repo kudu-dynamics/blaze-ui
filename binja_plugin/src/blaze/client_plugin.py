@@ -6,29 +6,27 @@ import os
 import os.path
 import queue
 import threading
-import uuid
 from typing import Callable, Dict, Literal, Optional, Union, cast
 
+import binaryninjaui
 import requests
 import websockets
-from binaryninja import BinaryView, PluginCommand, user_plugin_path
+from binaryninja import BinaryView, PluginCommand
 from binaryninja.interaction import (
     MessageBoxButtonResult,
     MessageBoxButtonSet,
     MessageBoxIcon,
     show_message_box,
 )
-
-import binaryninjaui
-if getattr(binaryninjaui, 'qt_major_version', None) == 6:
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication, QWidget
-else:
-    from PySide2.QtCore import Qt
-    from PySide2.QtWidgets import QApplication, QWidget
-
 from binaryninjaui import DockHandler, ViewFrame
 from websockets.client import WebSocketClientProtocol
+
+if getattr(binaryninjaui, 'qt_major_version', None) == 6:
+    from PySide6.QtCore import Qt  # type: ignore
+    from PySide6.QtWidgets import QApplication, QWidget  # type: ignore
+else:
+    from PySide2.QtCore import Qt  # type: ignore
+    from PySide2.QtWidgets import QApplication, QWidget  # type: ignore
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
 from .settings import BlazeSettings

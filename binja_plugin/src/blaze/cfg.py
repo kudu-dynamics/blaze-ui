@@ -1,7 +1,8 @@
 import logging as _logging
 from copy import deepcopy
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union, cast
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, cast
 
+import binaryninjaui
 from binaryninja import BinaryView
 from binaryninja.enums import BranchType, EdgePenStyle, HighlightStandardColor, ThemeColor
 from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphEdge, FlowGraphNode
@@ -21,15 +22,14 @@ from binaryninjaui import (
     ViewFrame,
 )
 
-import binaryninjaui
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
-    from PySide6.QtCore import QEvent, QObject, Qt
-    from PySide6.QtGui import QContextMenuEvent, QMouseEvent
-    from PySide6.QtWidgets import QVBoxLayout, QWidget
+    from PySide6.QtCore import QEvent, QObject, Qt  # type: ignore
+    from PySide6.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
+    from PySide6.QtWidgets import QVBoxLayout, QWidget  # type: ignore
 else:
-    from PySide2.QtCore import QEvent, QObject, Qt
-    from PySide2.QtGui import QContextMenuEvent, QMouseEvent
-    from PySide2.QtWidgets import QVBoxLayout, QWidget
+    from PySide2.QtCore import QEvent, QObject, Qt  # type: ignore
+    from PySide2.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
+    from PySide2.QtWidgets import QVBoxLayout, QWidget  # type: ignore
 
 from .types import (
     BINARYNINJAUI_CUSTOM_EVENT,
