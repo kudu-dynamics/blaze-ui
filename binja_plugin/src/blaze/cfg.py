@@ -204,9 +204,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
             ),
             BNAction(
                 'Blaze', 'Expand Call Node', MenuOrder.EARLY,
-
-                # activate = self.context_menu_action_expand_call,
-                # isValid = self._clicked_node_is_call_node,
                 activate=self.context_menu_action_expand_call,
                 isValid=self._clicked_node_is_call_node,
             ),

@@ -1,5 +1,8 @@
+import enum
 import logging as _logging
-from typing import TYPE_CHECKING, List, Optional, Set, Tuple, Union, cast, Dict
+import os
+from datetime import datetime
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union, cast
 
 from binaryninjaui import (
     ContextMenuManager,
@@ -43,14 +46,7 @@ if TYPE_CHECKING:
 
 log = _logging.getLogger(__name__)
 
-
-class SnapTree():
-    '''
-    I handle the logic for comprehending a snapshot tree
-    '''
-    def __init__(self):
-        pass
-
+# =================================================================================================
 
 def branch_tree_from_server(branch_tree: ServerBranchTree) -> BranchTree:
     edges = [edge[1] for edge in branch_tree['edges']]
@@ -79,13 +75,23 @@ def branchtree_to_branchtreelistitem(bt: BranchTree, snapInfo: Dict[CfgId, Snaps
 def branch_to_list_item(branch: Branch) -> BranchTreeListItem:
     return branchtree_to_branchtreelistitem(branch['tree'], branch['snapshotInfo'], branch['rootNode'])
 
+# =================================================================================================
+
+@enum.unique
+class SnapTreeColumn(enum.Enum):
+    '''
+    values are in column order
+    '''
+    NAME = "Name"
+    TYPE = "Category"
+    TIME = "Timestamp"
+
 
 class SnapTreeItem(QTreeWidgetItem):
     def __init__(
             self,
             parent: Union[QTreeWidget, QTreeWidgetItem],
-            predecessor: Optional[QTreeWidgetItem] = None,
-            text: Tuple[str] = tuple()
+            predecessor: Optional[QTreeWidgetItem] = None
     ):
         '''
         parent: the Q parent widget (either a treeview for a top level item, or a tree item)
@@ -98,10 +104,11 @@ class SnapTreeItem(QTreeWidgetItem):
             predecessor,                      # type: ignore
             type=QTreeWidgetItem.UserType
         )
-        for i, t in enumerate(text):
-            self.setText(i, t)
 
-        '''
+        for i, col in enumerate(SnapTreeColumn):
+            self.setText(i, self.get_text_for_col(col))
+
+        ''' From QTreeWidgetItem documentation, for reference:
         By default, items are enabled, selectable, checkable, and can be
         the source of a drag and drop operation. Each item’s flags can be
         changed by calling setFlags() with the appropriate value (see ItemFlags).
@@ -109,6 +116,23 @@ class SnapTreeItem(QTreeWidgetItem):
         function. The corresponding checkState() function indicates whether the
         item is currently checked.
         '''
+
+    def get_text_for_col(self, col: SnapTreeColumn) -> str:
+        """
+        To be overridden by implementing classes
+        Ought to return the text for a given column
+        """
+        return ""
+
+    '''
+    def get_child(self, identifier):
+        for idx in range(self.childCount()):
+            child = self.child(idx)
+            # TODO this check better
+            if child.text(0) == identifier:
+                return child
+    '''
+
 
 class SnapTreeBranchListItem(SnapTreeItem):
     def __init__(
@@ -119,17 +143,25 @@ class SnapTreeBranchListItem(SnapTreeItem):
     ):
         self.item = item
         self.branch_id = branch_id
+        self.snap_info = item.get('snapshotInfo')
+        self.timestamp = datetime.fromisoformat(
+            self.snap_info.get('created')[:len('YYYY-DD-SSTHH:MM:SS')] # TODO or modified?
+        )
+        SnapTreeItem.__init__(self, parent, None)
 
-        date = item['snapshotInfo']['created']
-        if item['snapshotInfo']['snapshotType'] == 'Autosave':
-            text = (f"Autosave: {date}:")
-        else:
-            name = item['snapshotInfo']['name'] or (f"{date}")
-            text = (f"Snapshot: {name}")
-        SnapTreeItem.__init__(self, parent, None, (text,))
+        self.process_children(item.get('children'))
 
-        for child in item['children']:
-            self.addChild(SnapTreeBranchListItem(self, self.branch_id, child))
+    def process_children(self, children: List[BranchTreeListItem]):
+        for child in children:
+            child = SnapTreeBranchListItem(self, self.branch_id, child)
+            self.addChild(child)
+
+    def get_text_for_col(self, col: SnapTreeColumn) -> str:
+        return {
+            SnapTreeColumn.NAME: self.snap_info.get('name') or "<<Snapshot>>",
+            SnapTreeColumn.TYPE: self.snap_info.get('snapshotType'),
+            SnapTreeColumn.TIME: self.timestamp.strftime('%b %d, %Y @ %H:%M:%S'),
+        }.get(col) or ""
 
 
 class SnapTreeBranchItem(SnapTreeItem):
@@ -141,14 +173,25 @@ class SnapTreeBranchItem(SnapTreeItem):
             predecessor: Optional[QTreeWidgetItem] = None,
     ):
         self.branch_id = branch_id
+        self.branch_data = branch_data
+        self.children = {}
+        SnapTreeItem.__init__(self, parent, predecessor)
+
+        self.process_branch_data(branch_data)
+
+    def process_branch_data(self, branch_data: ServerBranch):
+        self.branch_data = branch_data
+
         self.branch = branch_from_server(branch_data)
-        self.branch_tree_list_item = branch_to_list_item(self.branch)
-        origin_func_name = self.branch['originFuncName']
+        list_item = branch_to_list_item(self.branch)
+        child = SnapTreeBranchListItem(self, self.branch_id, list_item)
+        self.addChild(child)
 
-        text = (f"Branch {origin_func_name}:",) # {str(branch_data)}",)
-        SnapTreeItem.__init__(self, parent, predecessor, text)
-
-        self.addChild(SnapTreeBranchListItem(self, branch_id, self.branch_tree_list_item))
+    def get_text_for_col(self, col: SnapTreeColumn) -> str:
+        return {
+            SnapTreeColumn.NAME: self.branch_data.get('branchName') or self.branch_data.get('originFuncName'),
+            SnapTreeColumn.TYPE: "Branch Tree",
+        }.get(col) or ""
 
 
 class SnapTreeBinaryItem(SnapTreeItem):
@@ -158,60 +201,97 @@ class SnapTreeBinaryItem(SnapTreeItem):
             binary_path: str,
             branches: List[Tuple[BranchId, ServerBranch]]
     ):
-        SnapTreeItem.__init__(self, parent, text=(binary_path,))
-        self.process_branches(branches)
+        self.binary_path: str = binary_path
+        self.branches: Dict[BranchId, SnapTreeBranchItem] = {}
 
-    def process_branches(self, branches: List[Tuple[BranchId, ServerBranch]]):
-        last_branch = None
-        for bid, bdata in branches:
-            last_branch = SnapTreeBranchItem(self, bid, bdata)#, last_branch)
-            self.addChild(last_branch)
+        SnapTreeItem.__init__(self, parent)
+
+        self.add_branches(branches)
+
+    def add_branches(self, branches: List[Tuple[BranchId, ServerBranch]]):
+        self.addChildren([SnapTreeBranchItem(self, bid, bdata) for bid, bdata in branches])
+
+    def get_text_for_col(self, col: SnapTreeColumn) -> str:
+        return {
+            SnapTreeColumn.NAME: self.bin_path_to_label(self.binary_path),
+            SnapTreeColumn.TYPE: "Binary Path"
+        }.get(col) or ""
+
+    @classmethod
+    def bin_path_to_label(cls, bpath) -> str:
+        ''' TODO
+        A unified way to get a searchable binary path for getting this Item
+        through QTreeWidget.findItems()
+        '''
+        return os.path.basename(bpath)
 
 
 class SnapTreeWidget(QTreeWidget):
     '''
     I am the manifestation of a SnapTree into reality
     '''
-    def __init__(self, blaze_instance: 'BlazeInstance', parent: QWidget): #, view_frame: ViewFrame, blaze_instance: 'BlazeInstance'):
+    def __init__(self, parent: QWidget, blaze_instance: 'BlazeInstance'): #, view_frame: ViewFrame):
         QTreeWidget.__init__(self, parent)
+        self.blaze_instance: 'BlazeInstance' = blaze_instance
         # self._view_frame: ViewFrame = view_frame
-        # self.blaze_instance: 'BlazeInstance' = blaze_instance
 
         self.action_handler = UIActionHandler()
         self.action_handler.setupActionHandler(self)
         self.context_menu = Menu()
         self.context_menu_manager = ContextMenuManager(self)
-        self.blaze_instance = blaze_instance
+        self.tracked_binaries: List[HostBinaryPath] = []
 
-        # TODO this is temp data
-        headers = ["test"]
+        headers = [col.value for col in SnapTreeColumn]
         self.setHeaderLabels(headers)
         self.setColumnCount(len(headers))
-        self.itemDoubleClicked.connect(lambda item, c: self.load_icfg(item))
+        self.itemDoubleClicked.connect(self._dispatch_double_click)
 
-    def insert_branches_of_client(self, data: ServerBranchesOfClient):
+    def _dispatch_double_click(self, item: SnapTreeItem, column: int) -> None:
+        if isinstance(item, SnapTreeBranchListItem):
+            snap = cast(SnapTreeBranchListItem, item)
+            cfg_id = snap.item['cfgId']
+            self.load_icfg(cfg_id)
+
+    def update_branches_of_client(self, data: ServerBranchesOfClient) -> None:
         self.clear()
-        self.addTopLevelItems(
-            [SnapTreeBinaryItem(self, bpath, branches) for bpath, branches in data]
+        self.addTopLevelItems([SnapTreeBinaryItem(self, bpath, branches) for bpath, branches in data])
+
+        # TODO placeholder for logic for snaptree clarity
+        # self.on_update(data['currentCfg'])
+
+    def update_branches_of_binary(self, bin_path: HostBinaryPath, branches: List[Tuple[BranchId, ServerBranch]]):
+        if binary_item := self.find_binary_item(bin_path):
+            # this is the only way I can find that removes a TLI from the tree?
+            self.takeTopLevelItem(self.indexOfTopLevelItem(binary_item))
+
+        self.addTopLevelItem(SnapTreeBinaryItem(self, bin_path, branches))
+
+        # TODO placeholder for logic for snaptree clarity
+        # self.on_update(data['currentCfg'])
+
+    def on_update(self, current_cfg: str) -> None:
+        # TODO
+        # item = get current snap item
+        # collapse all items
+        # for item in tree:
+        #     item.setExpanded( item is in path for current_cfg )
+        # self.scrollToItem(item)
+        pass
+
+    def find_binary_item(self, bin_path: HostBinaryPath) -> Optional[SnapTreeBinaryItem]:
+        if bin_path not in self.tracked_binaries:
+            return None
+
+        items = self.findItems(
+            SnapTreeBinaryItem.bin_path_to_label(bin_path),
+            Qt.MatchFlag.MatchExactly
         )
-        self._debug_()
 
-    def _debug_(self):
-        it = QTreeWidgetItemIterator(self)
-        while it.value():
-            item = it.value()
-            item.setExpanded(True)
-            log.info(f"{item.text(0)}: {item.parent().text(0) if item.parent() else '---'}")
-            log.info(f"{item.text(0)}: {item.isExpanded()}")
-            log.info(f"{item.text(0)}: {item.isDisabled()}")
-            it.__next__()
+        return cast(SnapTreeBinaryItem, items[0]) if items else None
 
-    def load_icfg(self, x):
-        # TODO: check for type to make sure it's a SnapTreeBranchListItem
-        snap = cast(SnapTreeBranchListItem, x)
-        cfg_id = snap.item['cfgId']
-        log.info(f'Loading icfg {cfg_id}')
-        snapshot_msg = SnapshotBinjaToServer(tag='LoadSnapshot', cfgId=snap.item['cfgId'])
+    def load_icfg(self, cfg_id: CfgId) -> None:
+        log.info(f'Loading snapshot for icfg {cfg_id}')
+        snapshot_msg = SnapshotBinjaToServer(tag='LoadSnapshot', cfgId=cfg_id)
 
         self.blaze_instance.blaze.icfg_dock_widget.icfg_widget.recenter_node_id = None
         self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snapshot_msg))
@@ -223,6 +303,15 @@ class SnapTreeWidget(QTreeWidget):
     def notifyOffsetChanged(self, view_frame: ViewFrame, offset: int) -> None:
         pass
 
+    def _debug_(self):
+        it = QTreeWidgetItemIterator(self)
+        while it.value():
+            item = it.value()
+            item.setExpanded(True)
+            log.debug(f"{item.text(0)} parent: {item.parent().text(0) if item.parent() else '---'}")
+            log.debug(f"{item.text(0)} expanded: {item.isExpanded()}")
+            log.debug(f"{item.text(0)} disabled: {item.isDisabled()}")
+            it.__next__()
 
 
 class SnapTreeDockWidget(QWidget, DockContextHandler):
@@ -240,7 +329,7 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
 
         self._view_frame: ViewFrame = view_frame
         self.blaze_instance: Optional['BlazeInstance'] = blaze_instance
-        self.snaptree_widget = SnapTreeWidget(blaze_instance, self) #, view_frame, self.blaze_instance)
+        self.snaptree_widget = SnapTreeWidget(self, blaze_instance) #, view_frame)
 
         layout = QVBoxLayout()  # type: ignore
         layout.setContentsMargins(0, 0, 0, 0)  # type: ignore
@@ -252,12 +341,20 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
         '''
         this is where I delegate snapshot server messages
         '''
-        log.info(snap_msg)
+        log.debug(snap_msg)
 
-        if snap_msg['tag'] == 'BranchesOfClient':
-            self.snaptree_widget.insert_branches_of_client(
+        if snap_msg.get('tag') == 'BranchesOfClient':
+            self.snaptree_widget.update_branches_of_client(
                 cast(ServerBranchesOfClient, snap_msg.get('branchesOfClient'))
             )
+
+        if snap_msg.get('tag') == 'BranchesOfBinary':
+            self.snaptree_widget.update_branches_of_binary(
+                cast(HostBinaryPath, snap_msg.get('hostBinaryPath')),
+                snap_msg.get('branches')
+            )
+
+        # self.snaptree_widget._debug_()
 
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
         self._view_frame = view_frame
