@@ -177,7 +177,6 @@ class SnapshotBinjaToServerTotal(TypedDict, total=True):
     tag: Literal['GetAllBranchesOfClient', 'GetAllBranchesOfBinary', 'GetBranchesOfFunction',
                  'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot']
 
-
 class SnapshotBinjaToServer(SnapshotBinjaToServerTotal, total=False):
     originFuncAddr: Optional[Address]
     branchId: Optional[BranchId]
