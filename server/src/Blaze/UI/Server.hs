@@ -363,7 +363,7 @@ handleBinjaEvent = \case
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
             ctx <- ask
-            let pcfg = r ^. #result
+            let (InterCfg pcfg) = CfgA.prune . InterCfg $ r ^. #result
             (_bid, cid, _snapBranch) <- Db.saveNewCfgAndBranch
               (ctx ^. #clientId)
               (ctx ^. #hostBinaryPath)
@@ -393,7 +393,7 @@ handleBinjaEvent = \case
             -- TODO: more specific error
             sendToBinja . SBLogError . show $ err
           Right (InterCfg cfg') -> do
-            let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'               
+            let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'  
             -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
             printPrunedStats cfg' prunedCfg
             autosaveCfg cid prunedCfg
