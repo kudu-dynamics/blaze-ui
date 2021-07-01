@@ -393,7 +393,7 @@ handleBinjaEvent = \case
             -- TODO: more specific error
             sendToBinja . SBLogError . show $ err
           Right (InterCfg cfg') -> do
-            let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'  
+            let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
             -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
             printPrunedStats cfg' prunedCfg
             autosaveCfg cid prunedCfg
