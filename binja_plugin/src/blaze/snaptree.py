@@ -14,21 +14,13 @@ from binaryninjaui import (
 )
 
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
+    from PySide6.QtCore import Qt  # type: ignore
     from PySide6.QtWidgets import (  # type: ignore
-        QTreeWidget,
-        QTreeWidgetItem,
-        QTreeWidgetItemIterator,
-        QVBoxLayout,
-        QWidget,
-    )
+        QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget)  # type: ignore
 else:
+    from PySide2.QtCore import Qt  # type: ignore
     from PySide2.QtWidgets import (  # type: ignore
-        QTreeWidget,
-        QTreeWidgetItem,
-        QTreeWidgetItemIterator,
-        QVBoxLayout,
-        QWidget,
-    )
+        QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget)  # type: ignore
 
 from .types import (
     BinjaToServer,
@@ -37,6 +29,7 @@ from .types import (
     BranchTree,
     BranchTreeListItem,
     CfgId,
+    HostBinaryPath,
     ServerBranch,
     ServerBranchesOfClient,
     ServerBranchTree,
@@ -355,7 +348,8 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
 
         if snap_msg.get('tag') == 'BranchesOfBinary':
             self.snaptree_widget.update_branches_of_binary(
-                cast(HostBinaryPath, snap_msg.get('hostBinaryPath')), snap_msg.get('branches'))
+                cast(HostBinaryPath, snap_msg.get('hostBinaryPath')),
+                cast(list, snap_msg.get('branches')))
 
         # self.snaptree_widget._debug_()
 
