@@ -165,17 +165,18 @@ ServerBranchesOfClient = List[Tuple[HostBinaryPath, List[Tuple[BranchId, ServerB
 
 
 class SnapshotServerToBinja(SnapshotServerToBinjaTotal, total=False):
-    branchId: Optional[BranchId]
-    funcAddress: Optional[Address]
-    hostBinaryPath: Optional[HostBinaryPath]
-    branch: Optional[ServerBranch]
-    branches: Optional[List[Tuple[BranchId, ServerBranch]]]
-    branchesOfClient: Optional[ServerBranchesOfClient]
+    branchId: BranchId
+    funcAddress: Address
+    hostBinaryPath: HostBinaryPath
+    branch: ServerBranch
+    branches: List[Tuple[BranchId, ServerBranch]]
+    branchesOfClient: ServerBranchesOfClient
 
 
 class SnapshotBinjaToServerTotal(TypedDict, total=True):
     tag: Literal['GetAllBranchesOfClient', 'GetAllBranchesOfBinary', 'GetBranchesOfFunction',
                  'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot']
+
 
 class SnapshotBinjaToServer(SnapshotBinjaToServerTotal, total=False):
     originFuncAddr: Optional[Address]
