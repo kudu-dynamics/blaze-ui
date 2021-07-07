@@ -262,12 +262,12 @@ class ICFGWidget(FlowGraphWidget, QObject):
             log.error('Recenter node was deleted')
             return
 
-    def focus(self, node: CfNode):
+    def focus(self, cf_node: CfNode):
         '''
         Send a request to the backend to focus on the `CfNode`
         '''
 
-        node = node.copy()
+        node = deepcopy(cf_node)
         node['contents']['nodeData'] = []
         self.blaze_instance.send(
             BinjaToServer(
