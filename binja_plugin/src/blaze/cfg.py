@@ -361,6 +361,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
             return
 
         node = self.get_cf_node(self.clicked_node)
+        if not node:
+            log.error(f'Did not right-click on a node')
+            return
 
         self.recenter_node_id = node['contents']['uuid']
 
