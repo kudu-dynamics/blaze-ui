@@ -150,6 +150,11 @@ class ICFGFlowGraph(FlowGraph):
             nodes[edge['src']['contents']['uuid']].add_outgoing_edge(
                 branch_type, nodes[edge['dst']['contents']['uuid']], edge_style)
 
+        log.debug('%r initialized', self)
+
+    def __del__(self):
+        log.debug(f'Deleting {self!r}')
+
     @property
     def nodes(self) -> Dict[UUID, CfNode]:
         return self.pil_icfg['nodes']
@@ -220,13 +225,21 @@ class ICFGWidget(FlowGraphWidget, QObject):
         bind_actions(self.action_handler, actions)
         add_actions(self.context_menu, actions)
 
+        log.debug('%r initialized', self)
+
+    def __del__(self):
+        log.debug(f'Deleting {self!r}')
+
     def set_icfg(self, cfg_id: CfgId, cfg: Cfg):
         self.blaze_instance.graph = ICFGFlowGraph(self.blaze_instance.bv, cfg, cfg_id)
         self.setGraph(self.blaze_instance.graph)
 
     def save_icfg(self):
-        snapshot_msg = SnapshotBinjaToServer(
-            tag='SaveSnapshot', cfgId=self.blaze_instance.graph.pil_icfg_id)
+        cfg_id = self.blaze_instance.graph.pil_icfg_id
+        snapshot_msg = SnapshotBinjaToServer(tag='SaveSnapshot', cfgId=cfg_id)
+
+        log.debug('Requesting backend save snapshot of %r', cfg_id)
+
         self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snapshot_msg))
 
     def prune(self, from_node: CfNode, to_node: CfNode):
@@ -240,6 +253,12 @@ class ICFGWidget(FlowGraphWidget, QObject):
         from_node['contents']['nodeData'] = []
         to_node['contents']['nodeData'] = []
 
+        log.debug(
+            'Requesting backend prune edge from %r to %r',
+            from_node['contents']['uuid'],
+            to_node['contents']['uuid'],
+        )
+
         self.blaze_instance.send(
             BinjaToServer(
                 tag='BSCfgRemoveBranch',
@@ -251,11 +270,10 @@ class ICFGWidget(FlowGraphWidget, QObject):
         if event.type() != BINARYNINJAUI_CUSTOM_EVENT or self.recenter_node_id is None:
             return
 
-        log.debug(f'Recentering on UUID {self.recenter_node_id!r}')
+        log.debug('Recentering on UUID %r', self.recenter_node_id)
         for fg_node, cf_node in self.blaze_instance.graph.node_mapping.items():
             if cf_node['contents']['uuid'] == self.recenter_node_id:
-                log.debug('Found recenter node\n%s', '\n'.join(map(str, fg_node.lines)))
-                # time.sleep(self.sleep_time)
+                log.debug('Found recenter node', extra={'node': cf_node})
                 self.showNode(fg_node)
                 break
         else:
@@ -282,6 +300,12 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         call_node = node.copy()
         call_node['nodeData'] = []
+
+        log.debug(
+            'Requesting backend expand call-site at %s',
+            call_node['start'],
+            extra={'node': call_node})
+
         self.blaze_instance.send(
             BinjaToServer(
                 tag='BSCfgExpandCall',
@@ -293,6 +317,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
         Context menu action to call `self.prune`. Assumes `self.clicked_edge` has already
         been set by `self.mousePressEvent`
         '''
+
+        log.debug('User requested prune')
 
         if self.clicked_edge is None:
             log.error('Did not right-click on an edge')
@@ -311,11 +337,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
             source_node['contents']['uuid'], dest_node['contents']['uuid'])
         if not edge:
             raise RuntimeError('Missing edge!')
-
-        log.debug(
-            'Double click on %s edge from %s to %s',
-            'True' if edge['branchType'] == 'TrueBranch' else 'False',
-            source_node['contents']['uuid'], dest_node['contents']['uuid'])
 
         self.recenter_node_id = source_node['contents']['uuid']
 
@@ -356,6 +377,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
         been set by `self.mousePressEvent`
         '''
 
+        log.debug('User requested focus')
+
         if not self.clicked_node:
             log.error(f'Did not right-click on a CFG node')
             return
@@ -375,6 +398,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
         been set by `self.mousePressEvent`
         '''
 
+        log.debug('User requested call-site expansion')
+
         if not self.clicked_node:
             log.error(f'Did not right-click on a CFG node')
             return
@@ -390,12 +415,15 @@ class ICFGWidget(FlowGraphWidget, QObject):
         self.expand_call(call_node)
 
     def context_menu_action_save_icfg_snapshot(self, context: UIActionContext):
+        log.debug('User requested Save ICFG')
         self.save_icfg()
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any
         '''
+
+        log.debug('User double-clicked')
 
         if event.button() != Qt.LeftButton or self.blaze_instance.graph is None:
             return super().mousePressEvent(event)
@@ -404,7 +432,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             node = self.get_cf_node(fg_node)
 
             if not node:
-                log.error(f'Couldn\'t find node_mapping[{fg_node}]')
+                log.error('Couldn\'t find node_mapping[%r]', fg_node)
                 return
 
             if not is_call_node(node):
@@ -447,6 +475,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         self.context_menu_manager.show(self.context_menu, self.action_handler)
 
     def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', view_frame: ViewFrame):
+        log.debug('Changing ICFG view to blaze instance %r', blaze_instance)
         self.blaze_instance = blaze_instance
         self._view_frame = view_frame
 
@@ -488,7 +517,13 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         layout.addWidget(self.icfg_widget)
         self.setLayout(layout)
 
+        log.debug('%r initialized', self)
+
+    def __del__(self):
+        log.debug(f'Deleting {self!r}')
+
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
+        log.debug('ViewFrame changed to %r', view_frame)
         self._view_frame = view_frame
         if view_frame is None:
             self.blaze_instance = None

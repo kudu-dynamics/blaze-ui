@@ -1,43 +1,16 @@
 import logging
 
-import binaryninja
+from . import logging_config
 
-from . import client_plugin
-from . import cfg
+logging_config.setup_logging()
+log = logging.getLogger(__name__)
 
-LOG_LEVEL = logging.INFO
+# NOTE: any modules that should make use of the above logging configuration
+# (output to the BinaryNinja UI log, and jsonl to the logfile) MUST be imported
+# after this line
 
+__all__ = ['cfg', 'client_plugin', 'snaptree']
 
-class BinaryNinjaUILoggingHandler(logging.Handler):
-    def __init__(self, level):
-        super().__init__(level)
+from . import cfg, client_plugin, snaptree
 
-    def emit(self, record: logging.LogRecord):
-        if record.levelno >= logging.ERROR:
-            binaryninja.log_error(self.format(record))
-        elif record.levelno >= logging.WARN:
-            binaryninja.log_warn(self.format(record))
-        elif record.levelno >= logging.INFO:
-            binaryninja.log_info(self.format(record))
-        elif record.levelno >= logging.DEBUG:
-            binaryninja.log_debug(self.format(record))
-        else:
-            binaryninja.log_warn(f'Unknown log level: {record.levelno} ({record.levelname})')
-
-
-def setup_logging() -> BinaryNinjaUILoggingHandler:
-    # for handler in list(logging.root.handlers):
-    #     if any(t.__name__ == BinaryNinjaUILoggingHandler.__name__
-    #            for t in handler.__class__.__mro__):
-    #         logging.root.removeHandler(handler)
-
-    handler = BinaryNinjaUILoggingHandler(level=LOG_LEVEL)
-    formatter = logging.Formatter('Blaze: {message} [{name}:{funcName}:{lineno}]', style='{')
-    handler.setFormatter(formatter)
-    logging.getLogger(__name__).handlers = [handler]
-    logging.root.level = min(LOG_LEVEL, logging.root.level)
-
-    return handler
-
-
-ui_log_handler = setup_logging()
+log.debug('Blaze initialized')
