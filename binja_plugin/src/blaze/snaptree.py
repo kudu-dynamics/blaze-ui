@@ -248,6 +248,11 @@ class SnapTreeWidget(QTreeWidget):
         self.setColumnCount(len(headers))
         self.itemDoubleClicked.connect(self._dispatch_double_click)
 
+        log.debug('%r initialized', self)
+
+    def __del__(self):
+        log.debug(f'Deleting {self!r}')
+
     def _dispatch_double_click(self, item: SnapTreeItem, column: int) -> None:
         if isinstance(item, SnapTreeBranchListItem):
             snap = cast(SnapTreeBranchListItem, item)
@@ -336,12 +341,15 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
         layout.addWidget(self.snaptree_widget)
         self.setLayout(layout)
 
+        log.debug('%r initialized', self)
+
+    def __del__(self):
+        log.debug(f'Deleting {self!r}')
+
     def handle_server_msg(self, snap_msg: SnapshotServerToBinja):
         '''
         this is where I delegate snapshot server messages
         '''
-        log.debug(snap_msg)
-
         if snap_msg.get('tag') == 'BranchesOfClient':
             self.snaptree_widget.update_branches_of_client(
                 cast(ServerBranchesOfClient, snap_msg.get('branchesOfClient')))
