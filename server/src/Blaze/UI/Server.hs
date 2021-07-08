@@ -432,6 +432,22 @@ handleBinjaEvent = \case
           autosaveCfg cid prunedCfg
             >>= sendCfgAndSnapshots bhash prunedCfg cid
 
+  BSCfgFocus cid node' -> do
+    debug "Binja Focus"
+    bhash <- getCfgBinaryHash cid
+    cfg <- getCfg cid
+    case Cfg.getFullNodeMay cfg node' of
+      Nothing -> sendToBinja
+        . SBLogError $ "Node doesn't exist in Cfg"
+      Just fullNode -> if fullNode == cfg ^. #root
+        then sendToBinja $ SBLogError "Cannot remove root node"
+        else do
+          let cfg' = Cfg.focus fullNode cfg
+              (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+          printPrunedStats cfg' prunedCfg
+          autosaveCfg cid prunedCfg
+            >>= sendCfgAndSnapshots bhash prunedCfg cid
+
   BSNoop -> debug "Binja noop"
 
   BSSnapshot snapMsg -> case snapMsg of

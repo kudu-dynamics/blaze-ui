@@ -280,6 +280,19 @@ class ICFGWidget(FlowGraphWidget, QObject):
             log.error('Recenter node was deleted')
             return
 
+    def focus(self, cf_node: CfNode):
+        '''
+        Send a request to the backend to focus on the `CfNode`
+        '''
+
+        node = deepcopy(cf_node)
+        node['contents']['nodeData'] = []
+        self.blaze_instance.send(
+            BinjaToServer(
+                tag='BSCfgFocus',
+                cfgId=self.blaze_instance.graph.pil_icfg_id,
+                node=node))
+
     def expand_call(self, node: CallNode):
         '''
         Send a request to the backend that the `CallNode` `node` be expanded
@@ -366,8 +379,18 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         log.debug('User requested focus')
 
-        # FIXME implement focus
-        log.warn('Focus is not implemented yet')
+        if not self.clicked_node:
+            log.error(f'Did not right-click on a CFG node')
+            return
+
+        node = self.get_cf_node(self.clicked_node)
+        if not node:
+            log.error(f'Did not right-click on a node')
+            return
+
+        self.recenter_node_id = node['contents']['uuid']
+
+        self.focus(node)
 
     def context_menu_action_expand_call(self, context: UIActionContext):
         '''
