@@ -128,7 +128,6 @@ data PilType t = TBool
                | TArray (TArrayOp t)
                | TRecord [(BitOffset, t)]
 
-
                | TUnit
                -- Bottom is labeled with error info
                | TBottom Sym

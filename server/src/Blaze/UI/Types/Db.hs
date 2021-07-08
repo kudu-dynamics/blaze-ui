@@ -80,6 +80,9 @@ cfgTable = table "cfg" [#cfgId :- primary]
 snapshotBranchTable :: Table SnapshotBranch
 snapshotBranchTable = table "snapshotBranch" [#branchId :- primary]
 
+open :: FilePath -> IO Conn
+open dbPath = Conn <$> sqliteOpen dbPath
+
 runSelda :: (MonadMask m, MonadIO m) => Conn -> SeldaT SQLite m a -> m a
 runSelda (Conn conn) m = runSeldaT m conn
 
