@@ -44,7 +44,6 @@ simpleResult id = do
     [x] -> return x
     _ -> P.error "SimpleResult: Multiple results"
 
-
 initDb :: FilePath -> IO ()
 initDb db = do
   withSQLite db $ do
@@ -57,19 +56,16 @@ simpleTest db = do
   id <- withSQLite db simpleCreateEntry
   withSQLite db $ simpleAdd1 id
   replicateConcurrently_ 10 $ f id
-  -- void . forkIO $ replicateM_ 10 $ f id
   threadDelay 100000
   withSQLite db $ simpleResult id
   where
     f id = replicateM_ 10 $ do
-      -- void . withSQLite db $ simpleResult id
       withSQLite db $ simpleAdd1 id
 
 simpleTest2 :: FilePath -> IO Int
 simpleTest2 db = do
   initDb db
-  conn <- sqliteOpen db
-  
+  conn <- sqliteOpen db  
   id <- runSeldaT simpleCreateEntry conn
   replicateConcurrently_ 10 $ f conn id
   r <- runSeldaT (simpleResult id) conn
