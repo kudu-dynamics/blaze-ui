@@ -26,11 +26,18 @@ import Blaze.UI.Types.Graph (graphFromTransport, graphToTransport)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import qualified Data.HashMap.Strict as HashMap
+import Database.Selda.Backend (runSeldaT)
 
-init :: FilePath -> IO ()
-init blazeSqliteFilePath = withSQLite blazeSqliteFilePath $ do
-  tryCreateTable cfgTable
-  tryCreateTable snapshotBranchTable
+init :: FilePath -> IO Conn
+init blazeSqliteFilePath = do
+  conn <- sqliteOpen blazeSqliteFilePath
+  flip runSeldaT conn $ do
+    tryCreateTable cfgTable
+    tryCreateTable snapshotBranchTable
+  return $ Conn conn
+
+close :: Conn -> IO ()
+close (Conn conn) = seldaClose conn
 
 -- | Only called when creating a fresh CFG from a function
 saveNewCfgAndBranch :: MonadDb m

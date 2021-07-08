@@ -18,7 +18,7 @@ import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.Db (MonadDb(withDb))
-import Database.Selda.SQLite (withSQLite)
+import qualified Blaze.UI.Types.Db as Db
 import Blaze.UI.Types.BinaryManager (BinaryManager, BinaryManagerStorageDir(BinaryManagerStorageDir))
 import Blaze.UI.Types.Session (SessionId, ClientId)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
@@ -140,7 +140,7 @@ data EventLoopCtx = EventLoopCtx
   , binaryManager :: BinaryManager
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
-  , sqliteFilePath :: FilePath
+  , dbConn :: TMVar Db.Conn
   } deriving (Generic)
 
 newtype EventLoopState = EventLoopState
@@ -164,8 +164,11 @@ newtype EventLoop a = EventLoop { _runEventLoop :: ReaderT EventLoopCtx (ExceptT
 
 instance MonadDb EventLoop where
   withDb m = do
-    ctx <- ask
-    withSQLite (ctx ^. #sqliteFilePath) m
+    tconn <- view #dbConn <$> ask
+    conn <- liftIO . atomically $ takeTMVar tconn
+    r <- Db.runSelda conn m
+    liftIO . atomically $ putTMVar tconn conn
+    return r
 
 runEventLoop :: EventLoop a -> EventLoopCtx -> IO (Either EventLoopError a)
 runEventLoop m ctx = runExceptT . flip runReaderT ctx $ _runEventLoop m
@@ -187,25 +190,30 @@ data SessionState = SessionState
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , eventHandlerThread :: TMVar ThreadId
   , eventInbox :: TQueue Event
+  , dbConn :: TMVar Db.Conn
   } deriving (Generic)
 
-emptySessionState :: HostBinaryPath -> BinaryManager -> STM SessionState
-emptySessionState binPath bm
+emptySessionState :: HostBinaryPath -> BinaryManager -> TMVar Db.Conn -> STM SessionState
+emptySessionState binPath bm tconn
   = SessionState binPath bm
     <$> newTVar HashMap.empty
     <*> newTVar HashMap.empty
     <*> newEmptyTMVar
     <*> newTQueue
+    <*> return tconn
 
 -- all the changeable fields should be STM vars
 -- so this can be updated across threads
 data AppState = AppState
   { serverConfig :: ServerConfig
   , binarySessions :: TVar (HashMap SessionId SessionState)
+  , dbConn :: TMVar Db.Conn
   } deriving (Generic)
 
-initAppState :: ServerConfig -> IO AppState
-initAppState cfg' = AppState cfg' <$> newTVarIO HashMap.empty
+initAppState :: ServerConfig -> Db.Conn -> IO AppState
+initAppState cfg' conn = AppState cfg'
+  <$> newTVarIO HashMap.empty
+  <*> newTMVarIO conn
 
 lookupSessionState :: SessionId -> AppState -> STM (Maybe SessionState)
 lookupSessionState sid st = do
