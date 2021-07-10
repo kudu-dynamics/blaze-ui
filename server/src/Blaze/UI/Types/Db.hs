@@ -19,7 +19,10 @@ import Blaze.UI.Types.Cfg.Snapshot (BranchId, SnapshotType)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
+import Database.Selda.Backend (SeldaConnection, runSeldaT)
 
+
+newtype Conn = Conn (SeldaConnection SQLite)
 
 newtype Blob a = Blob a
   deriving (Eq, Ord, Show, Generic, Typeable)
@@ -76,6 +79,12 @@ cfgTable = table "cfg" [#cfgId :- primary]
 
 snapshotBranchTable :: Table SnapshotBranch
 snapshotBranchTable = table "snapshotBranch" [#branchId :- primary]
+
+open :: FilePath -> IO Conn
+open dbPath = Conn <$> sqliteOpen dbPath
+
+runSelda :: (MonadMask m, MonadIO m) => Conn -> SeldaT SQLite m a -> m a
+runSelda (Conn conn) m = runSeldaT m conn
 
 class (MonadMask m, MonadIO m, Monad m) => MonadDb m where
   withDb :: SeldaT SQLite m a -> m a

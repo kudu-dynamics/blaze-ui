@@ -24,6 +24,8 @@ main = do
       putText "or"
       putText "blaze-ui-server <host> <websockets port> <http port> <sqlite filepath> <bndb dir>"
       P.error "Invalid args"
-  Db.init $ cfg ^. #sqliteFilePath
+  conn <- Db.init $ cfg ^. #sqliteFilePath
   void . forkIO $ WebServer.run cfg
-  Server.run cfg
+  Server.run cfg conn
+  putText "Closing database connection"
+  Db.close conn

@@ -127,7 +127,8 @@ data PilType t = TBool
 
                | TArray (TArrayOp t)
                | TRecord [(BitOffset, t)]
-               
+
+               | TUnit
                -- Bottom is labeled with error info
                | TBottom Sym
                | TFunction (TFunctionOp t)
@@ -165,6 +166,7 @@ convertPilType = \case
   Ch.TArray l t -> TArray $ TArrayOp l t
   Ch.TRecord xs -> TRecord (HashMap.toList xs)
   Ch.TBottom (Ch.Sym s) -> TBottom (Sym s)
+  Ch.TUnit -> TUnit
   Ch.TFunction r xs -> TFunction $ TFunctionOp r xs
   Ch.TVBitWidth w -> TVBitWidth w
   Ch.TVLength l -> TVLength l
