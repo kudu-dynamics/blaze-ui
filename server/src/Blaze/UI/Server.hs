@@ -69,7 +69,7 @@ getSessionState sid st = atomically $ do
           (st ^. #serverConfig . #binaryManagerStorageDir)
           (sid ^. #clientId)
           (sid ^. #hostBinaryPath)
-        ss <- emptySessionState (sid ^. #hostBinaryPath) bm
+        ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn)
         modifyTVar (st ^. #binarySessions)
           $ HashMap.insert sid ss
         return (True, ss)
@@ -157,7 +157,7 @@ spawnEventHandler cid st ss = do
                   (ss ^. #binaryManager)
                   (ss ^. #binjaOutboxes)
                   (ss ^. #cfgs)
-                  (st ^. #serverConfig . #sqliteFilePath)
+                  (st ^. #dbConn)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
         void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx
@@ -175,9 +175,9 @@ app st pconn = case splitPath of
     path = WS.requestPath $ WS.pendingRequest pconn
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
 
-run :: ServerConfig -> IO ()
-run cfg = do
-  st <- initAppState cfg
+run :: ServerConfig -> Db.Conn -> IO ()
+run cfg conn = do
+  st <- initAppState cfg conn
   putText $ "Starting Blaze UI Server at "
     <> serverHost cfg
     <> ":"

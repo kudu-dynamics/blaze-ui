@@ -34,12 +34,12 @@ tryRemoveFile p = removeFile p `catch` ignore
     ignore :: SomeException -> IO ()
     ignore _ = return ()
 
-mockEventLoopCtx :: IO EventLoopCtx
-mockEventLoopCtx = EventLoopCtx cid hpath
+mockEventLoopCtx :: Db.Conn -> IO EventLoopCtx
+mockEventLoopCtx conn = EventLoopCtx cid hpath
   <$> atomically (BM.create bmdir cid hpath)
   <*> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
-  <*> emptySystemTempFile "blazeTest"
+  <*> newTMVarIO conn
   where
     bmdir = "/tmp/blaze/bm"
     hpath = "/tmp/blaze/spec"
@@ -47,15 +47,12 @@ mockEventLoopCtx = EventLoopCtx cid hpath
 
 mockEventLoop :: EventLoop a -> IO a
 mockEventLoop m = do
-  ctx' <- mockEventLoopCtx
-  Db.init $ ctx' ^. #sqliteFilePath
+  dbFile <- emptySystemTempFile "blazeTest"
+  conn <- Db.init dbFile
+  ctx' <- mockEventLoopCtx conn
   (Right r) <- runEventLoop m ctx'
-  clean ctx'
-  return r
-
-clean :: EventLoopCtx -> IO ()
-clean = tryRemoveFile . view #sqliteFilePath
-  
+  tryRemoveFile dbFile
+  return r 
 
 spec :: Spec
 spec = describe "Blaze.UI.Db" $ do
