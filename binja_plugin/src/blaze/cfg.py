@@ -42,6 +42,7 @@ from .types import (
     CfgId,
     CfNode,
     EnterFuncNode,
+    Function,
     LeaveFuncNode,
     MenuOrder,
     ServerCfg,
@@ -91,6 +92,19 @@ def is_call_node(node: CfNode) -> bool:
     return node['tag'] == 'Call'
 
 
+def is_plt_call_node(bv: BinaryView, call_node: CallNode) -> bool:
+    if call_node['callDest']['tag'] == 'CallFunc':
+      func = cast(Function, call_node['callDest']['contents'])
+      in_plt = any([sec.name == '.plt.sec' for sec in bv.get_sections_at(func['address'])])
+      return in_plt
+    else:
+      return False
+
+
+def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
+    return not is_plt_call_node(bv, call_node)
+
+
 def format_block_header(node: CfNode) -> str:
     node_id = node['contents']['uuid']
     node_tag = node['tag']
@@ -119,7 +133,7 @@ def format_block_header(node: CfNode) -> str:
 
 
 class ICFGFlowGraph(FlowGraph):
-    def __init__(self, _bv: BinaryView, cfg: Cfg, cfg_id: CfgId):
+    def __init__(self, bv: BinaryView, cfg: Cfg, cfg_id: CfgId):
         super().__init__()
         self.pil_icfg: Cfg = cfg
         self.pil_icfg_id: CfgId = cfg_id
@@ -136,7 +150,10 @@ class ICFGFlowGraph(FlowGraph):
                 fg_node.lines += nodeData
 
             if node['tag'] == 'Call':
+              if is_expandable_call_node(bv, cast(CallNode, node['contents'])):
                 fg_node.highlight = HighlightStandardColor.YellowHighlightColor
+              else:
+                fg_node.highlight = HighlightStandardColor.BlackHighlightColor
             elif node['tag'] == 'EnterFunc':
                 fg_node.highlight = HighlightStandardColor.GreenHighlightColor
             elif node['tag'] == 'LeaveFunc':
@@ -210,7 +227,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             BNAction(
                 'Blaze', 'Expand Call Node', MenuOrder.EARLY,
                 activate=self.context_menu_action_expand_call,
-                isValid=self._clicked_node_is_call_node,
+                isValid=self._clicked_node_is_expandable_call_node,
             ),
             BNAction(
                 'Blaze', 'Save ICfg Snapshot', MenuOrder.EARLY,
@@ -485,15 +502,18 @@ class ICFGWidget(FlowGraphWidget, QObject):
     def get_cf_node(self, node: FlowGraphNode) -> Optional[CfNode]:
         return self.blaze_instance.graph.node_mapping.get(node)
 
-    def _clicked_node_is_call_node(self, ctx: UIActionContext) -> bool:
+    def _clicked_node_is_expandable_call_node(self, _ctx: UIActionContext) -> bool:
         '''
         Helper function for checking if the node just clicked is a call node
         Used for context menu validation
         '''
         if isinstance(self.clicked_node, FlowGraphNode):
             cf_node = self.get_cf_node(self.clicked_node)
-            return cf_node is not None and is_call_node(cf_node)
-
+            return (cf_node is not None and 
+                    is_call_node(cf_node) and 
+                    is_expandable_call_node(self.blaze_instance.bv, 
+                                            cast(CallNode, 
+                                            cf_node['contents'])))
         return False
 
 
