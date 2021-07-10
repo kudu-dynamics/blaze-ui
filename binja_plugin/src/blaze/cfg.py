@@ -94,11 +94,12 @@ def is_call_node(node: CfNode) -> bool:
 
 def is_plt_call_node(bv: BinaryView, call_node: CallNode) -> bool:
     if call_node['callDest']['tag'] == 'CallFunc':
-      func = cast(Function, call_node['callDest']['contents'])
-      in_plt = any([sec.name == '.plt.sec' for sec in bv.get_sections_at(func['address'])])
-      return in_plt
+        func = cast(Function, call_node['callDest']['contents'])
+        in_plt = any([sec.name in ('.plt', '.plt.got', '.plt.sec') 
+                      for sec in bv.get_sections_at(func['address'])])
+        return in_plt
     else:
-      return False
+        return False
 
 
 def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
