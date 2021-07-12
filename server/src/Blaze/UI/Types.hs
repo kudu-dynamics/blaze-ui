@@ -66,6 +66,7 @@ data BinjaToServer = BSConnect
                    | BSCfgExpandCall
                      { cfgId :: CfgId
                      , callNode :: CallNode ()
+                     , targetAddress :: Word64
                      }
                    | BSCfgRemoveBranch
                      { cfgId :: CfgId
