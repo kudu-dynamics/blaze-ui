@@ -212,6 +212,7 @@ class BinjaToServer(BinjaToServerTotal, total=False):
     edge: Optional[Tuple[CfNode, CfNode]]
     snapshotMsg: Optional[SnapshotBinjaToServer]
     node: Optional[CfNode]
+    targetAddress: Optional[Word64]
 
 
 class BinjaMessage(TypedDict):
