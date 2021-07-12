@@ -126,6 +126,7 @@ def get_target_address(call_dest: CallDest) -> Optional[Address]:
     else:
         return None
 
+
 def format_block_header(node: CfNode) -> str:
     node_id = node['contents']['uuid']
     node_tag = node['tag']
