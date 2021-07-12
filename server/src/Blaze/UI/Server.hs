@@ -212,7 +212,7 @@ autosaveCfg cid pcfg = getCfgType cid >>= \case
     bid <- getBranchId cid
     Db.modifyBranchTree bid $ Snapshot.addChild cid autoCid
     CfgUI.addCfg autoCid pcfg
-    Db.saveNewCfg_ bid autoCid pcfg
+    Db.saveNewCfg_ bid autoCid pcfg Snapshot.Autosave
     return $ Just autoCid
 
 -- | Used after `autosaveCfg`. If second CfgId is Nothing, just send first.
