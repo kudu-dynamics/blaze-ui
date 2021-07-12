@@ -186,14 +186,14 @@ def format_block_header(node: CfNode) -> DisassemblyTextLine:
 
         tokens += [
             InstructionTextToken(
-                InstructionTextTokenType.PossibleAddressToken,
-                hex(node_contents['prevCtx']['func']['address']),
+                InstructionTextTokenType.CodeSymbolToken,
+                node_contents['prevCtx']['func']['name'],
                 value=node_contents['prevCtx']['func']['address'],
             ),
             InstructionTextToken(InstructionTextTokenType.TextToken, ' -> '),
             InstructionTextToken(
-                InstructionTextTokenType.PossibleAddressToken,
-                hex(node_contents['nextCtx']['func']['address']),
+                InstructionTextTokenType.CodeSymbolToken,
+                node_contents['nextCtx']['func']['name'],
                 value=node_contents['nextCtx']['func']['address'],
             ),
         ]
@@ -207,19 +207,19 @@ def format_block_header(node: CfNode) -> DisassemblyTextLine:
             ]
         else:
             tokens = [
-                InstructionTextToken(InstructionTextTokenType.KeywordToken, 'Leave '),
+                InstructionTextToken(InstructionTextTokenType.KeywordToken, 'Return '),
             ]
 
         tokens += [
             InstructionTextToken(
-                InstructionTextTokenType.PossibleAddressToken,
-                hex(node_contents['nextCtx']['func']['address']),
+                InstructionTextTokenType.CodeSymbolToken,
+                node_contents['nextCtx']['func']['name'],
                 value=node_contents['nextCtx']['func']['address'],
             ),
             InstructionTextToken(InstructionTextTokenType.TextToken, ' <- '),
             InstructionTextToken(
-                InstructionTextTokenType.PossibleAddressToken,
-                hex(node_contents['prevCtx']['func']['address']),
+                InstructionTextTokenType.CodeSymbolToken,
+                node_contents['prevCtx']['func']['name'],
                 value=node_contents['prevCtx']['func']['address'],
             ),
         ]
