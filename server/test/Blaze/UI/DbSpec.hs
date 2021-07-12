@@ -5,6 +5,7 @@ import qualified Blaze.Import.CallGraph as CG
 import Blaze.Import.Cfg (CfgImporter (getCfg))
 import Blaze.Import.Source.BinaryNinja (BNImporter (BNImporter))
 import Blaze.Types.Import (ImportResult (ImportResult))
+import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Db as Db
 import Blaze.UI.Prelude hiding (ignore)
 import Blaze.UI.Types
@@ -64,7 +65,7 @@ spec = describe "Blaze.UI.Db" $ do
     selectDive <- runIO $ fromJust <$> CG.getFunction imp 0x804e080
     (ImportResult _ originalCfg _) <- runIO $ fromJust <$> getCfg imp selectDive
     mRetrievedCfg <- runIO . mockEventLoop $ do
-      Db.saveNewCfg_ bid cid originalCfg
+      Db.saveNewCfg_ bid cid originalCfg Snapshot.Immutable
       Db.getCfg cid
 
     it "Should save and retrieve a pil cfg" $ do
@@ -74,7 +75,7 @@ spec = describe "Blaze.UI.Db" $ do
       let firstCfg = Cfg.removeEdges
             (Set.toList $ Cfg.succEdges (originalCfg ^. #root) originalCfg)
             originalCfg
-      Db.saveNewCfg_ bid cid firstCfg
+      Db.saveNewCfg_ bid cid firstCfg Snapshot.Immutable
       Db.setCfg cid originalCfg
       Db.getCfg cid
 
