@@ -22,6 +22,7 @@ import qualified Blaze.UI.Types.Db as Db
 import Blaze.UI.Types.BinaryManager (BinaryManager, BinaryManagerStorageDir(BinaryManagerStorageDir))
 import Blaze.UI.Types.Session (SessionId, ClientId)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
+import Blaze.Pretty (Token)
 
 
 data BinjaMessage a = BinjaMessage
@@ -41,17 +42,13 @@ data ServerToBinja = SBLogInfo { message :: Text }
                            -- So plugin can easily warn if it's out of date
                            , bndbHash :: BinaryHash
                            -- TODO: send cfg with text
-                           , cfg :: CfgTransport [Text]
+                           , cfg :: CfgTransport [[Token]]
                            }
 
                    | SBSnapshot { snapshotMsg :: Snapshot.ServerToBinja }
                      
                    | SBNoop
-                   deriving (Eq, Ord, Show, Generic)
-
-instance ToJSON ServerToBinja
-instance FromJSON ServerToBinja
-
+                   deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
 
 data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
@@ -85,10 +82,7 @@ data BinjaToServer = BSConnect
 
                    | BSNoop
 
-                   deriving (Eq, Ord, Show, Generic)
-
-instance ToJSON BinjaToServer
-instance FromJSON BinjaToServer
+                   deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
 
 data FunctionDescriptor = FunctionDescriptor
   { name :: Text

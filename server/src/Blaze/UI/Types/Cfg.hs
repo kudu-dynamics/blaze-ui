@@ -6,7 +6,7 @@ import Blaze.Types.Pil (Stmt)
 import Blaze.Types.Cfg ( CfNode, CfEdge(CfEdge), Cfg )
 import qualified Blaze.Graph as G
 import qualified Data.HashMap.Strict as HashMap
-import Blaze.Pretty (pretty)
+import Blaze.Pretty (Token, tokenize)
 import Blaze.Cfg.Interprocedural (
   InterCfg,
   unInterCfg,
@@ -36,11 +36,11 @@ data CfgTransport a = CfgTransport
   , nodes :: [(CfNode (), CfNode a)]
   } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, Functor)
 
-convertInterCfg :: InterCfg -> CfgTransport [Text]
+convertInterCfg :: InterCfg -> CfgTransport [[Token]]
 convertInterCfg = convertPilCfg . unInterCfg
 
-convertPilCfg :: Cfg [Stmt] -> CfgTransport [Text]
-convertPilCfg = toTransport $ fmap pretty
+convertPilCfg :: Cfg [Stmt] -> CfgTransport [[Token]]
+convertPilCfg = toTransport $ fmap tokenize
 
 toTransport :: forall a b. (a -> b) -> Cfg a -> CfgTransport b
 toTransport f pcfg = CfgTransport
