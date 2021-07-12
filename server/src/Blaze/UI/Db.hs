@@ -17,7 +17,7 @@ import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot ( BranchId
                                    , BranchTree
                                    , SnapshotInfo(SnapshotInfo)
-                                   , SnapshotType(Autosave)
+                                   , SnapshotType(Immutable)
                                    )
 import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Graph as Graph
@@ -53,18 +53,18 @@ saveNewCfgAndBranch clientId' hpath bhash originFuncAddr' originFuncName' pcfg =
   cid <- liftIO randomIO
   bid <- liftIO randomIO
   utc <- liftIO getCurrentTime
-  saveNewCfg_ bid cid pcfg
+  saveNewCfg_ bid cid pcfg Immutable
   let b = Snapshot.singletonBranch hpath bhash originFuncAddr' originFuncName' Nothing cid
-          $ SnapshotInfo Nothing utc utc Snapshot.Autosave
+          $ SnapshotInfo Nothing utc utc Snapshot.Immutable
   saveNewBranch_ bid clientId' hpath bhash b
   return (bid, cid, b)
 
 -- | use `saveNewCfgAndBranch` instead
-saveNewCfg_ :: MonadDb m => BranchId -> CfgId -> PilCfg -> m ()
-saveNewCfg_ bid cid cfg = withDb $ do
+saveNewCfg_ :: MonadDb m => BranchId -> CfgId -> PilCfg -> SnapshotType -> m ()
+saveNewCfg_ bid cid cfg snaptype = withDb $ do
   utc <- liftIO getCurrentTime
   insert_ cfgTable
-    [ SavedCfg cid bid Nothing utc utc Autosave . Blob $ Cfg.toTransport identity cfg ]
+    [ SavedCfg cid bid Nothing utc utc snaptype . Blob $ Cfg.toTransport identity cfg ]
 
 setCfgAttr :: (MonadDb m, SqlType a)
            => Selector SavedCfg a
