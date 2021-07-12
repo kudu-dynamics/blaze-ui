@@ -55,7 +55,7 @@ saveNewCfgAndBranch clientId' hpath bhash originFuncAddr' originFuncName' pcfg =
   utc <- liftIO getCurrentTime
   saveNewCfg_ bid cid pcfg
   let b = Snapshot.singletonBranch hpath bhash originFuncAddr' originFuncName' Nothing cid
-          $ SnapshotInfo Nothing utc utc Snapshot.Autosave
+          $ SnapshotInfo Nothing utc utc Snapshot.Immutable
   saveNewBranch_ bid clientId' hpath bhash b
   return (bid, cid, b)
 
