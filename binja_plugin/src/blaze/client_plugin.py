@@ -38,6 +38,7 @@ from .types import (
     CfgId,
     ServerCfg,
     ServerToBinja,
+    SnapshotBinjaToServer,
     SnapshotServerToBinja,
 )
 
@@ -82,6 +83,9 @@ class BlazeInstance():
 
     def send(self, msg: BinjaToServer):
         self.blaze.send(self.bv, msg)
+
+    def get_bv_key(self) -> str:
+        return bv_key(self.bv)
 
     def with_bndb_hash(self, callback: Callable[[BinaryHash], None]) -> None:
         def set_hash_and_do_callback(h: BinaryHash) -> None:
@@ -252,6 +256,7 @@ class BlazePlugin():
         log.debug('Creating new blaze instance for BV: %r', bv)
         instance = BlazeInstance(bv, self)
         BlazePlugin.instances[instance_key] = instance
+
         return instance
 
     def send(self, bv: BinaryView, msg: BinjaToServer) -> None:
@@ -353,6 +358,7 @@ class BlazePlugin():
             bndb_hash = cast(BinaryHash, msg.get('bndbHash'))
             cfg = cast(ServerCfg, msg.get('cfg'))
             self.icfg_dock_widget.icfg_widget.set_icfg(cfg_id, cfg_from_server(cfg))
+            self.snaptree_dock_widget.snaptree_widget.focus_icfg(cfg_id)
 
         elif tag == 'SBSnapshot':
             snap_msg = cast(SnapshotServerToBinja, msg.get('snapshotMsg'))
