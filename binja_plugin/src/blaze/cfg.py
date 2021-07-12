@@ -4,16 +4,21 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, cast
 
 import binaryninjaui
 from binaryninja import BinaryView
-from binaryninja.enums import BranchType, DeadStoreElimination, EdgePenStyle, HighlightStandardColor, ThemeColor
+from binaryninja.enums import (
+    BranchType,
+    EdgePenStyle,
+    HighlightStandardColor,
+    InstructionTextTokenType,
+    ThemeColor,
+)
 from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphEdge, FlowGraphNode
+from binaryninja.function import DisassemblyTextLine, InstructionTextToken
 from binaryninja.interaction import (
     AddressField,
     MessageBoxButtonResult,
     MessageBoxButtonSet,
     MessageBoxIcon,
-    get_address_input,
     get_form_input,
-    get_text_line_input,
     show_message_box,
 )
 from binaryninjaui import (
@@ -53,6 +58,7 @@ from .types import (
     MenuOrder,
     ServerCfg,
     SnapshotBinjaToServer,
+    tokens_from_server,
 )
 from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge
 
@@ -105,8 +111,11 @@ def is_indirect_call(call_node: CallNode) -> bool:
 def is_plt_call_node(bv: BinaryView, call_node: CallNode) -> bool:
     if call_node['callDest']['tag'] == 'CallFunc':
         func = cast(Function, call_node['callDest']['contents'])
-        in_plt = any([sec.name in ('.plt', '.plt.got', '.plt.sec') 
-                      for sec in bv.get_sections_at(func['address'])])
+        in_plt = any(
+            [
+                sec.name in ('.plt', '.plt.got', '.plt.sec')
+                for sec in bv.get_sections_at(func['address'])
+            ])
         return in_plt
     else:
         return False
@@ -127,31 +136,98 @@ def get_target_address(call_dest: CallDest) -> Optional[Address]:
         return None
 
 
-def format_block_header(node: CfNode) -> str:
+def format_block_header(node: CfNode) -> DisassemblyTextLine:
     node_id = node['contents']['uuid']
     node_tag = node['tag']
 
+    tokens: List[InstructionTextToken]
+
     if node_tag == 'BasicBlock':
         node_contents = cast(BasicBlockNode, node['contents'])
-        return f'{node_contents["start"]:#x} (id {node_id}) BasicBlockNode' if VERBOSE else f'{node_contents["start"]:#x}'
+        tokens = [
+            InstructionTextToken(
+                InstructionTextTokenType.PossibleAddressToken,
+                hex(node_contents['start']),
+                value=node_contents['start'],
+            ),
+        ]
+        if VERBOSE:
+            tokens += [
+                InstructionTextToken(InstructionTextTokenType.TextToken, f' (id {node_id}) '),
+                InstructionTextToken(InstructionTextTokenType.KeywordToken, 'BasicBlocknode'),
+            ]
 
     elif node_tag == 'Call':
         node_contents = cast(CallNode, node['contents'])
-        return f'{node_contents["start"]:#x} (id {node_id}) CallNode' if VERBOSE else f'{node_contents["start"]:#x} Call'
+        tokens = [
+            InstructionTextToken(
+                InstructionTextTokenType.PossibleAddressToken,
+                hex(node_contents['start']),
+                value=node_contents['start'],
+            ),
+        ]
+        if VERBOSE:
+            tokens += [
+                InstructionTextToken(InstructionTextTokenType.TextToken, f' (id {node_id}) '),
+                InstructionTextToken(InstructionTextTokenType.KeywordToken, 'CallNode'),
+            ]
 
     elif node_tag == 'EnterFunc':
         node_contents = cast(EnterFuncNode, node['contents'])
-        prevFun = node_contents['prevCtx']['func']['name']
-        nextFun = node_contents['nextCtx']['func']['name']
-        return f'(id {node_id}) EnterFuncNode {prevFun} -> {nextFun}' if VERBOSE else f'Enter {prevFun} -> {nextFun}'
+        if VERBOSE:
+            tokens = [
+                InstructionTextToken(InstructionTextTokenType.TextToken, f'(id {node_id}) '),
+                InstructionTextToken(InstructionTextTokenType.KeywordToken, 'EnterFuncNode '),
+            ]
+        else:
+            tokens = [
+                InstructionTextToken(InstructionTextTokenType.KeywordToken, 'Enter '),
+            ]
 
-    if node_tag == 'LeaveFunc':
+        tokens += [
+            InstructionTextToken(
+                InstructionTextTokenType.PossibleAddressToken,
+                hex(node_contents['prevCtx']['func']['address']),
+                value=node_contents['prevCtx']['func']['address'],
+            ),
+            InstructionTextToken(InstructionTextTokenType.TextToken, ' -> '),
+            InstructionTextToken(
+                InstructionTextTokenType.PossibleAddressToken,
+                hex(node_contents['nextCtx']['func']['address']),
+                value=node_contents['nextCtx']['func']['address'],
+            ),
+        ]
+
+    elif node_tag == 'LeaveFunc':
         node_contents = cast(LeaveFuncNode, node['contents'])
-        prevFun = node_contents['prevCtx']['func']['name']
-        nextFun = node_contents['nextCtx']['func']['name']
-        return f'(id {node_id}) LeaveFuncNode {nextFun} <- {prevFun}' if VERBOSE else f'Leave {nextFun} <- {prevFun}'
+        if VERBOSE:
+            tokens = [
+                InstructionTextToken(InstructionTextTokenType.TextToken, f'(id {node_id}) '),
+                InstructionTextToken(InstructionTextTokenType.KeywordToken, 'LeaveFuncNode '),
+            ]
+        else:
+            tokens = [
+                InstructionTextToken(InstructionTextTokenType.KeywordToken, 'Leave '),
+            ]
 
-    assert False, f'Inexaustive match on CFNode? tag={node["tag"]}'
+        tokens += [
+            InstructionTextToken(
+                InstructionTextTokenType.PossibleAddressToken,
+                hex(node_contents['nextCtx']['func']['address']),
+                value=node_contents['nextCtx']['func']['address'],
+            ),
+            InstructionTextToken(InstructionTextTokenType.TextToken, ' <- '),
+            InstructionTextToken(
+                InstructionTextTokenType.PossibleAddressToken,
+                hex(node_contents['prevCtx']['func']['address']),
+                value=node_contents['prevCtx']['func']['address'],
+            ),
+        ]
+
+    else:
+        assert False, f'Inexaustive match on CFNode? tag={node["tag"]}'
+
+    return DisassemblyTextLine(tokens)
 
 
 class ICFGFlowGraph(FlowGraph):
@@ -168,14 +244,14 @@ class ICFGFlowGraph(FlowGraph):
             self.node_mapping[fg_node] = node
 
             fg_node.lines = [format_block_header(node)]
-            if (nodeData := node.get('contents', {}).get('nodeData', None)):
-                fg_node.lines += nodeData
+            tokenized_lines = node['contents']['nodeData']
+            fg_node.lines += [tokens_from_server(line) for line in tokenized_lines]
 
             if node['tag'] == 'Call':
-              if is_expandable_call_node(bv, cast(CallNode, node['contents'])):
-                fg_node.highlight = HighlightStandardColor.YellowHighlightColor
-              else:
-                fg_node.highlight = HighlightStandardColor.BlackHighlightColor
+                if is_expandable_call_node(bv, cast(CallNode, node['contents'])):
+                    fg_node.highlight = HighlightStandardColor.YellowHighlightColor
+                else:
+                    fg_node.highlight = HighlightStandardColor.BlackHighlightColor
             elif node['tag'] == 'EnterFunc':
                 fg_node.highlight = HighlightStandardColor.GreenHighlightColor
             elif node['tag'] == 'LeaveFunc':
@@ -327,10 +403,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         node = deepcopy(cf_node)
         node['contents']['nodeData'] = []
         self.blaze_instance.send(
-            BinjaToServer(
-                tag='BSCfgFocus',
-                cfgId=self.blaze_instance.graph.pil_icfg_id,
-                node=node))
+            BinjaToServer(tag='BSCfgFocus', cfgId=self.blaze_instance.graph.pil_icfg_id, node=node))
 
     def expand_call(self, node: CallNode):
         '''
@@ -350,16 +423,17 @@ class ICFGWidget(FlowGraphWidget, QObject):
             if get_form_input([addr_field], 'Call Target'):
                 target_addr = addr_field.result
                 self.blaze_instance.send(
-                BinjaToServer(
-                    tag='BSCfgExpandCall',
-                    cfgId=self.blaze_instance.graph.pil_icfg_id,
-                    callNode=call_node,
-                    targetAddress=target_addr))
+                    BinjaToServer(
+                        tag='BSCfgExpandCall',
+                        cfgId=self.blaze_instance.graph.pil_icfg_id,
+                        callNode=call_node,
+                        targetAddress=target_addr))
         else:
             maybe_target_addr = get_target_address(call_node['callDest'])
             # This should never happen. Call nodes with indirect calls are handled differently.
             if maybe_target_addr is None:
-                log.error('Could not get target address for call node at 0x%08x', call_node['start'])
+                log.error(
+                    'Could not get target address for call node at 0x%08x', call_node['start'])
 
             target_addr = cast(Address, maybe_target_addr)
 
@@ -550,11 +624,11 @@ class ICFGWidget(FlowGraphWidget, QObject):
         '''
         if isinstance(self.clicked_node, FlowGraphNode):
             cf_node = self.get_cf_node(self.clicked_node)
-            return (cf_node is not None and 
-                    is_call_node(cf_node) and 
-                    is_expandable_call_node(self.blaze_instance.bv, 
-                                            cast(CallNode, 
-                                            cf_node['contents'])))
+            return (cf_node is not None and \
+                    is_call_node(cf_node) and
+                    is_expandable_call_node(
+                        self.blaze_instance.bv,
+                        cast(CallNode, cf_node['contents'])))
         return False
 
 

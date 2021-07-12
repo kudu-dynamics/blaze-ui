@@ -3,10 +3,8 @@
 import enum
 from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict, Union, cast
 
-# T = TypeVar('T')
-# TypedDict cannot be polymorphic/generic
-# See https://github.com/python/mypy/issues/3863
-T = List[str]
+from binaryninja.enums import InstructionTextTokenContext, InstructionTextTokenType
+from binaryninja.function import DisassemblyTextLine, InstructionTextToken
 
 Address = int
 Word64 = int
@@ -54,12 +52,56 @@ class CallDest(TypedDict):
     contents: Union[Address, Function, PilExpr, List[PilExpr]]
 
 
+TokenType = Literal['TextToken', 'InstructionToken', 'OperandSeparatorToken', 'RegisterToken',
+                    'IntegerToken', 'PossibleAddressToken', 'BeginMemoryOperandToken',
+                    'EndMemoryOperandToken', 'FloatingPointToken', 'AnnotationToken',
+                    'CodeRelativeAddressToken', 'ArgumentNameToken', 'HexDumpByteValueToken',
+                    'HexDumpSkippedByteToken', 'HexDumpInvalidByteToken', 'HexDumpTextToken',
+                    'OpcodeToken', 'StringToken', 'CharacterConstantToken', 'KeywordToken',
+                    'TypeNameToken', 'FieldNameToken', 'NameSpaceToken', 'NameSpaceSeparatorToken',
+                    'TagToken', 'StructOffsetToken', 'StructOffsetByteValueToken',
+                    'StructureHexDumpTextToken', 'GotoLabelToken', 'CommentToken',
+                    'PossibleValueToken', 'PossibleValueTypeToken', 'ArrayIndexToken',
+                    'IndentationToken', 'CodeSymbolToken', 'DataSymbolToken', 'LocalVariableToken',
+                    'ImportToken', 'AddressDisplayToken', 'IndirectImportToken',
+                    'ExternalSymbolToken']
+
+TokenContext = Literal['NoTokenContext', 'ocalVariableTokenContext', 'DataVariableTokenContext',
+                       'unctionReturnTokenContext', 'InstructionAddressTokenContext',
+                       'LInstructionIndexTokenContext',]
+
+
+class Token(TypedDict):
+    tokenType: TokenType
+    text: str
+    value: int
+    size: int
+    operand: int
+    context: TokenContext
+    address: int
+
+
+def tokens_from_server(ts: List[Token]) -> DisassemblyTextLine:
+    tokens = [
+        InstructionTextToken(
+            token_type=getattr(InstructionTextTokenType, t['tokenType']),
+            text=t['text'],
+            value=t['value'],
+            size=t['size'],
+            operand=t['operand'],
+            context=getattr(InstructionTextTokenContext, t['context']),
+            address=t['address'],
+        ) for t in ts
+    ]
+    return DisassemblyTextLine(tokens)
+
+
 class BasicBlockNode(TypedDict):
     uuid: UUID
     ctx: Ctx
     start: Address
     end: Address
-    nodeData: T
+    nodeData: List[List[Token]]
 
 
 class CallNode(TypedDict):
@@ -67,21 +109,21 @@ class CallNode(TypedDict):
     ctx: Ctx
     start: Address
     callDest: CallDest
-    nodeData: T
+    nodeData: List[List[Token]]
 
 
 class EnterFuncNode(TypedDict):
     uuid: UUID
     prevCtx: Ctx
     nextCtx: Ctx
-    nodeData: T
+    nodeData: List[List[Token]]
 
 
 class LeaveFuncNode(TypedDict):
     uuid: UUID
     prevCtx: Ctx
     nextCtx: Ctx
-    nodeData: T
+    nodeData: List[List[Token]]
 
 
 CfNodeUnion = Union[BasicBlockNode, CallNode, EnterFuncNode, LeaveFuncNode]
