@@ -263,7 +263,7 @@ sendLatestBinarySnapshots = do
 -- | Called whenever snapshots change.
 -- TODO: change to `sendLatestBinarySnapshots` when frontend is ready to handle it
 sendLatestSnapshots :: EventLoop ()
-sendLatestSnapshots = sendLatestClientSnapshots
+sendLatestSnapshots = sendLatestBinarySnapshots
 
 ------------------------------------------
 --- main event handler
