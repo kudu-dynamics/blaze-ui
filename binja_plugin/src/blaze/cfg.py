@@ -346,7 +346,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             extra={'node': call_node})
 
         if is_indirect_call(node):
-            addr_field = AddressField('Function Address (hex)')
+            addr_field = AddressField('Function (start address or name)', self.blaze_instance.bv)
             if get_form_input([addr_field], 'Call Target'):
                 target_addr = addr_field.result
                 self.blaze_instance.send(
