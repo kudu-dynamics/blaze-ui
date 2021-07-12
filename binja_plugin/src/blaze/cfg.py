@@ -4,12 +4,16 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, cast
 
 import binaryninjaui
 from binaryninja import BinaryView
-from binaryninja.enums import BranchType, EdgePenStyle, HighlightStandardColor, ThemeColor
+from binaryninja.enums import BranchType, DeadStoreElimination, EdgePenStyle, HighlightStandardColor, ThemeColor
 from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphEdge, FlowGraphNode
 from binaryninja.interaction import (
+    AddressField,
     MessageBoxButtonResult,
     MessageBoxButtonSet,
     MessageBoxIcon,
+    get_address_input,
+    get_form_input,
+    get_text_line_input,
     show_message_box,
 )
 from binaryninjaui import (
@@ -34,8 +38,10 @@ else:
 from .types import (
     BINARYNINJAUI_CUSTOM_EVENT,
     UUID,
+    Address,
     BasicBlockNode,
     BinjaToServer,
+    CallDest,
     CallNode,
     CfEdge,
     Cfg,
@@ -92,6 +98,10 @@ def is_call_node(node: CfNode) -> bool:
     return node['tag'] == 'Call'
 
 
+def is_indirect_call(call_node: CallNode) -> bool:
+    return call_node['callDest']['tag'] == 'CallExpr'
+
+
 def is_plt_call_node(bv: BinaryView, call_node: CallNode) -> bool:
     if call_node['callDest']['tag'] == 'CallFunc':
         func = cast(Function, call_node['callDest']['contents'])
@@ -105,6 +115,16 @@ def is_plt_call_node(bv: BinaryView, call_node: CallNode) -> bool:
 def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
     return not is_plt_call_node(bv, call_node)
 
+
+def get_target_address(call_dest: CallDest) -> Optional[Address]:
+    dest_tag = call_dest['tag']
+    if dest_tag == 'CallAddr':
+        return cast(Address, call_dest['contents'])
+    elif dest_tag == 'CallFunc':
+        func = cast(Function, call_dest['contents'])
+        return func['address']
+    else:
+        return None
 
 def format_block_header(node: CfNode) -> str:
     node_id = node['contents']['uuid']
@@ -324,11 +344,30 @@ class ICFGWidget(FlowGraphWidget, QObject):
             call_node['start'],
             extra={'node': call_node})
 
-        self.blaze_instance.send(
-            BinjaToServer(
-                tag='BSCfgExpandCall',
-                cfgId=self.blaze_instance.graph.pil_icfg_id,
-                callNode=call_node))
+        if is_indirect_call(node):
+            addr_field = AddressField('Function Address (hex)')
+            if get_form_input([addr_field], 'Call Target'):
+                target_addr = addr_field.result
+                self.blaze_instance.send(
+                BinjaToServer(
+                    tag='BSCfgExpandCall',
+                    cfgId=self.blaze_instance.graph.pil_icfg_id,
+                    callNode=call_node,
+                    targetAddress=target_addr))
+        else:
+            maybe_target_addr = get_target_address(call_node['callDest'])
+            # This should never happen. Call nodes with indirect calls are handled differently.
+            if maybe_target_addr is None:
+                log.error('Could not get target address for call node at 0x%08x', call_node['start'])
+
+            target_addr = cast(Address, maybe_target_addr)
+
+            self.blaze_instance.send(
+                BinjaToServer(
+                    tag='BSCfgExpandCall',
+                    cfgId=self.blaze_instance.graph.pil_icfg_id,
+                    callNode=call_node,
+                    targetAddress=target_addr))
 
     def context_menu_action_prune(self, context: UIActionContext):
         '''

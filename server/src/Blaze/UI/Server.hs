@@ -39,6 +39,7 @@ import Blaze.UI.Types.Session ( SessionId
                               , ClientId
                               , mkSessionId
                               )
+import Blaze.Function (Function)
 
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
@@ -161,7 +162,7 @@ spawnEventHandler cid st ss = do
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
         void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx
-      
+
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
       putText "Spawned event handlers"
 
@@ -289,7 +290,7 @@ getCfgBinaryView :: CfgId -> EventLoop (BNBinaryView, BinaryHash)
 getCfgBinaryView cid = Db.getCfgBinaryHash cid >>= \case
   Nothing ->
     logError $ "Could not find binary hash version for cfg: " <> show cid
-    
+
   Just h -> do
     bm <- view #binaryManager <$> ask
     BM.loadBndb bm h >>= either (logError . show) (return . (,h))
@@ -315,12 +316,17 @@ getBranchId cid = Db.getCfgBranchId cid >>= \case
   Nothing -> logError $ "Could not find branch id for: " <> show cid
   Just bid -> return bid
 
+getTargetFunc :: BNBinaryView -> Address -> EventLoop Function
+getTargetFunc bv addr = liftIO (CG.getFunction bv addr) >>= \case
+  Nothing -> logError $ "Could not find function at address: " <> show addr
+  Just func -> return func
+
 mainEventLoop :: Event -> EventLoop ()
 mainEventLoop (BinjaEvent msg) = handleBinjaEvent msg
 
 handleBinjaEvent :: BinjaToServer -> EventLoop ()
 handleBinjaEvent = \case
-  BSConnect -> debug "Binja explicitly connected"  
+  BSConnect -> debug "Binja explicitly connected"
   BSTextMessage t -> do
     debug $ "Message from binja: " <> t
     sendToBinja $ SBLogInfo "Got hello. Thanks."
@@ -332,7 +338,7 @@ handleBinjaEvent = \case
       n <- liftIO randomIO :: EventLoop Int
       sendToBinja . SBLogInfo
         $ "Here is your important integer: " <> show n
-      
+
   BSTypeCheckFunction bhash addr -> do
     bv <- getBinaryView bhash
     etr <- getFunctionTypeReport bv (fromIntegral addr)
@@ -371,12 +377,12 @@ handleBinjaEvent = \case
               (func ^. #address)
               (func ^. #name)
               pcfg
-            CfgUI.addCfg cid pcfg 
+            CfgUI.addCfg cid pcfg
             sendLatestSnapshots
             sendToBinja . SBCfg cid bhash $ convertPilCfg pcfg
         debug "Created new branch and added auto-cfg."
 
-  BSCfgExpandCall cid callNode -> do
+  BSCfgExpandCall cid callNode targetAddr -> do
     (bv, bhash) <- getCfgBinaryView cid
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
     cfg <- getCfg cid
@@ -386,7 +392,9 @@ handleBinjaEvent = \case
           -- TODO: fix issue #160 so we can just send `CallNode ()` to expandCall
       Just (Cfg.Call fullCallNode) -> do
         let bs = ICfg.mkBuilderState (BNImporter bv)
-        mCfg' <- liftIO . ICfg.build bs $ ICfg.expandCall (InterCfg cfg) fullCallNode
+        targetFunc <- getTargetFunc bv (fromIntegral targetAddr)
+        mCfg' <- liftIO . ICfg.build bs $
+          ICfg.expandCall (InterCfg cfg) fullCallNode targetFunc
 
         case mCfg' of
           Left err ->
@@ -400,7 +408,7 @@ handleBinjaEvent = \case
               >>= sendCfgAndSnapshots bhash prunedCfg cid
       Just _ -> do
         sendToBinja . SBLogError $ "Node must be a CallNode"
-    
+
   BSCfgRemoveBranch cid (node1, node2) -> do
     debug "Binja remove branch"
     -- TODO: just get the bhash since bv isn't used
@@ -452,9 +460,9 @@ handleBinjaEvent = \case
 
   BSSnapshot snapMsg -> case snapMsg of
     Snapshot.GetAllBranchesOfClient -> sendLatestClientSnapshots
-      
+
     Snapshot.GetAllBranchesOfBinary -> sendLatestBinarySnapshots
-      
+
     -- returns all branches for function
     Snapshot.GetBranchesOfFunction funcAddr -> do
       ctx <- ask
@@ -466,7 +474,7 @@ handleBinjaEvent = \case
         . SBSnapshot
         . Snapshot.BranchesOfFunction funcAddr
         . fmap (over _2 Snapshot.toTransport)
-        $ branches  
+        $ branches
 
     Snapshot.RenameBranch bid name' -> do
       Db.setBranchName bid (Just name')
@@ -479,7 +487,7 @@ handleBinjaEvent = \case
       cfg <- getCfg cid
       sendToBinja . SBCfg cid bhash . convertPilCfg $ cfg
 
-        
+
     Snapshot.SaveSnapshot cid -> do
       Db.setCfgSnapshotType cid Snapshot.Immutable
 
