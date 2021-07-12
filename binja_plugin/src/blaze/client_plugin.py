@@ -21,6 +21,8 @@ from binaryninja.interaction import (
 from binaryninjaui import DockHandler, ViewFrame
 from websockets.client import WebSocketClientProtocol
 
+REQUEST_ACTIVITY_TIMEOUT = 5
+
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
     from PySide6.QtCore import Qt  # type: ignore
     from PySide6.QtWidgets import QApplication, QWidget  # type: ignore
@@ -221,7 +223,7 @@ class BlazePlugin():
                 'hostBinaryPath': og_filename,
                 'clientId': self.settings.client_id,
             }
-            r = requests.post(uri, data=post_data, files=files)
+            r = requests.post(uri, data=post_data, files=files, timeout=REQUEST_ACTIVITY_TIMEOUT)
 
         if r.status_code != requests.codes['ok']:
             log.error(
@@ -272,7 +274,7 @@ class BlazePlugin():
         uri = f'ws://{self.settings.host}:{self.settings.ws_port}/binja'
 
         log.info('connecting to websocket...')
-        async with websockets.connect(uri) as websocket:
+        async with websockets.connect(uri, max_size=None) as websocket:  # type: ignore
             log.info('connected to websocket')
             consumer_task = asyncio.ensure_future(self.recv_loop(websocket))
             producer_task = asyncio.ensure_future(self.send_loop(websocket))
