@@ -61,7 +61,7 @@ from .types import (
     SnapshotBinjaToServer,
     tokens_from_server,
 )
-from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge
+from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge, try_debug
 
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance
@@ -344,7 +344,7 @@ class ICFGFlowGraph(FlowGraph):
         log.debug('%r initialized', self)
 
     def __del__(self):
-        log.debug(f'Deleting {self!r}')
+        try_debug(log, 'Deleting %r', self)
 
     @property
     def nodes(self) -> Dict[UUID, CfNode]:
@@ -419,7 +419,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         log.debug('%r initialized', self)
 
     def __del__(self):
-        log.debug(f'Deleting {self!r}')
+        try_debug(log, 'Deleting %r', self)
 
     def set_icfg(self, cfg_id: CfgId, cfg: Cfg):
         self.blaze_instance.graph = ICFGFlowGraph(self.blaze_instance.bv, cfg, cfg_id)
@@ -647,9 +647,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 log.warning('Did not double-click on a call node')
                 return
 
-            if not (is_expandable_call_node(
-                    self.blaze_instance.bv,
-                    cast(CallNode, node['contents']))):
+            if not (is_expandable_call_node(self.blaze_instance.bv, cast(CallNode,
+                                                                         node['contents']))):
                 log.warning('Call node not expandable')
                 return
 
@@ -737,7 +736,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         log.debug('%r initialized', self)
 
     def __del__(self):
-        log.debug(f'Deleting {self!r}')
+        try_debug(log, 'Deleting %r', self)
 
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
         log.debug('ViewFrame changed to %r', view_frame)

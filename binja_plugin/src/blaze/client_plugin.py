@@ -43,6 +43,7 @@ from .types import (
     SnapshotBinjaToServer,
     SnapshotServerToBinja,
 )
+from .util import try_debug
 
 BLAZE_WS_SHUTDOWN = 'SHUTDOWN'
 
@@ -81,7 +82,7 @@ class BlazeInstance():
         log.debug('%r initialized', self)
 
     def __del__(self):
-        log.debug(f'Deleting {self!r}')
+        try_debug(log, 'Deleting %r', self)
 
     def send(self, msg: BinjaToServer):
         self.blaze.send(self.bv, msg)
@@ -165,7 +166,7 @@ class BlazePlugin():
         log.debug('%r initialized', self)
 
     def __del__(self):
-        log.debug(f'Deleting {self!r}')
+        try_debug(log, 'Deleting %r', self)
 
     def _init_thread(self) -> None:
         if not self.websocket_thread or not self.websocket_thread.is_alive():
