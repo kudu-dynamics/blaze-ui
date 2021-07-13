@@ -188,7 +188,7 @@ testCallOp :: [(Int, Pil.Statement SymExpression)]
 testCallOp =
   [ ( 5
     , Pil.Call $ Pil.CallOp
-      { dest = Pil.CallAddr 777
+      { dest = Pil.CallAddr $ Pil.ConstFuncPtrOp 777 Nothing
       , name = Just "exit"
       , params =
         [ Ch.InfoExpression

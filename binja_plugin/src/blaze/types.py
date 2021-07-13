@@ -46,10 +46,13 @@ class Ctx(TypedDict):
 
 PilExpr = object
 
+class ConstFuncPtrOp(TypedDict):
+    address: Address
+    symbol: Optional[Symbol]
 
 class CallDest(TypedDict):
     tag: Literal['CallAddr', 'CallFunc', 'CallExpr', 'CallExprs']
-    contents: Union[Address, Function, PilExpr, List[PilExpr]]
+    contents: Union[ConstFuncPtrOp, Function, PilExpr, List[PilExpr]]
 
 
 TokenType = Literal['TextToken', 'InstructionToken', 'OperandSeparatorToken', 'RegisterToken',
