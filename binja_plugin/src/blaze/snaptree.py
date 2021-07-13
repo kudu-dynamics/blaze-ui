@@ -102,7 +102,7 @@ class SnapTreeColumn(enum.Enum):
     TIME = "Timestamp"
 
 
-ITEM_DATE_FMT_IN = 'YYYY-DD-SSTHH:MM:SS.ffffff'
+ITEM_DATE_FMT_IN = 'YYYY-DD-SSTHH:MM:SS'
 ITEM_DATE_FMT_OUT = '%b %d, %Y @ %H:%M:%S'
 
 def servertime_to_clienttime(timestamp) -> str:
