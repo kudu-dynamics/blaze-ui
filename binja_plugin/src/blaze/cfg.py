@@ -121,6 +121,7 @@ def is_plt_call_node(bv: BinaryView, call_node: CallNode) -> bool:
     else:
         return False
 
+
 def is_got_call_node(bv: BinaryView, call_node: CallNode) -> bool:
     if call_node['callDest']['tag'] == 'CallAddr':
         func_ptr = cast(ConstFuncPtrOp, call_node['callDest']['contents'])
@@ -242,6 +243,61 @@ def format_block_header(node: CfNode) -> DisassemblyTextLine:
         assert False, f'Inexaustive match on CFNode? tag={node["tag"]}'
 
     return DisassemblyTextLine(tokens)
+
+
+def export_cfg_to_python(cfg: Cfg) -> str:
+    '''
+    Exports `cfg` to python code which draws `cfg` using the binaryninja.flowgraph API
+    TODO: add flags that preserve node bodies' text, block highlights, edge types
+
+    Example:
+
+    >>> print(
+    ...     blaze.cfg.export_cfg_to_python(
+    ...         blaze.client_plugin.blaze.icfg_dock_widget.icfg_widget.blaze_instance.graph.pil_icfg))
+    '''
+    def idf(n: CfNode) -> str:
+        s = n["contents"].get("start")
+        if s is not None:
+            return hex(s)[2:] + ('_call' if n['tag'] == 'Call' else '')
+        else:
+            return n["contents"]["uuid"].replace('-', '_')
+
+    lines = [
+        'from binaryninja.enums import BranchType',
+        'from binaryninja.flowgraph import FlowGraph, FlowGraphNode',
+        'from binaryninja.interaction import show_graph_report',
+        '',
+        'g = FlowGraph()',
+        '',
+        '',
+        'def node(name):',
+        '    n = FlowGraphNode(g)',
+        '    n.lines = [name]',
+        '    g.append(n)',
+        '    return n',
+        '',
+        '',
+        'def edge(a, b):',
+        '    a.add_outgoing_edge(BranchType.UnconditionalBranch, b)',
+        '',
+        '',
+    ]
+
+    for (node_id, node) in cfg['nodes'].items():
+        lines.append(f'node_{idf(node)} = node({idf(node)!r})')
+
+    lines.append('')
+
+    for edge in cfg['edges']:
+        from_id = idf(edge['src'])
+        to_id = idf(edge['dst'])
+        lines.append(f'edge(node_{from_id}, node_{to_id})')
+
+    lines.append('')
+    lines.append('show_graph_report("Blaze ICFG", g)')
+
+    return '\n'.join(lines)
 
 
 class ICFGFlowGraph(FlowGraph):
