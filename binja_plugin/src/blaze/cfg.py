@@ -141,7 +141,8 @@ def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
 def get_target_address(call_dest: CallDest) -> Optional[Address]:
     dest_tag = call_dest['tag']
     if dest_tag == 'CallAddr':
-        return cast(Address, call_dest['contents'])
+        func_ptr = cast(ConstFuncPtrOp, call_dest['contents'])
+        return func_ptr['address']
     elif dest_tag == 'CallFunc':
         func = cast(Function, call_dest['contents'])
         return func['address']
