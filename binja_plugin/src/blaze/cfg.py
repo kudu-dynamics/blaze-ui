@@ -52,6 +52,7 @@ from .types import (
     Cfg,
     CfgId,
     CfNode,
+    ConstFuncPtrOp,
     EnterFuncNode,
     Function,
     LeaveFuncNode,
@@ -120,9 +121,21 @@ def is_plt_call_node(bv: BinaryView, call_node: CallNode) -> bool:
     else:
         return False
 
+def is_got_call_node(bv: BinaryView, call_node: CallNode) -> bool:
+    if call_node['callDest']['tag'] == 'CallAddr':
+        func_ptr = cast(ConstFuncPtrOp, call_node['callDest']['contents'])
+        in_got = any(
+            [
+                sec.name in ('.got', '.got.plt', '.got.sec')
+                for sec in bv.get_sections_at(func_ptr['address'])
+            ])
+        return in_got
+    else:
+        return False
+
 
 def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
-    return not is_plt_call_node(bv, call_node)
+    return not is_plt_call_node(bv, call_node) and not is_got_call_node(bv, call_node)
 
 
 def get_target_address(call_dest: CallDest) -> Optional[Address]:
