@@ -309,7 +309,13 @@ class ICFGFlowGraph(FlowGraph):
 
         nodes: Dict[UUID, FlowGraphNode] = {}
 
-        for (node_id, node) in cfg['nodes'].items():
+        # Root node MUST be added to the FlowGraph first, otherwise weird FlowGraphWidget
+        # layout issues may ensue
+        source_nodes: List[Tuple[UUID, CfNode]]
+        source_nodes = [(cfg['root'], cfg['nodes'][cfg['root']])]
+        source_nodes += [(k, v) for (k, v) in cfg['nodes'].items() if k != cfg['root']]
+
+        for (node_id, node) in source_nodes:
             fg_node = FlowGraphNode(self)
             self.node_mapping[fg_node] = node
 
