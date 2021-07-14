@@ -18,6 +18,8 @@ from binaryninjaui import (
     ViewFrame,
 )
 
+from .util import try_debug
+
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
     from PySide6.QtCore import Qt  # type: ignore
     from PySide6.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
@@ -46,7 +48,7 @@ from .types import (
     SnapshotInfo,
     SnapshotServerToBinja,
 )
-from .util import BNAction, add_actions, bind_actions
+from .util import BNAction, add_actions, bind_actions, try_debug
 
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance
@@ -105,6 +107,7 @@ class SnapTreeColumn(enum.Enum):
 ITEM_DATE_FMT_IN = 'YYYY-DD-SSTHH:MM:SS'
 ITEM_DATE_FMT_OUT = '%b %d, %Y @ %H:%M:%S'
 
+
 def servertime_to_clienttime(timestamp) -> str:
     """
     Timestamps coming in from the server have 7-digit floats instead of 6
@@ -115,6 +118,7 @@ def servertime_to_clienttime(timestamp) -> str:
     else:
         # TODO non-Zulu time
         return timestamp[:len(ITEM_DATE_FMT_IN)]
+
 
 class SnapTreeItem(QTreeWidgetItem):
     def __init__(
@@ -145,7 +149,7 @@ class SnapTreeItem(QTreeWidgetItem):
         for i, col in enumerate(SnapTreeColumn):
             try:
                 txt = self.get_text_for_col(col)
-            except Exception as e: # the show must go on
+            except Exception as e:  # the show must go on
                 txt = ''
             self.setText(i, txt)
 
@@ -194,8 +198,7 @@ class SnapTreeBranchListItem(SnapTreeItem):
 
         self.snap_name = self.snap_info.get('name')
         self.timestamp = datetime.fromisoformat(
-            servertime_to_clienttime(self.snap_info.get('modified'))
-        )
+            servertime_to_clienttime(self.snap_info.get('modified')))
         self.update_text()
 
         children = item.get('children')
@@ -217,12 +220,9 @@ class SnapTreeBranchListItem(SnapTreeItem):
 
     def get_text_for_col(self, col: SnapTreeColumn) -> str:
         return {
-            SnapTreeColumn.NAME:
-                self.snap_name or f'Snapshot {self.cfg_id[-6:]}',
-            SnapTreeColumn.TYPE:
-                self.snap_info.get('snapshotType'),
-            SnapTreeColumn.TIME:
-                self.timestamp.strftime(ITEM_DATE_FMT_OUT),
+            SnapTreeColumn.NAME: self.snap_name or f'Snapshot {self.cfg_id[-6:]}',
+            SnapTreeColumn.TYPE: self.snap_info.get('snapshotType'),
+            SnapTreeColumn.TIME: self.timestamp.strftime(ITEM_DATE_FMT_OUT),
         }.get(col) or ""
 
 
@@ -250,8 +250,7 @@ class SnapTreeBranchItem(SnapTreeItem):
         self.root_snap = branch_data['snapshotInfo'][self.cfg_id]
         self.snap_name = self.root_snap.get('name')
         self.timestamp = datetime.fromisoformat(
-            servertime_to_clienttime(self.root_snap.get('modified'))
-        )
+            servertime_to_clienttime(self.root_snap.get('modified')))
         self.update_text()
 
         list_item = branch_to_list_item(branch_data)
@@ -373,7 +372,7 @@ class SnapTreeWidget(QTreeWidget):
         log.debug('%r initialized', self)
 
     def __del__(self):
-        log.debug(f'Deleting {self!r}')
+        try_debug(log, 'Deleting %r', self)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         if event.button() != Qt.LeftButton:
@@ -475,7 +474,8 @@ class SnapTreeWidget(QTreeWidget):
         if not confirm:
             return
 
-        snap_msg = SnapshotBinjaToServer(tag='RenameSnapshot', cfgId=item.cfg_id, name=text_in.result)
+        snap_msg = SnapshotBinjaToServer(
+            tag='RenameSnapshot', cfgId=item.cfg_id, name=text_in.result)
         self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snap_msg))
 
     def delete_snapshot(self, cfg_id) -> None:
@@ -516,7 +516,7 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
         log.debug('%r initialized', self)
 
     def __del__(self):
-        log.debug(f'Deleting {self!r}')
+        try_debug(log, 'Deleting %r', self)
 
     def handle_server_msg(self, snap_msg: SnapshotServerToBinja):
         '''
@@ -530,9 +530,7 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
 
         if snap_msg.get('tag') == 'BranchesOfBinary':
             if snap_msg.get('hostBinaryPath') == self.blaze_instance.get_bv_key():
-                self.snaptree_widget.update_branches_of_binary(
-                    cast(list, snap_msg.get('branches'))
-                )
+                self.snaptree_widget.update_branches_of_binary(cast(list, snap_msg.get('branches')))
 
         # self.snaptree_widget._debug_()
 

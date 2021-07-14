@@ -46,3 +46,17 @@ def fix_flowgraph_edge(edge: FlowGraphEdge, swapped: bool) -> FlowGraphEdge:
         edge.source, edge.target = edge.target, edge.source
 
     return edge
+
+
+def try_log(log, level, error_level, *args, **kwargs) -> None:
+    try:
+        log.log(level, *args, **kwargs)
+    except Exception:
+        try:
+            log.log(error_level, 'error logging', exc_info=True)
+        except Exception:
+            pass
+
+
+def try_debug(log, *args, **kwargs) -> None:
+    try_log(log, _logging.DEBUG, _logging.DEBUG, *args, **kwargs)

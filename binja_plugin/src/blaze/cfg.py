@@ -61,7 +61,7 @@ from .types import (
     SnapshotBinjaToServer,
     tokens_from_server,
 )
-from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge
+from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge, try_debug
 
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance
@@ -120,6 +120,7 @@ def is_plt_call_node(bv: BinaryView, call_node: CallNode) -> bool:
         return in_plt
     else:
         return False
+
 
 def is_got_call_node(bv: BinaryView, call_node: CallNode) -> bool:
     if call_node['callDest']['tag'] == 'CallAddr':
@@ -244,6 +245,61 @@ def format_block_header(node: CfNode) -> DisassemblyTextLine:
     return DisassemblyTextLine(tokens)
 
 
+def export_cfg_to_python(cfg: Cfg) -> str:
+    '''
+    Exports `cfg` to python code which draws `cfg` using the binaryninja.flowgraph API
+    TODO: add flags that preserve node bodies' text, block highlights, edge types
+
+    Example:
+
+    >>> print(
+    ...     blaze.cfg.export_cfg_to_python(
+    ...         blaze.client_plugin.blaze.icfg_dock_widget.icfg_widget.blaze_instance.graph.pil_icfg))
+    '''
+    def idf(n: CfNode) -> str:
+        s = n["contents"].get("start")
+        if s is not None:
+            return hex(s)[2:] + ('_call' if n['tag'] == 'Call' else '')
+        else:
+            return n["contents"]["uuid"].replace('-', '_')
+
+    lines = [
+        'from binaryninja.enums import BranchType',
+        'from binaryninja.flowgraph import FlowGraph, FlowGraphNode',
+        'from binaryninja.interaction import show_graph_report',
+        '',
+        'g = FlowGraph()',
+        '',
+        '',
+        'def node(name):',
+        '    n = FlowGraphNode(g)',
+        '    n.lines = [name]',
+        '    g.append(n)',
+        '    return n',
+        '',
+        '',
+        'def edge(a, b):',
+        '    a.add_outgoing_edge(BranchType.UnconditionalBranch, b)',
+        '',
+        '',
+    ]
+
+    for (node_id, node) in cfg['nodes'].items():
+        lines.append(f'node_{idf(node)} = node({idf(node)!r})')
+
+    lines.append('')
+
+    for edge in cfg['edges']:
+        from_id = idf(edge['src'])
+        to_id = idf(edge['dst'])
+        lines.append(f'edge(node_{from_id}, node_{to_id})')
+
+    lines.append('')
+    lines.append('show_graph_report("Blaze ICFG", g)')
+
+    return '\n'.join(lines)
+
+
 class ICFGFlowGraph(FlowGraph):
     def __init__(self, bv: BinaryView, cfg: Cfg, cfg_id: CfgId):
         super().__init__()
@@ -253,7 +309,13 @@ class ICFGFlowGraph(FlowGraph):
 
         nodes: Dict[UUID, FlowGraphNode] = {}
 
-        for (node_id, node) in cfg['nodes'].items():
+        # Root node MUST be added to the FlowGraph first, otherwise weird FlowGraphWidget
+        # layout issues may ensue
+        source_nodes: List[Tuple[UUID, CfNode]]
+        source_nodes = [(cfg['root'], cfg['nodes'][cfg['root']])]
+        source_nodes += [(k, v) for (k, v) in cfg['nodes'].items() if k != cfg['root']]
+
+        for (node_id, node) in source_nodes:
             fg_node = FlowGraphNode(self)
             self.node_mapping[fg_node] = node
 
@@ -282,7 +344,7 @@ class ICFGFlowGraph(FlowGraph):
         log.debug('%r initialized', self)
 
     def __del__(self):
-        log.debug(f'Deleting {self!r}')
+        try_debug(log, 'Deleting %r', self)
 
     @property
     def nodes(self) -> Dict[UUID, CfNode]:
@@ -357,7 +419,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         log.debug('%r initialized', self)
 
     def __del__(self):
-        log.debug(f'Deleting {self!r}')
+        try_debug(log, 'Deleting %r', self)
 
     def set_icfg(self, cfg_id: CfgId, cfg: Cfg):
         self.blaze_instance.graph = ICFGFlowGraph(self.blaze_instance.bv, cfg, cfg_id)
@@ -585,9 +647,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 log.warning('Did not double-click on a call node')
                 return
 
-            if not (is_expandable_call_node(
-                    self.blaze_instance.bv,
-                    cast(CallNode, node['contents']))):
+            if not (is_expandable_call_node(self.blaze_instance.bv, cast(CallNode,
+                                                                         node['contents']))):
                 log.warning('Call node not expandable')
                 return
 
@@ -675,7 +736,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         log.debug('%r initialized', self)
 
     def __del__(self):
-        log.debug(f'Deleting {self!r}')
+        try_debug(log, 'Deleting %r', self)
 
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
         log.debug('ViewFrame changed to %r', view_frame)
