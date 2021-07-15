@@ -1,4 +1,10 @@
 {
     "stubPath": "./stubs",
-    "reportUnnecessaryComparison": "warning"
+    "reportUnnecessaryComparison": "warning",
+    "reportOptionalSubscript": "error",
+    "reportOptionalMemberAccess": "error",
+    "reportOptionalCall": "error",
+    "reportOptionalIterable": "error",
+    "reportOptionalContextManager": "error",
+    "reportOptionalOperand": "error"
 }
