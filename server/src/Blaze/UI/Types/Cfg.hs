@@ -64,7 +64,7 @@ toTransport f pcfg = CfgTransport
     edges' = fmap Cfg.fromLEdge . G.edges $ pcfg ^. #graph
 
 
-fromTransport :: Ord a => CfgTransport a -> Cfg a
+fromTransport :: (Eq a, Hashable a) => CfgTransport a -> Cfg a
 fromTransport t = Cfg.mkCfg root' nodes' edges'
   where
     nodeMap = HashMap.fromList $ t ^. #nodes
