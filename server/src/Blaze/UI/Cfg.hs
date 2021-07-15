@@ -12,7 +12,7 @@ import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.Types.Cfg (Cfg)
 
 -- | Changes CfgId key in graph cache.
--- Used whenever an auto-saved cfg is turned into a snapshot
+-- Used whenever an auto-saved cfg is turned into a snapshot.
 changeCfgId :: CfgId -> CfgId -> EventLoop ()
 changeCfgId oldCid newCid = do
   cfgMapTVar <- view #cfgs <$> ask
