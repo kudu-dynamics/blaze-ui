@@ -4,7 +4,7 @@ import Blaze.Prelude hiding (Symbol)
 
 import qualified Blaze.Graph as G
 import Blaze.Graph (Graph)
-import qualified Data.Set as Set
+import qualified Data.HashSet as HashSet
 
 
 data GraphTransport e attr n = GraphTransport
@@ -15,7 +15,7 @@ data GraphTransport e attr n = GraphTransport
 graphToTransport :: Graph e attr n g => g -> GraphTransport e attr n
 graphToTransport g = GraphTransport edges' nodes'
   where
-    nodes' = fmap (\n -> (n, G.getNodeAttr n g)) . Set.toList . G.nodes $ g
+    nodes' = fmap (\n -> (n, G.getNodeAttr n g)) . HashSet.toList . G.nodes $ g
     edges' = G.toTupleLEdge <$> G.edges g
 
 graphFromTransport :: Graph e attr n g => GraphTransport e attr n -> g

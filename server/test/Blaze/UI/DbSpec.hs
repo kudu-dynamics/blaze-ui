@@ -17,7 +17,7 @@ import qualified Data.HashMap.Strict as HashMap
 import System.Directory (removeFile)
 import System.IO.Temp (emptySystemTempFile)
 import Blaze.Types.Cfg as Cfg
-import qualified Data.Set as Set
+import qualified Data.HashSet as HashSet
 import Blaze.Util.Spec (mkUuid1)
 import qualified Blaze.UI.Types.BinaryManager as BM
 import Blaze.UI.Types.Session (ClientId(ClientId))
@@ -73,7 +73,7 @@ spec = describe "Blaze.UI.Db" $ do
 
     mRetrievedCfg2 <- runIO . mockEventLoop $ do
       let firstCfg = Cfg.removeEdges
-            (Set.toList $ Cfg.succEdges (originalCfg ^. #root) originalCfg)
+            (HashSet.toList $ Cfg.succEdges (originalCfg ^. #root) originalCfg)
             originalCfg
       Db.saveNewCfg_ bid cid firstCfg Snapshot.Immutable
       Db.setCfg cid originalCfg

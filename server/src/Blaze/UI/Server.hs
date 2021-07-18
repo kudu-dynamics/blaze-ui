@@ -20,7 +20,7 @@ import qualified Blaze.Types.Cfg as Cfg
 import Blaze.Types.Cfg (Cfg, PilCfg)
 import qualified Blaze.Cfg.Analysis as CfgA
 import qualified Blaze.UI.Cfg as CfgUI
-import qualified Data.Set as Set
+import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
 import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
 import qualified Blaze.Cfg.Interprocedural as ICfg
@@ -500,12 +500,12 @@ handleBinjaEvent = \case
       logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
       sendLatestSnapshots
 
-printPrunedStats :: (Ord a, MonadIO m) => Cfg a -> Cfg a -> m ()
+printPrunedStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printPrunedStats a b = do
   putText "------------- Prune -----------"
-  putText $ "Before: " <> show (Set.size $ G.nodes a) <> " nodes, "
+  putText $ "Before: " <> show (HashSet.size $ G.nodes a) <> " nodes, "
     <> show (length $ G.edges a) <> " edges"
-  putText $ "After: " <> show (Set.size $ G.nodes b) <> " nodes, "
+  putText $ "After: " <> show (HashSet.size $ G.nodes b) <> " nodes, "
     <> show (length $ G.edges b) <> " edges"
 
 
