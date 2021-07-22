@@ -48,15 +48,36 @@ def fix_flowgraph_edge(edge: FlowGraphEdge, swapped: bool) -> FlowGraphEdge:
     return edge
 
 
-def try_log(log, level, error_level, *args, **kwargs) -> None:
+def try_log(log: _logging.Logger, level: int, error_level: int, msg: str, *args, **kwargs) -> None:
+    '''
+    Attempt to log `msg` with arguments `args` to log `log` at level `level`.
+    If there are any exceptions, log the traceback to the same log but at level
+    `error_level`. Note that ``msg % args`` is evaluated eagerly (though exceptions
+    will be caught), even if the message would be ignored by the logger or its
+    handlers
+    '''
+
     try:
-        log.log(level, *args, **kwargs)
+        if args:
+            msg = msg % args
     except Exception:
         try:
-            log.log(error_level, 'error logging', exc_info=True)
+            log.log(error_level, 'error formatting log message', exc_info=True)
         except Exception:
             pass
+    else:
+        try:
+            log.log(level, msg, **kwargs)
+        except Exception:
+            try:
+                log.log(error_level, 'error logging', exc_info=True)
+            except Exception:
+                pass
 
 
-def try_debug(log, *args, **kwargs) -> None:
-    try_log(log, _logging.DEBUG, _logging.DEBUG, *args, **kwargs)
+def try_debug(log: _logging.Logger, msg: str, *args, **kwargs) -> None:
+    '''
+    Like `try_log`, but fix both levels to `logging.DEBUG`
+    '''
+
+    try_log(log, _logging.DEBUG, _logging.DEBUG, msg, *args, **kwargs)
