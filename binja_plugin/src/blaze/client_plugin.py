@@ -98,9 +98,6 @@ class BlazeInstance():
         if self.bndbHash == None or self.bv.file.analysis_changed or self.bv.file.modified:
             u = UploadBndb('Uploading \'' + self.bv.file.filename + '\' to Blaze server...', self.blaze, self.bv, set_hash_and_do_callback)
             u.start()
-            # t = threading.Thread(target=blaze.upload_bndb, args=(self.bv, set_hash_and_do_callback))
-            # t.start()
-            #blaze.upload_bndb(self.bv, set_hash_and_do_callback)
         else:
             callback(self.bndbHash)
 
