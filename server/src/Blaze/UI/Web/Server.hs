@@ -42,7 +42,6 @@ uploadBinary cfg = do
         . cs
         . Wai.fileContent
         $ finfo
-      liftIO $ threadDelay 60000000
       json h
       putText $ "New bndb uploaded: "
         <> HBP.toText hostBinaryPath'

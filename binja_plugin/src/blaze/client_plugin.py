@@ -224,7 +224,7 @@ class BlazePlugin():
                 'hostBinaryPath': og_filename,
                 'clientId': self.settings.client_id,
             }
-            r = requests.post(uri, data=post_data, files=files, timeout=REQUEST_ACTIVITY_TIMEOUT)
+            r = requests.post(uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
 
         if r.status_code != requests.codes['ok']:
             log.error(
