@@ -11,7 +11,7 @@ from typing import Callable, Dict, Literal, Optional, Union, cast
 import binaryninjaui
 import requests
 import websockets
-from binaryninja import BinaryView, PluginCommand
+from binaryninja import BinaryView, PluginCommand, BackgroundTaskThread
 from binaryninja.interaction import (
     MessageBoxButtonResult,
     MessageBoxButtonSet,
@@ -96,10 +96,23 @@ class BlazeInstance():
             callback(h)
 
         if self.bndbHash == None or self.bv.file.analysis_changed or self.bv.file.modified:
-            blaze.upload_bndb(self.bv, set_hash_and_do_callback)
+            u = UploadBndb('Uploading \'' + self.bv.file.filename + '\' to Blaze server...', self.blaze, self.bv, set_hash_and_do_callback)
+            u.start()
+            # t = threading.Thread(target=blaze.upload_bndb, args=(self.bv, set_hash_and_do_callback))
+            # t.start()
+            #blaze.upload_bndb(self.bv, set_hash_and_do_callback)
         else:
             callback(self.bndbHash)
 
+class UploadBndb(BackgroundTaskThread):
+    def __init__(self, msg: str, blaze: 'BlazePlugin', bv: BinaryView, callback: Callable[[BinaryHash], None]) -> None:
+        BackgroundTaskThread.__init__(self, msg, False)
+        self.bv: BinaryView = bv
+        self.blaze: 'BlazePlugin' = blaze
+        self.callback: Callable[[BinaryHash], None] = callback
+
+    def run(self):
+        self.blaze.upload_bndb(self.bv, self.callback)
 
 class BlazePlugin():
     instances: Dict[str, BlazeInstance] = {}
