@@ -11,7 +11,7 @@ from typing import Callable, Dict, Literal, Optional, Union, cast
 import binaryninjaui
 import requests
 import websockets
-from binaryninja import BinaryView, PluginCommand
+from binaryninja import BinaryView, PluginCommand, BackgroundTaskThread
 from binaryninja.interaction import (
     MessageBoxButtonResult,
     MessageBoxButtonSet,
@@ -96,10 +96,23 @@ class BlazeInstance():
             callback(h)
 
         if self.bndbHash == None or self.bv.file.analysis_changed or self.bv.file.modified:
-            blaze.upload_bndb(self.bv, set_hash_and_do_callback)
+            u = UploadBndb(
+                f'Uploading {self.bv.file.filename!r} to Blaze server...', self.blaze, self.bv,
+                set_hash_and_do_callback)
+            u.start()
         else:
             callback(self.bndbHash)
 
+
+class UploadBndb(BackgroundTaskThread):
+    def __init__(self, msg: str, blaze: 'BlazePlugin', bv: BinaryView, callback: Callable[[BinaryHash], None]) -> None:
+        BackgroundTaskThread.__init__(self, msg, False)
+        self.bv: BinaryView = bv
+        self.blaze: 'BlazePlugin' = blaze
+        self.callback: Callable[[BinaryHash], None] = callback
+
+    def run(self):
+        self.blaze.upload_bndb(self.bv, self.callback)
 
 class BlazePlugin():
     instances: Dict[str, BlazeInstance] = {}
@@ -216,7 +229,6 @@ class BlazePlugin():
         if bv.file.analysis_changed:
             bv.create_database(og_filename)
 
-        # TODO: run the following in a thread
         uri = f'http://{self.settings.host}:{self.settings.http_port}/upload'
         with open(og_filename, 'rb') as f:
             files = {'bndb': f}
@@ -224,7 +236,7 @@ class BlazePlugin():
                 'hostBinaryPath': og_filename,
                 'clientId': self.settings.client_id,
             }
-            r = requests.post(uri, data=post_data, files=files, timeout=REQUEST_ACTIVITY_TIMEOUT)
+            r = requests.post(uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
 
         if r.status_code != requests.codes['ok']:
             log.error(
