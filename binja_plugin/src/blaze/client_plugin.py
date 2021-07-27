@@ -226,7 +226,6 @@ class BlazePlugin():
         if bv.file.analysis_changed:
             bv.create_database(og_filename)
 
-        # TODO: run the following in a thread
         uri = f'http://{self.settings.host}:{self.settings.http_port}/upload'
         with open(og_filename, 'rb') as f:
             files = {'bndb': f}
