@@ -96,10 +96,13 @@ class BlazeInstance():
             callback(h)
 
         if self.bndbHash == None or self.bv.file.analysis_changed or self.bv.file.modified:
-            u = UploadBndb('Uploading \'' + self.bv.file.filename + '\' to Blaze server...', self.blaze, self.bv, set_hash_and_do_callback)
+            u = UploadBndb(
+                f'Uploading {self.bv.file.filename!r} to Blaze server...', self.blaze, self.bv,
+                set_hash_and_do_callback)
             u.start()
         else:
             callback(self.bndbHash)
+
 
 class UploadBndb(BackgroundTaskThread):
     def __init__(self, msg: str, blaze: 'BlazePlugin', bv: BinaryView, callback: Callable[[BinaryHash], None]) -> None:
