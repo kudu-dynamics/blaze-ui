@@ -1,6 +1,5 @@
 import enum
 import logging as _logging
-import os
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union, cast
 
@@ -455,7 +454,10 @@ class SnapTreeWidget(QTreeWidget):
         log.info(f'Loading snapshot for icfg {cfg_id}')
         snapshot_msg = SnapshotBinjaToServer(tag='LoadSnapshot', cfgId=cfg_id)
 
-        self.blaze_instance.blaze.icfg_dock_widget.icfg_widget.recenter_node_id = None
+        for dw in self.blaze_instance.blaze.icfg_dock_widgets[self.blaze_instance.bv_key]:
+            if dw.blaze_instance == self.blaze_instance:
+                dw.icfg_widget.recenter_node_id = None
+
         self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snapshot_msg))
 
     def get_item_for_cfg(self, cfg_id: CfgId) -> Optional[SnapTreeItem]:
@@ -504,7 +506,7 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
         DockContextHandler.__init__(self, self, name)
 
         self._view_frame: ViewFrame = view_frame
-        self.blaze_instance: Optional['BlazeInstance'] = blaze_instance
+        self.blaze_instance: 'BlazeInstance' = blaze_instance
         self.snaptree_widget = SnapTreeWidget(self, blaze_instance)  #, view_frame)
 
         layout = QVBoxLayout()  # type: ignore
@@ -524,12 +526,12 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
         '''
         if snap_msg.get('tag') == 'BranchesOfClient':
             for bpath, data in cast(ServerBranchesOfClient, snap_msg.get('branchesOfClient')):
-                if bpath == self.blaze_instance.get_bv_key():
+                if bpath == self.blaze_instance.bv_key:
                     self.snaptree_widget.update_branches_of_binary(cast(list, data))
                     break
 
         if snap_msg.get('tag') == 'BranchesOfBinary':
-            if snap_msg.get('hostBinaryPath') == self.blaze_instance.get_bv_key():
+            if snap_msg.get('hostBinaryPath') == self.blaze_instance.bv_key:
                 self.snaptree_widget.update_branches_of_binary(cast(list, snap_msg.get('branches')))
 
         # self.snaptree_widget._debug_()
@@ -537,7 +539,7 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
         self._view_frame = view_frame
         if view_frame is None:
-            self.blaze_instance = None
+            log.error('view_frame is None')
         else:
             view = view_frame.getCurrentViewInterface()
             self.blaze_instance = self.blaze_instance.blaze.ensure_instance(view.getData())

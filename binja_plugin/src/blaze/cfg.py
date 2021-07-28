@@ -254,7 +254,7 @@ def export_cfg_to_python(cfg: Cfg) -> str:
 
     >>> print(
     ...     blaze.cfg.export_cfg_to_python(
-    ...         blaze.client_plugin.blaze.icfg_dock_widget.icfg_widget.blaze_instance.graph.pil_icfg))
+    ...         blaze.client_plugin.blaze.instances[bv_key(bv)].graph.pil_icfg))
     '''
     def idf(n: CfNode) -> str:
         s = n["contents"].get("start")
@@ -421,11 +421,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
     def __del__(self):
         try_debug(log, 'Deleting %r', self)
 
-    def set_icfg(self, cfg_id: CfgId, cfg: Cfg):
-        self.blaze_instance.graph = ICFGFlowGraph(self.blaze_instance.bv, cfg, cfg_id)
-        self.setGraph(self.blaze_instance.graph)
-
     def save_icfg(self):
+        assert self.blaze_instance.graph
         cfg_id = self.blaze_instance.graph.pil_icfg_id
         snapshot_msg = SnapshotBinjaToServer(tag='SaveSnapshot', cfgId=cfg_id)
 
@@ -438,6 +435,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
         Send a request to the backend that the edge between `from_node` and
         `to_node` be pruned
         '''
+
+        assert self.blaze_instance.graph
 
         from_node = deepcopy(from_node)
         to_node = deepcopy(to_node)
@@ -462,6 +461,10 @@ class ICFGWidget(FlowGraphWidget, QObject):
             return
 
         log.debug('Recentering on UUID %r', self.recenter_node_id)
+        if not self.blaze_instance.graph:
+            log.warning('No graph set')
+            return
+
         for fg_node, cf_node in self.blaze_instance.graph.node_mapping.items():
             if cf_node['contents']['uuid'] == self.recenter_node_id:
                 log.debug('Found recenter node', extra={'node': cf_node})
@@ -476,6 +479,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
         Send a request to the backend to focus on the `CfNode`
         '''
 
+        assert self.blaze_instance.graph
+
         node = deepcopy(cf_node)
         node['contents']['nodeData'] = []
         self.blaze_instance.send(
@@ -485,6 +490,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
         '''
         Send a request to the backend that the `CallNode` `node` be expanded
         '''
+
+        assert self.blaze_instance.graph
 
         call_node = node.copy()
         call_node['nodeData'] = []
@@ -527,6 +534,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         '''
 
         log.debug('User requested prune')
+        assert self.blaze_instance.graph
 
         if self.clicked_edge is None:
             log.error('Did not right-click on an edge')
@@ -696,6 +704,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         pass
 
     def get_cf_node(self, node: FlowGraphNode) -> Optional[CfNode]:
+        assert self.blaze_instance.graph
         return self.blaze_instance.graph.node_mapping.get(node)
 
     def _clicked_node_is_expandable_call_node(self, _ctx: UIActionContext) -> bool:
@@ -721,7 +730,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         DockContextHandler.__init__(self, self, name)
 
         self._view_frame: ViewFrame = view_frame
-        self.blaze_instance: Optional['BlazeInstance'] = blaze_instance
+        self.blaze_instance: 'BlazeInstance' = blaze_instance
         self.icfg_widget: ICFGWidget = ICFGWidget(self, view_frame, self.blaze_instance)
 
         # TODO why does pyright choke on these? Idea: they're both @typing.overload
@@ -742,11 +751,12 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         log.debug('ViewFrame changed to %r', view_frame)
         self._view_frame = view_frame
         if view_frame is None:
-            self.blaze_instance = None
+            log.error('view_frame is None')
         else:
             view = view_frame.getCurrentViewInterface()
             self.blaze_instance = self.blaze_instance.blaze.ensure_instance(view.getData())
             self.icfg_widget.notifyInstanceChanged(self.blaze_instance, view_frame)
 
     def notifyOffsetChanged(self, offset: int) -> None:
+        log.debug('offset changed (bv=%r, offset=%r)', self.blaze_instance.bv, offset)
         self.icfg_widget.notifyOffsetChanged(self._view_frame, offset)

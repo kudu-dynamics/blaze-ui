@@ -1,7 +1,9 @@
 import copy
+from binaryninja import BinaryView
 import dataclasses
 import logging as _logging
-from typing import Callable, List, Optional
+from os import PathLike
+from typing import Callable, List, Optional, Union
 from binaryninja.flowgraph import FlowGraphEdge
 
 from binaryninjaui import ActionPriority, Menu, UIAction, UIActionContext, UIActionHandler
@@ -81,3 +83,8 @@ def try_debug(log: _logging.Logger, msg: str, *args, **kwargs) -> None:
     '''
 
     try_log(log, _logging.DEBUG, _logging.DEBUG, msg, *args, **kwargs)
+
+
+def bv_key(bv_or_path: Union[BinaryView, str, PathLike]) -> str:
+    path = bv_or_path.file.filename if isinstance(bv_or_path, BinaryView) else str(bv_or_path)
+    return path if path.endswith('.bndb') else path + '.bndb'
