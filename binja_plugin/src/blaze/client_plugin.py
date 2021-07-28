@@ -287,20 +287,27 @@ class BlazePlugin():
         uri = f'ws://{self.settings.host}:{self.settings.ws_port}/binja'
 
         log.info('connecting to websocket...')
-        async with websockets.connect(uri, max_size=None) as websocket:  # type: ignore
-            log.info('connected to websocket')
-            consumer_task = asyncio.ensure_future(self.recv_loop(websocket))
-            producer_task = asyncio.ensure_future(self.send_loop(websocket))
-            _, pending = await asyncio.wait(
-                [consumer_task, producer_task],
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            for task in pending:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+
+        try:
+            async with websockets.connect(uri, max_size=None) as websocket:  # type: ignore
+                log.info('connected to websocket')
+                consumer_task = asyncio.ensure_future(self.recv_loop(websocket))
+                producer_task = asyncio.ensure_future(self.send_loop(websocket))
+                _, pending = await asyncio.wait(
+                    [consumer_task, producer_task],
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in pending:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+        except Exception as e:
+            log.error("Websocket error: " + str(e))
+            return None
+
+            
 
     async def recv_loop(self, websocket: WebSocketClientProtocol) -> None:
         async for ws_msg in websocket:
