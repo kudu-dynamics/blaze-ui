@@ -287,7 +287,6 @@ class BlazePlugin():
         uri = f'ws://{self.settings.host}:{self.settings.ws_port}/binja'
 
         log.info('connecting to websocket...')
-
         try:
             async with websockets.connect(uri, max_size=None) as websocket:  # type: ignore
                 log.info('connected to websocket')
