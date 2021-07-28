@@ -114,6 +114,7 @@ class UploadBndb(BackgroundTaskThread):
     def run(self):
         self.blaze.upload_bndb(self.bv, self.callback)
 
+
 class BlazePlugin():
     instances: Dict[str, BlazeInstance] = {}
     out_queue: "queue.Queue[Union[Literal['SHUTDOWN'], BinjaMessage]]"
@@ -236,7 +237,12 @@ class BlazePlugin():
                 'hostBinaryPath': og_filename,
                 'clientId': self.settings.client_id,
             }
-            r = requests.post(uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
+            try:
+                r = requests.post(uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
+            except requests.exceptions.RequestException as e:
+                log.error('Failed to upload BNDB: ' + str(e))
+                return None
+            
 
         if r.status_code != requests.codes['ok']:
             log.error(
@@ -287,6 +293,7 @@ class BlazePlugin():
         uri = f'ws://{self.settings.host}:{self.settings.ws_port}/binja'
 
         log.info('connecting to websocket...')
+        
         async with websockets.connect(uri, max_size=None) as websocket:  # type: ignore
             log.info('connected to websocket')
             consumer_task = asyncio.ensure_future(self.recv_loop(websocket))
