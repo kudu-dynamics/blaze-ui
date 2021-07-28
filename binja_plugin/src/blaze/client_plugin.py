@@ -148,7 +148,7 @@ class BlazePlugin():
             create_icfg_widget,
             Qt.DockWidgetArea.RightDockWidgetArea,
             Qt.Orientation.Vertical,
-            False  # default visibility
+            True  # default visibility
         )
 
         log.debug('Created ICFG dock widget')
@@ -169,9 +169,9 @@ class BlazePlugin():
         self.dock_handler.addDockWidget(
             "Blaze Snapshot Tree",
             create_snaptree_widget,
-            Qt.DockWidgetArea.LeftDockWidgetArea,
+            Qt.DockWidgetArea.BottomDockWidgetArea,
             Qt.Orientation.Vertical,
-            False  # default visibility
+            True  # default visibility
         )
 
         log.debug('Created snaptree dock widget')
