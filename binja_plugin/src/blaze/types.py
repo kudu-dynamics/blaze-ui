@@ -7,6 +7,7 @@ from binaryninja.enums import InstructionTextTokenContext, InstructionTextTokenT
 from binaryninja.function import DisassemblyTextLine, InstructionTextToken
 
 Address = int
+ByteOffset = int
 Word64 = int
 UUID = str
 BranchId = UUID
@@ -50,9 +51,14 @@ class ConstFuncPtrOp(TypedDict):
     address: Address
     symbol: Optional[Symbol]
 
+class ExternPtrOp(TypedDict):
+    address: Address
+    offset: ByteOffset
+    symbol: Optional[Symbol]
+    
 class CallDest(TypedDict):
-    tag: Literal['CallAddr', 'CallFunc', 'CallExpr', 'CallExprs']
-    contents: Union[ConstFuncPtrOp, Function, PilExpr, List[PilExpr]]
+    tag: Literal['CallAddr', 'CallFunc', 'CallExpr', 'CallExprs', 'CallExtern']
+    contents: Union[ConstFuncPtrOp, Function, PilExpr, List[PilExpr], ExternPtrOp]
 
 
 TokenType = Literal['TextToken', 'InstructionToken', 'OperandSeparatorToken', 'RegisterToken',
