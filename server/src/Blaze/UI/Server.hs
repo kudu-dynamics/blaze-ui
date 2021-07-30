@@ -369,17 +369,17 @@ handleBinjaEvent = \case
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
             ctx <- ask
-            let (InterCfg pcfg) = CfgA.prune . InterCfg $ r ^. #result
+            let (InterCfg cfg) = CfgA.simplify . InterCfg $ r ^. #result
             (_bid, cid, _snapBranch) <- Db.saveNewCfgAndBranch
               (ctx ^. #clientId)
               (ctx ^. #hostBinaryPath)
               bhash
               (func ^. #address)
               (func ^. #name)
-              pcfg
-            CfgUI.addCfg cid pcfg
+              cfg
+            CfgUI.addCfg cid cfg
             sendLatestSnapshots
-            sendToBinja . SBCfg cid bhash $ convertPilCfg pcfg
+            sendToBinja . SBCfg cid bhash $ convertPilCfg cfg
         debug "Created new branch and added auto-cfg."
 
   BSCfgExpandCall cid callNode targetAddr -> do
@@ -388,7 +388,7 @@ handleBinjaEvent = \case
     cfg <- getCfg cid
     case Cfg.getFullNodeMay cfg (Cfg.Call callNode) of
       Nothing ->
-        sendToBinja . SBLogError $ "Could not find call node in Cfg"
+        sendToBinja . SBLogError $ "Could not find call node in CFG"
           -- TODO: fix issue #160 so we can just send `CallNode ()` to expandCall
       Just (Cfg.Call fullCallNode) -> do
         let bs = ICfg.mkBuilderState (BNImporter bv)
@@ -401,11 +401,11 @@ handleBinjaEvent = \case
             -- TODO: more specific error
             sendToBinja . SBLogError . show $ err
           Right (InterCfg cfg') -> do
-            let (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
+            let (InterCfg simplifiedCfg) = CfgA.simplify $ InterCfg cfg'
             -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
-            printPrunedStats cfg' prunedCfg
-            autosaveCfg cid prunedCfg
-              >>= sendCfgAndSnapshots bhash prunedCfg cid
+            printSimplifyStats cfg' simplifiedCfg
+            autosaveCfg cid simplifiedCfg
+              >>= sendCfgAndSnapshots bhash simplifiedCfg cid
       Just _ -> do
         sendToBinja . SBLogError $ "Node must be a CallNode"
 
@@ -416,13 +416,12 @@ handleBinjaEvent = \case
     cfg <- getCfg cid
     case (,) <$> Cfg.getFullNodeMay cfg node1 <*> Cfg.getFullNodeMay cfg node2 of
       Nothing -> sendToBinja
-        . SBLogError $ "Node or nodes don't exist in Cfg"
+        . SBLogError $ "Node or nodes don't exist in CFG"
       Just (fullNode1, fullNode2) -> do
-        let cfg' = G.removeEdge (G.Edge fullNode1 fullNode2) cfg
-            (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
-        printPrunedStats cfg' prunedCfg
-        autosaveCfg cid prunedCfg
-          >>= sendCfgAndSnapshots bhash prunedCfg cid
+        let InterCfg cfg' = CfgA.prune (G.Edge fullNode1 fullNode2) $ InterCfg cfg
+        printSimplifyStats cfg cfg'
+        autosaveCfg cid cfg'
+          >>= sendCfgAndSnapshots bhash cfg' cid
 
   BSCfgRemoveNode cid node' -> do
     debug "Binja remove node"
@@ -430,13 +429,13 @@ handleBinjaEvent = \case
     cfg <- getCfg cid
     case Cfg.getFullNodeMay cfg node' of
       Nothing -> sendToBinja
-        . SBLogError $ "Node doesn't exist in Cfg"
+        . SBLogError $ "Node doesn't exist in CFG"
       Just fullNode -> if fullNode == cfg ^. #root
         then sendToBinja $ SBLogError "Cannot remove root node"
         else do
           let cfg' = G.removeNode fullNode cfg
-              (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
-          printPrunedStats cfg' prunedCfg
+              InterCfg prunedCfg = CfgA.simplify $ InterCfg cfg'
+          printSimplifyStats cfg' prunedCfg
           autosaveCfg cid prunedCfg
             >>= sendCfgAndSnapshots bhash prunedCfg cid
 
@@ -446,15 +445,14 @@ handleBinjaEvent = \case
     cfg <- getCfg cid
     case Cfg.getFullNodeMay cfg node' of
       Nothing -> sendToBinja
-        . SBLogError $ "Node doesn't exist in Cfg"
+        . SBLogError $ "Node doesn't exist in CFG"
       Just fullNode -> if fullNode == cfg ^. #root
         then sendToBinja $ SBLogError "Cannot remove root node"
         else do
-          let cfg' = Cfg.focus fullNode cfg
-              (InterCfg prunedCfg) = CfgA.prune $ InterCfg cfg'
-          printPrunedStats cfg' prunedCfg
-          autosaveCfg cid prunedCfg
-            >>= sendCfgAndSnapshots bhash prunedCfg cid
+          let InterCfg cfg' = CfgA.focus fullNode $ InterCfg cfg
+          printSimplifyStats cfg cfg'
+          autosaveCfg cid cfg'
+            >>= sendCfgAndSnapshots bhash cfg' cid
 
   BSNoop -> debug "Binja noop"
 
@@ -500,9 +498,9 @@ handleBinjaEvent = \case
       logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
       sendLatestSnapshots
 
-printPrunedStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
-printPrunedStats a b = do
-  putText "------------- Prune -----------"
+printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
+printSimplifyStats a b = do
+  putText "------------- Simplify -----------"
   putText $ "Before: " <> show (HashSet.size $ G.nodes a) <> " nodes, "
     <> show (length $ G.edges a) <> " edges"
   putText $ "After: " <> show (HashSet.size $ G.nodes b) <> " nodes, "
