@@ -157,7 +157,7 @@ class BlazePlugin():
             create_icfg_widget,
             Qt.DockWidgetArea.RightDockWidgetArea,
             Qt.Orientation.Vertical,
-            False  # default visibility
+            True  # default visibility
         )
 
         log.debug('Created ICFG dock widget')
@@ -179,9 +179,9 @@ class BlazePlugin():
         self.dock_handler.addDockWidget(
             "Blaze Snapshot Tree",
             create_snaptree_widget,
-            Qt.DockWidgetArea.LeftDockWidgetArea,
+            Qt.DockWidgetArea.BottomDockWidgetArea,
             Qt.Orientation.Vertical,
-            False  # default visibility
+            True  # default visibility
         )
 
         log.debug('Created snaptree dock widget')
@@ -220,9 +220,9 @@ class BlazePlugin():
         if (not bv.file.filename.endswith('.bndb')):
             bndb_filename = bv.file.filename + '.bndb'
             if (os.path.isfile(bndb_filename)):
-                msg = f"Is it ok to overwrite existing analysis database {bndb_filename}? If not, please manually load bndb and try again."
+                msg = f"This action will overwrite the existing analysis database {bndb_filename}. If you prefer to use your existing BNDB, please open it and try again.\n\nContinue with ICFG creation?"
             else:
-                msg = f"Is it ok to save analysis database to {bndb_filename}?"
+                msg = f"This action requires generation of an analysis database (BNDB).\n\nContinue with ICFG creation?"
             to_save: Optional[MessageBoxButtonResult] = show_message_box(
                 "Blaze",
                 msg,
@@ -248,8 +248,17 @@ class BlazePlugin():
                 'hostBinaryPath': og_filename,
                 'clientId': self.settings.client_id,
             }
+<<<<<<< HEAD
             r = requests.post(
                 uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
+=======
+            try:
+                r = requests.post(uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
+            except requests.exceptions.RequestException as e:
+                log.error('Failed to upload BNDB: ' + str(e))
+                return None
+            
+>>>>>>> master
 
         if r.status_code != requests.codes['ok']:
             log.error(
@@ -300,20 +309,26 @@ class BlazePlugin():
         uri = f'ws://{self.settings.host}:{self.settings.ws_port}/binja'
 
         log.info('connecting to websocket...')
-        async with websockets.connect(uri, max_size=None) as websocket:  # type: ignore
-            log.info('connected to websocket')
-            consumer_task = asyncio.ensure_future(self.recv_loop(websocket))
-            producer_task = asyncio.ensure_future(self.send_loop(websocket))
-            _, pending = await asyncio.wait(
-                [consumer_task, producer_task],
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            for task in pending:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+        try:
+            async with websockets.connect(uri, max_size=None) as websocket:  # type: ignore
+                log.info('connected to websocket')
+                consumer_task = asyncio.ensure_future(self.recv_loop(websocket))
+                producer_task = asyncio.ensure_future(self.send_loop(websocket))
+                _, pending = await asyncio.wait(
+                    [consumer_task, producer_task],
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in pending:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+        except Exception as e:
+            log.error("Websocket error: " + str(e))
+            return None
+
+            
 
     async def recv_loop(self, websocket: WebSocketClientProtocol) -> None:
         async for ws_msg in websocket:
