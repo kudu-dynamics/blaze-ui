@@ -135,8 +135,12 @@ def is_got_call_node(bv: BinaryView, call_node: CallNode) -> bool:
         return False
 
 
+def is_extern_call_node(call_node: CallNode) -> bool:
+    return call_node['callDest']['tag'] == 'CallExtern'
+
+
 def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
-    return not is_plt_call_node(bv, call_node) and not is_got_call_node(bv, call_node)
+    return not is_plt_call_node(bv, call_node) and not is_got_call_node(bv, call_node) and not is_extern_call_node(call_node)
 
 
 def get_target_address(call_dest: CallDest) -> Optional[Address]:
@@ -404,7 +408,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 isValid=self._clicked_node_is_expandable_call_node,
             ),
             BNAction(
-                'Blaze', 'Save ICfg Snapshot', MenuOrder.EARLY,
+                'Blaze', 'Save ICFG Snapshot', MenuOrder.EARLY,
                 activate = self.context_menu_action_save_icfg_snapshot,
                 # how would you check to see an icfg is loaded?
                 isValid = lambda ctx: True,

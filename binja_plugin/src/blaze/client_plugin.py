@@ -114,6 +114,7 @@ class UploadBndb(BackgroundTaskThread):
     def run(self):
         self.blaze.upload_bndb(self.bv, self.callback)
 
+
 class BlazePlugin():
     instances: Dict[str, BlazeInstance] = {}
     out_queue: "queue.Queue[Union[Literal['SHUTDOWN'], BinjaMessage]]"
@@ -208,9 +209,9 @@ class BlazePlugin():
         if (not bv.file.filename.endswith('.bndb')):
             bndb_filename = bv.file.filename + '.bndb'
             if (os.path.isfile(bndb_filename)):
-                msg = f"Is it ok to overwrite existing analysis database {bndb_filename}? If not, please manually load bndb and try again."
+                msg = f"This action will overwrite the existing analysis database {bndb_filename}. If you prefer to use your existing BNDB, please open it and try again.\n\nContinue with ICFG creation?"
             else:
-                msg = f"Is it ok to save analysis database to {bndb_filename}?"
+                msg = f"This action requires generation of an analysis database (BNDB).\n\nContinue with ICFG creation?"
             to_save: Optional[MessageBoxButtonResult] = show_message_box(
                 "Blaze",
                 msg,
@@ -236,7 +237,12 @@ class BlazePlugin():
                 'hostBinaryPath': og_filename,
                 'clientId': self.settings.client_id,
             }
-            r = requests.post(uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
+            try:
+                r = requests.post(uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
+            except requests.exceptions.RequestException as e:
+                log.error('Failed to upload BNDB: ' + str(e))
+                return None
+            
 
         if r.status_code != requests.codes['ok']:
             log.error(
