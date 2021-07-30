@@ -248,17 +248,12 @@ class BlazePlugin():
                 'hostBinaryPath': og_filename,
                 'clientId': self.settings.client_id,
             }
-<<<<<<< HEAD
-            r = requests.post(
-                uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
-=======
             try:
                 r = requests.post(uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
             except requests.exceptions.RequestException as e:
                 log.error('Failed to upload BNDB: ' + str(e))
                 return None
             
->>>>>>> master
 
         if r.status_code != requests.codes['ok']:
             log.error(
