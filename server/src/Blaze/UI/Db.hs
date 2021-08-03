@@ -26,7 +26,7 @@ import Blaze.UI.Types.Graph (graphFromTransport, graphToTransport)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import qualified Data.HashMap.Strict as HashMap
-import Blaze.UI.Types.Db.Poi (poiTable)
+import Blaze.UI.Types.Poi (poiTable)
 
 
 init :: FilePath -> IO Conn
