@@ -36,6 +36,12 @@ saveNew cid hpath funcAddr instrAddr poiName poiDescription = withDb $ do
       poiDescription
     ]
 
+delete :: MonadDb m => PoiId -> m ()
+delete pid = withDb $
+  deleteFrom_ poiTable
+    (\poi -> poi ! #poiId .== literal pid)
+
+
 setName :: MonadDb m => PoiId -> Maybe Text -> m ()
 setName pid mname = withDb $ do
   update_ poiTable

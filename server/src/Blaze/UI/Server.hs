@@ -266,6 +266,16 @@ sendLatestBinarySnapshots = do
 sendLatestSnapshots :: EventLoop ()
 sendLatestSnapshots = sendLatestBinarySnapshots
 
+sendLatestPois :: EventLoop ()
+sendLatestPois = do
+  ctx <- ask
+  pois <- PoiDb.getPoisOfBinary (ctx ^. #clientId) (ctx ^. #hostBinaryPath)
+  sendToBinja
+    . SBPoi
+    . Poi.PoisOfBinary
+    $ pois
+
+
 ------------------------------------------
 --- main event handler
 
@@ -500,38 +510,30 @@ handleBinjaEvent = \case
       sendLatestSnapshots
 
   BSPoi poiMsg -> case poiMsg of
-    Poi.GetPoisOfBinary -> do
+    Poi.GetPoisOfBinary -> sendLatestPois
+
+    Poi.AddPoi funcAddr instrAddr poiName poiDescription -> do
       ctx <- ask
-      pois <- PoiDb.getPoisOfBinary (ctx ^. #clientId) (ctx ^. #hostBinaryPath)
-      sendToBinja
-        . SBPoi
-        . Poi.PoisOfBinary
-        $ pois
+      PoiDb.saveNew
+        (ctx ^. #clientId)
+        (ctx ^. #hostBinaryPath)
+        funcAddr
+        instrAddr
+        poiName
+        poiDescription
+      sendLatestPois
 
-    -- Snapshot.RenameBranch bid name' -> do
-    --   Db.setBranchName bid (Just name')
-    --   Db.getBranch bid >>= \case
-    --     Nothing -> logError $ "Could not find snapshot with id: " <> show bid
-    --     Just _br -> sendLatestSnapshots
+    Poi.DeletePoi pid -> do
+      PoiDb.delete pid
+      sendLatestPois
 
-    -- Snapshot.LoadSnapshot cid -> do
-    --   bhash <- getCfgBinaryHash cid
-    --   cfg <- getCfg cid
-    --   sendToBinja . SBCfg cid bhash . convertPilCfg $ cfg
+    Poi.RenamePoi pid poiName -> do
+      PoiDb.setName pid poiName
+      sendLatestPois
 
-
-    -- Snapshot.SaveSnapshot cid -> do
-    --   Db.setCfgSnapshotType cid Snapshot.Immutable
-
-    --   logInfo $ "Saved iCfg as immutable snapshot: " <> show cid
-
-    --   sendLatestSnapshots
-
-    -- Snapshot.RenameSnapshot cid name' -> do
-    --   Db.setCfgName cid name'
-    --   logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
-    --   sendLatestSnapshots
-
+    Poi.DescribePoi pid poiDescription -> do
+      PoiDb.setName pid poiDescription
+      sendLatestPois
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do

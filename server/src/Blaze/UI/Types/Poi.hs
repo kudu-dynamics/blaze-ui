@@ -33,8 +33,8 @@ data ServerToBinja
 data BinjaToServer
   = GetPoisOfBinary
   
-  | AddPoi { funcAddr :: Word64
-           , instrAddr :: Word64
+  | AddPoi { funcAddr :: Address
+           , instrAddr :: Address
            , poiName :: Maybe Text
            , poiDescription :: Maybe Text
            }
