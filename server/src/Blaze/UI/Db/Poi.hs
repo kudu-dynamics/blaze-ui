@@ -41,7 +41,6 @@ delete pid = withDb $
   deleteFrom_ poiTable
     (\poi -> poi ! #poiId .== literal pid)
 
-
 setName :: MonadDb m => PoiId -> Maybe Text -> m ()
 setName pid mname = withDb $ do
   update_ poiTable
@@ -61,4 +60,3 @@ getPoisOfBinary cid hpath = withDb . query $ do
                .&& poi ! #hostBinaryPath .== literal hpath
              )
     return poi
-
