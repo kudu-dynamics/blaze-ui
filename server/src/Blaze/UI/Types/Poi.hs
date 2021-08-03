@@ -35,8 +35,8 @@ data BinjaToServer
   
   | AddPoi { funcAddr :: Address
            , instrAddr :: Address
-           , poiName :: Maybe Text
-           , poiDescription :: Maybe Text
+           , name :: Maybe Text
+           , description :: Maybe Text
            }
 
   | DeletePoi { poiId :: PoiId }
