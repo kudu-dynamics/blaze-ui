@@ -509,7 +509,7 @@ handleBinjaEvent = \case
       logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
       sendLatestSnapshots
 
-  BSPoi poiMsg -> case poiMsg of
+  BSPoi poiMsg' -> case poiMsg' of
     Poi.GetPoisOfBinary -> sendLatestPois
 
     Poi.AddPoi funcAddr instrAddr poiName poiDescription -> do

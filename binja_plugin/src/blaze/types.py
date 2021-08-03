@@ -13,6 +13,7 @@ UUID = str
 BranchId = UUID
 CfgId = UUID
 ClientId = UUID
+PoiId = UUID
 BinaryHash = str
 HostBinaryPath = str
 
@@ -208,11 +209,11 @@ class BranchTreeListItem(TypedDict, total=True):
 BranchTreeList = List[BranchTreeListItem]
 
 
+ServerBranchesOfClient = List[Tuple[HostBinaryPath, List[Tuple[BranchId, ServerBranch]]]]
+
+
 class SnapshotServerToBinjaTotal(TypedDict, total=True):
     tag: Literal['SnapshotBranch', 'BranchesOfFunction', 'BranchesOfBinary', 'BranchesOfClient']
-
-
-ServerBranchesOfClient = List[Tuple[HostBinaryPath, List[Tuple[BranchId, ServerBranch]]]]
 
 
 class SnapshotServerToBinja(SnapshotServerToBinjaTotal, total=False):
@@ -236,8 +237,40 @@ class SnapshotBinjaToServer(SnapshotBinjaToServerTotal, total=False):
     cfgId: Optional[CfgId]
 
 
+### Poi Messages
+
+class Poi(TypedDict):
+    poiId: PoiId
+    clientId: ClientId
+    hostBinaryPath: HostBinaryPath
+    created: Any  # TODO: utc time
+    funcAddr: Address
+    instrAddr: Address
+    name: Optional[str]
+    description: Optional[str]
+
+
+class PoiServerToBinja(TypedDict):
+    pois: List[Poi]
+
+
+class PoiBinjaToServerTotal(TypedDict, total=True):
+    tag: Literal['GetPoisOfBinary', 'AddPoi', 'DeletePoi',
+                 'RenamePoi', 'DescribePoi']
+
+
+class PoiBinjaToServer(PoiBinjaToServerTotal, total=False):
+    funcAddr: Optional[Address]
+    instrAddr: Optional[Address]
+    name: Optional[str]
+    description: Optional[str]
+    poiId: Optional[PoiId]
+
+
+#########
+
 class ServerToBinjaTotal(TypedDict, total=True):
-    tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshot']
+    tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshot', 'SBPoi']
 
 
 class ServerToBinja(ServerToBinjaTotal, total=False):
@@ -246,6 +279,7 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
     cfgId: Optional[CfgId]
     cfg: Optional[ServerCfg]
     snapshotMsg: Optional[SnapshotServerToBinja]
+    poiMsg: PoiServerToBinja
 
 
 class BinjaToServerTotal(TypedDict, total=True):
