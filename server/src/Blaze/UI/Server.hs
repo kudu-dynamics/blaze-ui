@@ -40,7 +40,8 @@ import Blaze.UI.Types.Session ( SessionId
                               , mkSessionId
                               )
 import Blaze.Function (Function)
-
+import qualified Blaze.UI.Db.Poi as PoiDb
+import qualified Blaze.UI.Types.Poi as Poi
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -497,6 +498,50 @@ handleBinjaEvent = \case
       Db.setCfgName cid name'
       logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
       sendLatestSnapshots
+
+  BSPoi poiMsg -> case poiMsg of
+    Poi.GetAllPoisForBinary -> do
+      
+
+    Snapshot.GetAllBranchesOfBinary -> sendLatestBinarySnapshots
+
+    -- returns all branches for function
+    Snapshot.GetBranchesOfFunction funcAddr -> do
+      ctx <- ask
+      branches <- Db.getBranchesForFunction
+                  (ctx ^. #clientId)
+                  (ctx ^. #hostBinaryPath)
+                  (fromIntegral funcAddr)
+      sendToBinja
+        . SBSnapshot
+        . Snapshot.BranchesOfFunction funcAddr
+        . fmap (over _2 Snapshot.toTransport)
+        $ branches
+
+    Snapshot.RenameBranch bid name' -> do
+      Db.setBranchName bid (Just name')
+      Db.getBranch bid >>= \case
+        Nothing -> logError $ "Could not find snapshot with id: " <> show bid
+        Just _br -> sendLatestSnapshots
+
+    Snapshot.LoadSnapshot cid -> do
+      bhash <- getCfgBinaryHash cid
+      cfg <- getCfg cid
+      sendToBinja . SBCfg cid bhash . convertPilCfg $ cfg
+
+
+    Snapshot.SaveSnapshot cid -> do
+      Db.setCfgSnapshotType cid Snapshot.Immutable
+
+      logInfo $ "Saved iCfg as immutable snapshot: " <> show cid
+
+      sendLatestSnapshots
+
+    Snapshot.RenameSnapshot cid name' -> do
+      Db.setCfgName cid name'
+      logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
+      sendLatestSnapshots
+
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do
