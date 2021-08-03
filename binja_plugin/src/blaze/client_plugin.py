@@ -39,6 +39,7 @@ from .types import (
     BinjaToServer,
     CfgId,
     HostBinaryPath,
+    PoiServerToBinja,
     ServerCfg,
     ServerToBinja,
     SnapshotBinjaToServer,
