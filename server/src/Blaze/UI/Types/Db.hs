@@ -10,9 +10,9 @@ import Database.Selda.SQLite
 import Blaze.UI.Types.Cfg (CfgId, CfgTransport)
 import Blaze.Types.Pil (Stmt)
 import qualified Data.Aeson as Aeson
-import Database.Selda.SqlType ( Lit(LBlob, LText, LCustom)
-                              , SqlTypeRep(TBlob, TText)
-                              , SqlValue(SqlBlob, SqlString)
+import Database.Selda.SqlType ( Lit(LBlob, LCustom)
+                              , SqlTypeRep(TBlob)
+                              , SqlValue(SqlBlob)
                               )
 import Blaze.UI.Types.Graph (GraphTransport)
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, SnapshotType)
@@ -20,6 +20,7 @@ import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import Database.Selda.Backend (SeldaConnection, runSeldaT)
+import Blaze.UI.Types.Db.Address ()
 
 
 newtype Conn = Conn (SeldaConnection SQLite)
@@ -38,19 +39,6 @@ instance (ToJSON a, FromJSON a, Typeable (Blob a)) => SqlType (Blob a) where
    fromSql x = P.error $ "Unexpected sql field type: " <> show x
 
    defaultValue = LCustom TBlob (LBlob "")
-
--- oh no, it's an orphan!
-instance SqlType Address where
-   mkLit (Address (Bytes x)) = LCustom TBlob . LText . show $ x
-
-   sqlType _ = TText
-
-   fromSql (SqlString s) = case readMaybe (cs s) of
-     Nothing -> P.error $ "Cannot convert " <> cs s <> " to Address"
-     Just n -> Address . Bytes $ n
-   fromSql x = P.error $ "Unexpected sql field type: " <> show x
-
-   defaultValue = LCustom TText (LText "")
 
 data SavedCfg = SavedCfg
   { cfgId :: CfgId
