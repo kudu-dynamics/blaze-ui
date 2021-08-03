@@ -284,7 +284,7 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
 
 class BinjaToServerTotal(TypedDict, total=True):
     tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
-                 'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop', 'BSCfgFocus']
+                 'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop', 'BSCfgFocus', 'BSPoi']
 
 
 class BinjaToServer(BinjaToServerTotal, total=False):
@@ -298,6 +298,7 @@ class BinjaToServer(BinjaToServerTotal, total=False):
     snapshotMsg: Optional[SnapshotBinjaToServer]
     node: Optional[CfNode]
     targetAddress: Optional[Word64]
+    poiMsg: Optional[PoiBinjaToServer]
 
 
 class BinjaMessage(TypedDict):
