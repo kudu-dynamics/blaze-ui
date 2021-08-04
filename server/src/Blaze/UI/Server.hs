@@ -219,10 +219,19 @@ autosaveCfg cid pcfg = getCfgType cid >>= \case
 -- If second is Just, send new CfgId and new snapshot tree.
 sendCfgAndSnapshots :: BinaryHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop ()
 sendCfgAndSnapshots bhash pcfg cid Nothing =
-  sendToBinja . SBCfg cid bhash . convertPilCfg $ pcfg
+  sendToBinja $ SBCfg cid bhash (convertPilCfg pcfg) [] []
 sendCfgAndSnapshots bhash pcfg _ (Just newCid) = do
-  sendToBinja . SBCfg newCid bhash . convertPilCfg $ pcfg
+  sendToBinja $ SBCfg newCid bhash (convertPilCfg pcfg) [] []
   sendLatestClientSnapshots
+
+sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
+sendDiffCfg bhash cid old new = do
+  CfgUI.addCfg cid new
+  sendToBinja $ SBCfg cid bhash (convertPilCfg old) removedNodes removedEdges
+  where
+    removedNodes = HashSet.toList $ CfgUI.getRemovedNodes old new
+    removedEdges = HashSet.toList $ CfgUI.getRemovedEdges old new
+    
 
 setCfg :: CfgId -> PilCfg -> EventLoop ()
 setCfg cid pcfg = do
@@ -264,6 +273,8 @@ sendLatestBinarySnapshots = do
 -- TODO: change to `sendLatestBinarySnapshots` when frontend is ready to handle it
 sendLatestSnapshots :: EventLoop ()
 sendLatestSnapshots = sendLatestBinarySnapshots
+
+
 
 ------------------------------------------
 --- main event handler

@@ -14,7 +14,7 @@ import qualified Binja.Function as BNFunc
 import qualified Data.Aeson.Types as Aeson
 import Blaze.Function (Function)
 import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
-import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
+import Blaze.Types.Cfg (CfNode, CallNode, Cfg, CfEdge)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.Db (MonadDb(withDb))
@@ -41,6 +41,8 @@ data ServerToBinja = SBLogInfo { message :: Text }
                    | SBCfg { cfgId :: CfgId
                            -- So plugin can easily warn if it's out of date
                            , bndbHash :: BinaryHash
+                           , nodesPendingRemoval :: [CfNode ()]
+                           , edgesPendingRemoval :: [CfEdge ()]
                            -- TODO: send cfg with text
                            , cfg :: CfgTransport [[Token]]
                            }
@@ -77,6 +79,9 @@ data BinjaToServer = BSConnect
                      { cfgId :: CfgId
                      , node :: CfNode ()
                      }
+
+                   | BSCfgConfirmRemoval
+                     { cfgId :: CfgId }
 
                    | BSSnapshot { snapshotMsg :: Snapshot.BinjaToServer }
 
