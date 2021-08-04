@@ -38,11 +38,12 @@ from .types import (
     BinjaMessage,
     BinjaToServer,
     CfgId,
-    HostBinaryPath,
+    PendingChanges,
     ServerCfg,
+    ServerPendingChanges,
     ServerToBinja,
-    SnapshotBinjaToServer,
     SnapshotServerToBinja,
+    pending_changes_from_server,
 )
 from .util import bv_key, try_debug
 
@@ -249,11 +250,11 @@ class BlazePlugin():
                 'clientId': self.settings.client_id,
             }
             try:
-                r = requests.post(uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
+                r = requests.post(
+                    uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
             except requests.exceptions.RequestException as e:
                 log.error('Failed to upload BNDB: ' + str(e))
                 return None
-            
 
         if r.status_code != requests.codes['ok']:
             log.error(
@@ -322,8 +323,6 @@ class BlazePlugin():
         except Exception as e:
             log.error("Websocket error: " + str(e))
             return None
-
-            
 
     async def recv_loop(self, websocket: WebSocketClientProtocol) -> None:
         async for ws_msg in websocket:
@@ -394,8 +393,14 @@ class BlazePlugin():
         elif tag == 'SBCfg':
             cfg_id = cast(CfgId, msg.get('cfgId'))
             cfg = cfg_from_server(cast(ServerCfg, msg.get('cfg')))
+            server_pending_changes = msg.get('pendingChanges')
 
-            instance.graph = ICFGFlowGraph(instance.bv, cfg, cfg_id)
+            if server_pending_changes is None:
+                server_pending_changes = ServerPendingChanges(removedNodes=[], removedEdges=[])
+
+            pending_changes = pending_changes_from_server(server_pending_changes)
+
+            instance.graph = ICFGFlowGraph(instance.bv, cfg, cfg_id, pending_changes)
 
             for dw in self.icfg_dock_widgets[instance.bv_key]:
                 dw.icfg_widget.setGraph(instance.graph)

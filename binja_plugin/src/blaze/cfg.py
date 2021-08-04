@@ -1,6 +1,6 @@
 import logging as _logging
 from copy import deepcopy
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, cast
+from typing import Container, TYPE_CHECKING, Dict, List, Optional, Set, Tuple, cast
 
 import binaryninjaui
 from binaryninja import BinaryView
@@ -34,11 +34,11 @@ from binaryninjaui import (
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
     from PySide6.QtCore import QEvent, QObject, Qt  # type: ignore
     from PySide6.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
-    from PySide6.QtWidgets import QVBoxLayout, QWidget  # type: ignore
+    from PySide6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget  # type: ignore
 else:
     from PySide2.QtCore import QEvent, QObject, Qt  # type: ignore
     from PySide2.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
-    from PySide2.QtWidgets import QVBoxLayout, QWidget  # type: ignore
+    from PySide2.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget  # type: ignore
 
 from .types import (
     BINARYNINJAUI_CUSTOM_EVENT,
@@ -57,6 +57,7 @@ from .types import (
     Function,
     LeaveFuncNode,
     MenuOrder,
+    PendingChanges,
     ServerCfg,
     SnapshotBinjaToServer,
     tokens_from_server,
@@ -81,19 +82,32 @@ def cfg_to_server(cfg: Cfg) -> ServerCfg:
     return ServerCfg(nodes=nodes, edges=cfg['edges'], root=cfg['nodes'][cfg['root']])
 
 
-def get_edge_type(edge: CfEdge, cfg: Cfg) -> Tuple[BranchType, Optional[EdgeStyle]]:
+def get_edge_type(
+    edge: CfEdge,
+    cfg: Cfg,
+    removed_edges: Container[Tuple[UUID, UUID]],
+) -> Tuple[BranchType, EdgeStyle]:
     node_from = cfg['nodes'][edge['src']['contents']['uuid']]
 
     if node_from['tag'] == 'Call':
-        return (
-            BranchType.UserDefinedBranch,
-            EdgeStyle(style=EdgePenStyle.DotLine, theme_color=ThemeColor.UnconditionalBranchColor))
+        branch_type = BranchType.UserDefinedBranch
+        dash_style = EdgePenStyle.DotLine
+        color = ThemeColor.UnconditionalBranchColor
+        edge_style = EdgeStyle(dash_style, theme_color=color)
+    else:
+        branch_type = {
+            'TrueBranch': BranchType.TrueBranch,
+            'FalseBranch': BranchType.FalseBranch,
+            'UnconditionalBranch': BranchType.UnconditionalBranch,
+        }[edge['branchType']]
+        edge_style = EdgeStyle()
 
-    return {
-        'TrueBranch': (BranchType.TrueBranch, None),
-        'FalseBranch': (BranchType.FalseBranch, None),
-        'UnconditionalBranch': (BranchType.UnconditionalBranch, None),
-    }[edge['branchType']]
+    this_edge = (edge['src']['contents']['uuid'], edge['dst']['contents']['uuid'])
+    if this_edge in removed_edges:
+        edge_style.style = EdgePenStyle.DashDotLine
+        edge_style.width = 2
+
+    return (branch_type, edge_style)
 
 
 def is_conditional_edge(edge: FlowGraphEdge) -> bool:
@@ -113,10 +127,8 @@ def is_plt_call_node(bv: BinaryView, call_node: CallNode) -> bool:
     if call_node['callDest']['tag'] == 'CallFunc':
         func = cast(Function, call_node['callDest']['contents'])
         in_plt = any(
-            [
-                sec.name in ('.plt', '.plt.got', '.plt.sec')
-                for sec in bv.get_sections_at(func['address'])
-            ])
+            sec.name in ('.plt', '.plt.got', '.plt.sec')
+            for sec in bv.get_sections_at(func['address']))
         return in_plt
     else:
         return False
@@ -126,10 +138,8 @@ def is_got_call_node(bv: BinaryView, call_node: CallNode) -> bool:
     if call_node['callDest']['tag'] == 'CallAddr':
         func_ptr = cast(ConstFuncPtrOp, call_node['callDest']['contents'])
         in_got = any(
-            [
-                sec.name in ('.got', '.got.plt', '.got.sec')
-                for sec in bv.get_sections_at(func_ptr['address'])
-            ])
+            sec.name in ('.got', '.got.plt', '.got.sec')
+            for sec in bv.get_sections_at(func_ptr['address']))
         return in_got
     else:
         return False
@@ -140,7 +150,8 @@ def is_extern_call_node(call_node: CallNode) -> bool:
 
 
 def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
-    return not is_plt_call_node(bv, call_node) and not is_got_call_node(bv, call_node) and not is_extern_call_node(call_node)
+    return not is_plt_call_node(bv, call_node) and not is_got_call_node(
+        bv, call_node) and not is_extern_call_node(call_node)
 
 
 def get_target_address(call_dest: CallDest) -> Optional[Address]:
@@ -305,11 +316,18 @@ def export_cfg_to_python(cfg: Cfg) -> str:
 
 
 class ICFGFlowGraph(FlowGraph):
-    def __init__(self, bv: BinaryView, cfg: Cfg, cfg_id: CfgId):
+    def __init__(
+        self,
+        bv: BinaryView,
+        cfg: Cfg,
+        cfg_id: CfgId,
+        pending_changes: PendingChanges,
+    ):
         super().__init__()
         self.pil_icfg: Cfg = cfg
         self.pil_icfg_id: CfgId = cfg_id
         self.node_mapping: Dict[FlowGraphNode, CfNode] = {}
+        self.pending_changes: PendingChanges = pending_changes
 
         nodes: Dict[UUID, FlowGraphNode] = {}
 
@@ -327,7 +345,9 @@ class ICFGFlowGraph(FlowGraph):
             tokenized_lines = node['contents']['nodeData']
             fg_node.lines += [tokens_from_server(line) for line in tokenized_lines]
 
-            if node['tag'] == 'Call':
+            if node['contents']['uuid'] in self.pending_changes.removed_nodes:
+                fg_node.highlight = HighlightStandardColor.RedHighlightColor
+            elif node['tag'] == 'Call':
                 if is_expandable_call_node(bv, cast(CallNode, node['contents'])):
                     fg_node.highlight = HighlightStandardColor.YellowHighlightColor
                 else:
@@ -341,7 +361,7 @@ class ICFGFlowGraph(FlowGraph):
             self.append(fg_node)
 
         for edge in cfg['edges']:
-            branch_type, edge_style = get_edge_type(edge, cfg)
+            branch_type, edge_style = get_edge_type(edge, cfg, self.pending_changes.removed_edges)
             nodes[edge['src']['contents']['uuid']].add_outgoing_edge(
                 branch_type, nodes[edge['dst']['contents']['uuid']], edge_style)
 
@@ -726,23 +746,78 @@ class ICFGWidget(FlowGraphWidget, QObject):
         return False
 
 
+class ICFGToolbarWidget(QWidget):
+    def __init__(
+        self,
+        parent: QWidget,
+        icfg_widget: ICFGWidget,
+        view_frame: ViewFrame,
+        blaze_instance: 'BlazeInstance',
+    ):
+        QWidget.__init__(self, parent)
+        self.icfg_widget: ICFGWidget = icfg_widget
+        self._view_frame: ViewFrame = view_frame
+        self.blaze_instance: 'BlazeInstance' = blaze_instance
+
+        self.build()
+
+    def build(self):
+        accept_button = QPushButton('Accept')
+        accept_button.clicked.connect(self.accept)
+        reject_button = QPushButton('Reject')
+        reject_button.clicked.connect(self.reject)
+
+        layout = QHBoxLayout()
+        layout.addWidget(accept_button)
+        layout.addWidget(reject_button)
+        self.setLayout(layout)
+
+    def accept(self) -> None:
+        log.debug('User accepted ICFG changes')
+        self.blaze_instance.send(
+            BinjaToServer(
+                tag='BSCfgConfirmChanges',
+                cfgId=self.blaze_instance.graph.pil_icfg_id,
+            ))
+
+    def reject(self) -> None:
+        # TODO send BSRejectIcfg message
+        log.debug('User rejected ICFG changes')
+        self.blaze_instance.send(
+            BinjaToServer(
+                tag='BSCfgRevertChanges',
+                cfgId=self.blaze_instance.graph.pil_icfg_id,
+            ))
+
+
 class ICFGDockWidget(QWidget, DockContextHandler):
     def __init__(
-            self, name: str, view_frame: ViewFrame, parent: QWidget,
-            blaze_instance: 'BlazeInstance'):
+        self,
+        name: str,
+        view_frame: ViewFrame,
+        parent: QWidget,
+        blaze_instance: 'BlazeInstance',
+    ):
         QWidget.__init__(self, parent)
         DockContextHandler.__init__(self, self, name)
 
         self._view_frame: ViewFrame = view_frame
         self.blaze_instance: 'BlazeInstance' = blaze_instance
-        self.icfg_widget: ICFGWidget = ICFGWidget(self, view_frame, self.blaze_instance)
 
         # TODO why does pyright choke on these? Idea: they're both @typing.overload
         # And the overload that we want is the first one, but pyright only seems to
         # see the second one
         layout = QVBoxLayout()  # type: ignore
+        self.icfg_widget: ICFGWidget = ICFGWidget(self, view_frame, self.blaze_instance)
+        self.icfg_toolbar_widget: ICFGToolbarWidget = ICFGToolbarWidget(
+            self,
+            self.icfg_widget,
+            view_frame,
+            self.blaze_instance,
+        )
         layout.setContentsMargins(0, 0, 0, 0)  # type: ignore
         layout.setSpacing(0)
+        layout.addWidget(self.icfg_toolbar_widget)
         layout.addWidget(self.icfg_widget)
         self.setLayout(layout)
 
