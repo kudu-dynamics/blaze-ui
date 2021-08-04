@@ -26,7 +26,7 @@ instance SqlType PoiId where
    fromSql x = PoiId $ Sql.fromSql x
    defaultValue = LCustom TBlob (Sql.defaultValue :: Lit UUID)
 
-data ServerToBinja
+newtype ServerToBinja
   = PoisOfBinary { pois :: [Poi] }
   deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 
