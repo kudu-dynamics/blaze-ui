@@ -231,10 +231,10 @@ class SnapshotBinjaToServerTotal(TypedDict, total=True):
 
 
 class SnapshotBinjaToServer(SnapshotBinjaToServerTotal, total=False):
-    originFuncAddr: Optional[Address]
-    branchId: Optional[BranchId]
-    name: Optional[str]
-    cfgId: Optional[CfgId]
+    originFuncAddr: Address
+    branchId: BranchId
+    name: str
+    cfgId: CfgId
 
 
 ### Poi Messages
@@ -260,11 +260,11 @@ class PoiBinjaToServerTotal(TypedDict, total=True):
 
 
 class PoiBinjaToServer(PoiBinjaToServerTotal, total=False):
-    funcAddr: Optional[Address]
-    instrAddr: Optional[Address]
+    funcAddr: Address
+    instrAddr: Address
     name: Optional[str]
     description: Optional[str]
-    poiId: Optional[PoiId]
+    poiId: PoiId
 
 
 #########
@@ -274,11 +274,11 @@ class ServerToBinjaTotal(TypedDict, total=True):
 
 
 class ServerToBinja(ServerToBinjaTotal, total=False):
-    bndbHash: Optional[BinaryHash]
-    message: Optional[str]
-    cfgId: Optional[CfgId]
-    cfg: Optional[ServerCfg]
-    snapshotMsg: Optional[SnapshotServerToBinja]
+    bndbHash: BinaryHash
+    message: str
+    cfgId: CfgId
+    cfg: ServerCfg
+    snapshotMsg: SnapshotServerToBinja
     poiMsg: PoiServerToBinja
 
 
@@ -288,17 +288,17 @@ class BinjaToServerTotal(TypedDict, total=True):
 
 
 class BinjaToServer(BinjaToServerTotal, total=False):
-    message: Optional[str]
-    bndbHash: Optional[BinaryHash]
-    address: Optional[Word64]
-    startFuncAddress: Optional[Word64]
-    cfgId: Optional[CfgId]
-    callNode: Optional[CallNode]
-    edge: Optional[Tuple[CfNode, CfNode]]
-    snapshotMsg: Optional[SnapshotBinjaToServer]
-    node: Optional[CfNode]
-    targetAddress: Optional[Word64]
-    poiMsg: Optional[PoiBinjaToServer]
+    message: str
+    bndbHash: BinaryHash
+    address: Word64
+    startFuncAddress: Word64
+    cfgId: CfgId
+    callNode: CallNode
+    edge: Tuple[CfNode, CfNode]
+    snapshotMsg: SnapshotBinjaToServer
+    node: CfNode
+    targetAddress: Word64
+    poiMsg: PoiBinjaToServer
 
 
 class BinjaMessage(TypedDict):
