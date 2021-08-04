@@ -51,7 +51,7 @@ setDescription :: MonadDb m => PoiId -> Maybe Text -> m ()
 setDescription pid mdescription = withDb $ do
   update_ poiTable
     (\poi -> poi ! #poiId .== literal pid)
-    (\poi -> poi `with` [ #name := literal mdescription])
+    (\poi -> poi `with` [ #description := literal mdescription])
 
 getPoisOfBinary :: MonadDb m => ClientId -> HostBinaryPath -> m [Poi]
 getPoisOfBinary cid hpath = withDb . query $ do
