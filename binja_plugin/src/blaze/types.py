@@ -250,7 +250,8 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
 
 class BinjaToServerTotal(TypedDict, total=True):
     tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
-                 'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop', 'BSCfgFocus']
+                 'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop', 'BSCfgFocus'
+                 'BSCfgConfirmChanges', 'BSCfgRevertChanges']
 
 
 class BinjaToServer(BinjaToServerTotal, total=False):
