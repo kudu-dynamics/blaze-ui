@@ -237,8 +237,8 @@ class SnapshotBinjaToServer(SnapshotBinjaToServerTotal, total=False):
 
 
 class PendingChanges(TypedDict, total=True):
-    removedNodes: List[CfNode]
-    removedEdges: List[CfEdge]
+    removedNodes: List[UUID]
+    removedEdges: List[Tuple[UUID, UUID]]
 
 
 class ServerToBinjaTotal(TypedDict, total=True):

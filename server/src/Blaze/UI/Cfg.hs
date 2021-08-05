@@ -57,3 +57,7 @@ getRemovedEdges :: Cfg a -> Cfg a -> HashSet (CfEdge ())
 getRemovedEdges old new = HashSet.difference (f old) (f new) 
   where
     f = HashSet.fromList . fmap Cfg.fromLEdge . G.edges . view #graph
+
+edgeToUUIDTuple :: CfEdge a -> (UUID, UUID)
+edgeToUUIDTuple e = (Cfg.getNodeUUID $ e ^. #src, Cfg.getNodeUUID $ e ^. #dst)
+                    

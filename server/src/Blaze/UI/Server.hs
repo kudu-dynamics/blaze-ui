@@ -230,8 +230,12 @@ sendDiffCfg bhash cid old new = do
   sendToBinja $ SBCfg cid bhash (Just changes) $ convertPilCfg old
   where
     changes = PendingChanges removedNodes' removedEdges'
-    removedNodes' = HashSet.toList $ CfgUI.getRemovedNodes old new
-    removedEdges' = HashSet.toList $ CfgUI.getRemovedEdges old new
+    removedNodes' = fmap Cfg.getNodeUUID
+                    . HashSet.toList
+                    $ CfgUI.getRemovedNodes old new
+    removedEdges' = fmap CfgUI.edgeToUUIDTuple
+                    . HashSet.toList
+                    $ CfgUI.getRemovedEdges old new
 
 setCfg :: CfgId -> PilCfg -> EventLoop ()
 setCfg cid pcfg = do

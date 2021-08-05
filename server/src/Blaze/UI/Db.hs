@@ -27,6 +27,7 @@ import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import qualified Data.HashMap.Strict as HashMap
 
+
 init :: FilePath -> IO Conn
 init blazeSqliteFilePath = do
   conn <- open blazeSqliteFilePath

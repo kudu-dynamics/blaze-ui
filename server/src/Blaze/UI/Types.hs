@@ -14,7 +14,7 @@ import qualified Binja.Function as BNFunc
 import qualified Data.Aeson.Types as Aeson
 import Blaze.Function (Function)
 import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
-import Blaze.Types.Cfg (CfNode, CallNode, Cfg, CfEdge)
+import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.Db (MonadDb(withDb))
@@ -35,8 +35,8 @@ instance ToJSON a => ToJSON (BinjaMessage a)
 instance FromJSON a => FromJSON (BinjaMessage a)
 
 data PendingChanges = PendingChanges
-  { removedNodes :: [CfNode ()]
-  , removedEdges :: [CfEdge ()]
+  { removedNodes :: [UUID]
+  , removedEdges :: [(UUID, UUID)]
   -- Maybe TODO: add "addedNodes" and "addedEdges"
   } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
 
