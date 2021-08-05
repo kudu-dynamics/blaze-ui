@@ -34,6 +34,12 @@ data BinjaMessage a = BinjaMessage
 instance ToJSON a => ToJSON (BinjaMessage a)
 instance FromJSON a => FromJSON (BinjaMessage a)
 
+data PendingChanges = PendingChanges
+  { removedNodes :: [CfNode ()]
+  , removedEdges :: [CfEdge ()]
+  -- Maybe TODO: add "addedNodes" and "addedEdges"
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+
 data ServerToBinja = SBLogInfo { message :: Text }
                    | SBLogWarn { message :: Text }
                    | SBLogError { message :: Text }
@@ -50,12 +56,6 @@ data ServerToBinja = SBLogInfo { message :: Text }
                      
                    | SBNoop
                    deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
-
-data PendingChanges = PendingChanges
-  { removedNodes :: [CfNode ()]
-  , removedEdges :: [CfEdge ()]
-  -- Maybe TODO: add "addedNodes" and "addedEdges"
-  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
 
 data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }

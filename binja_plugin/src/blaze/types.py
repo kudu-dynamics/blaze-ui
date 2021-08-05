@@ -236,6 +236,11 @@ class SnapshotBinjaToServer(SnapshotBinjaToServerTotal, total=False):
     cfgId: Optional[CfgId]
 
 
+class PendingChanges(TypedDict, total=True):
+    removedNodes: List[CfNode]
+    removedEdges: List[CfEdge]
+
+
 class ServerToBinjaTotal(TypedDict, total=True):
     tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshot']
 
@@ -246,8 +251,9 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
     cfgId: Optional[CfgId]
     cfg: Optional[ServerCfg]
     snapshotMsg: Optional[SnapshotServerToBinja]
+    pendingChanges: Optional[PendingChanges]
 
-
+    
 class BinjaToServerTotal(TypedDict, total=True):
     tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
                  'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop', 'BSCfgFocus'
