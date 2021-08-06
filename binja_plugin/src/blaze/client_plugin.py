@@ -31,6 +31,7 @@ else:
     from PySide2.QtWidgets import QApplication, QWidget  # type: ignore
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
+from .poi import PoiListDockWidget
 from .settings import BlazeSettings
 from .snaptree import SnapTreeDockWidget
 from .types import (
@@ -155,7 +156,7 @@ class BlazePlugin():
             self.icfg_dock_widgets[bv_key(bv)].append(widget)
             return widget
 
-        self.dock_handler.addDockWidget( \
+        self.dock_handler.addDockWidget(
             "Blaze ICFG",
             create_icfg_widget,
             Qt.DockWidgetArea.RightDockWidgetArea,
@@ -188,6 +189,29 @@ class BlazePlugin():
         )
 
         log.debug('Created snaptree dock widget')
+
+        # -- Add POI List View
+
+        self.poi_dock_widgets: Dict[str, List[PoiListDockWidget]] = DefaultDict(list)
+
+        def create_poi_widget(name: str, parent: ViewFrame, bv: BinaryView) -> QWidget:
+            dock_handler = DockHandler.getActiveDockHandler()
+            widget = PoiListDockWidget(
+                name=name,
+                view_frame=dock_handler.getViewFrame(),
+                parent=parent,
+                blaze_instance=self.ensure_instance(bv))
+            return widget
+
+        self.dock_handler.addDockWidget(
+            "Blaze POI List",
+            create_poi_widget,
+            Qt.DockWidgetArea.BottomDockWidgetArea,
+            Qt.Orientation.Vertical,
+            True  # default visibility
+        )
+
+        log.debug('Create POI list widget')
 
         log.debug('%r initialized', self)
 
