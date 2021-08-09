@@ -1,7 +1,8 @@
 import logging as _logging
 from copy import deepcopy
-from typing import Container, TYPE_CHECKING, Dict, List, Optional, Set, Tuple, cast
+from typing import TYPE_CHECKING, Container, Dict, List, Mapping, Optional, Tuple, cast
 
+import binaryninja
 import binaryninjaui
 from binaryninja import BinaryView
 from binaryninja.enums import (
@@ -32,7 +33,7 @@ from binaryninjaui import (
 )
 
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
-    from PySide6.QtCore import QEvent, QObject, Qt  # type: ignore
+    from PySide6.QtCore import QEvent, QObject, Qt
     from PySide6.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
     from PySide6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget  # type: ignore
 else:
@@ -82,37 +83,43 @@ def cfg_to_server(cfg: Cfg) -> ServerCfg:
     return ServerCfg(nodes=nodes, edges=cfg['edges'], root=cfg['nodes'][cfg['root']])
 
 
-def get_edge_type(
+def get_edge_style(
     edge: CfEdge,
-    cfg: Cfg,
+    nodes: Mapping[UUID, CfNode],
     removed_edges: Container[Tuple[UUID, UUID]],
-) -> Tuple[BranchType, EdgeStyle]:
-    node_from = cfg['nodes'][edge['src']['contents']['uuid']]
+) -> EdgeStyle:
+    node_from = nodes[edge['src']['contents']['uuid']]
 
-    if node_from['tag'] == 'Call':
-        branch_type = BranchType.UserDefinedBranch
-        dash_style = EdgePenStyle.DotLine
-        color = ThemeColor.UnconditionalBranchColor
-        edge_style = EdgeStyle(dash_style, theme_color=color)
+    color = {
+        'TrueBranch': ThemeColor.TrueBranchColor,
+        'FalseBranch': ThemeColor.FalseBranchColor,
+        'UnconditionalBranch': ThemeColor.UnconditionalBranchColor,
+    }[edge['branchType']]
+
+    this_edge_uuids = (edge['src']['contents']['uuid'], edge['dst']['contents']['uuid'])
+
+    if this_edge_uuids in removed_edges:
+        edge_style = EdgeStyle(EdgePenStyle.DashDotLine, width=3, theme_color=color)
+    elif node_from['tag'] == 'Call':
+        edge_style = EdgeStyle(EdgePenStyle.DotLine, theme_color=color)
     else:
-        branch_type = {
-            'TrueBranch': BranchType.TrueBranch,
-            'FalseBranch': BranchType.FalseBranch,
-            'UnconditionalBranch': BranchType.UnconditionalBranch,
-        }[edge['branchType']]
-        edge_style = EdgeStyle()
+        edge_style = EdgeStyle(EdgePenStyle.SolidLine, theme_color=color)
 
-    this_edge = (edge['src']['contents']['uuid'], edge['dst']['contents']['uuid'])
-    if this_edge in removed_edges:
-        edge_style.style = EdgePenStyle.DashDotLine
-        edge_style.width = 2
-
-    return (branch_type, edge_style)
+    return edge_style
 
 
 def is_conditional_edge(edge: FlowGraphEdge) -> bool:
-    conditional_types = ('TrueBranch', 'FalseBranch', BranchType.TrueBranch, BranchType.FalseBranch)
-    return edge.type in conditional_types
+    if edge.type in (BranchType.TrueBranch, BranchType.FalseBranch):
+        return True
+
+    if isinstance(edge.style.style, binaryninja.core.BNEdgeStyle):
+        color = ThemeColor(edge.style.style.color)
+    elif isinstance(edge.style, EdgeStyle):
+        color = edge.style.color
+    else:
+        raise RuntimeError(f'Bad type for edge: {type(edge)}')
+
+    return color in (ThemeColor.TrueBranchColor, ThemeColor.FalseBranchColor)
 
 
 def is_call_node(node: CfNode) -> bool:
@@ -361,9 +368,12 @@ class ICFGFlowGraph(FlowGraph):
             self.append(fg_node)
 
         for edge in cfg['edges']:
-            branch_type, edge_style = get_edge_type(edge, cfg, self.pending_changes.removed_edges)
+            edge_style = get_edge_style(edge, cfg['nodes'], self.pending_changes.removed_edges)
             nodes[edge['src']['contents']['uuid']].add_outgoing_edge(
-                branch_type, nodes[edge['dst']['contents']['uuid']], edge_style)
+                BranchType.UserDefinedBranch,
+                nodes[edge['dst']['contents']['uuid']],
+                edge_style,
+            )
 
         log.debug('%r initialized', self)
 
