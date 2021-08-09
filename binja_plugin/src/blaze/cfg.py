@@ -99,11 +99,11 @@ def get_edge_style(
     this_edge_uuids = (edge['src']['contents']['uuid'], edge['dst']['contents']['uuid'])
 
     if this_edge_uuids in removed_edges:
-        edge_style = EdgeStyle(EdgePenStyle.DashDotLine, width=3, theme_color=color)
+        edge_style = EdgeStyle(EdgePenStyle.DotLine, width=4, theme_color=color)
     elif node_from['tag'] == 'Call':
-        edge_style = EdgeStyle(EdgePenStyle.DotLine, theme_color=color)
+        edge_style = EdgeStyle(EdgePenStyle.DotLine, width=1, theme_color=color)
     else:
-        edge_style = EdgeStyle(EdgePenStyle.SolidLine, theme_color=color)
+        edge_style = EdgeStyle(EdgePenStyle.SolidLine, width=1, theme_color=color)
 
     return edge_style
 
