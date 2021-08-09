@@ -250,6 +250,10 @@ class PendingChanges:
     removed_nodes: Set[UUID]
     removed_edges: Set[Tuple[UUID, UUID]]
 
+    @property
+    def has_changes(self) -> bool:
+        return bool(self.removed_nodes) or bool(self.removed_edges)
+
 
 def pending_changes_from_server(p: ServerPendingChanges) -> PendingChanges:
     return PendingChanges(

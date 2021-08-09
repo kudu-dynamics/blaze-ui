@@ -403,7 +403,7 @@ class BlazePlugin():
             instance.graph = ICFGFlowGraph(instance.bv, cfg, cfg_id, pending_changes)
 
             for dw in self.icfg_dock_widgets[instance.bv_key]:
-                dw.icfg_widget.setGraph(instance.graph)
+                dw.set_graph(instance.graph)
             for dw in self.snaptree_dock_widgets[instance.bv_key]:
                 dw.snaptree_widget.focus_icfg(cfg_id)
 

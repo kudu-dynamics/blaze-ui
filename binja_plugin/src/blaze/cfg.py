@@ -825,6 +825,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
             view_frame,
             self.blaze_instance,
         )
+        self.icfg_toolbar_widget.hide()
         layout.setContentsMargins(0, 0, 0, 0)  # type: ignore
         layout.setSpacing(0)
         layout.addWidget(self.icfg_toolbar_widget)
@@ -835,6 +836,10 @@ class ICFGDockWidget(QWidget, DockContextHandler):
 
     def __del__(self):
         try_debug(log, 'Deleting %r', self)
+
+    def set_graph(self, graph: ICFGFlowGraph):
+        self.icfg_toolbar_widget.setVisible(graph.pending_changes.has_changes)
+        self.icfg_widget.setGraph(graph)
 
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
         log.debug('ViewFrame changed to %r', view_frame)
