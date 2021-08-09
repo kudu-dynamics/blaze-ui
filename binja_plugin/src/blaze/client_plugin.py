@@ -24,7 +24,7 @@ from websockets.client import WebSocketClientProtocol
 REQUEST_ACTIVITY_TIMEOUT = 5
 
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
-    from PySide6.QtCore import Qt  # type: ignore
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication, QWidget  # type: ignore
 else:
     from PySide2.QtCore import Qt  # type: ignore
