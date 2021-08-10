@@ -3,11 +3,8 @@ import logging as _logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union, cast
 
-from binaryninja.interaction import (
-    TextLineField,
-    get_form_input,
-)
 import binaryninjaui
+from binaryninja.interaction import TextLineField, get_form_input
 from binaryninjaui import (
     ContextMenuManager,
     DockContextHandler,
@@ -20,15 +17,14 @@ from binaryninjaui import (
 from .util import try_debug
 
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
-    from PySide6.QtCore import Qt  # type: ignore
-    from PySide6.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
-    from PySide6.QtWidgets import (  # type: ignore
-        QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget)  # type: ignore
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QMouseEvent  # type: ignore
+    from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget  # type: ignore
 else:
     from PySide2.QtCore import Qt  # type: ignore
-    from PySide2.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
+    from PySide2.QtGui import QMouseEvent  # type: ignore
     from PySide2.QtWidgets import (  # type: ignore
-        QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, QVBoxLayout, QWidget)  # type: ignore
+        QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)  # type: ignore
 
 from .types import (
     Address,

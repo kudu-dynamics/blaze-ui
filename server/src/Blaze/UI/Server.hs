@@ -247,7 +247,11 @@ setCfg cid pcfg = do
 getCfg :: CfgId -> EventLoop PilCfg
 getCfg cid = CfgUI.getCfg cid >>= \case
   Just pcfg -> return pcfg
-  Nothing -> Db.getCfg cid >>= \case
+  Nothing -> getStoredCfg cid
+
+-- | Tries to getCfg from db. if db has it, add it to cache
+getStoredCfg :: CfgId -> EventLoop PilCfg
+getStoredCfg cid = Db.getCfg cid >>= \case
     Nothing -> throwError . EventLoopError $ "Could not find existing CFG with id " <> show cid
     Just pcfg -> do
       CfgUI.addCfg cid pcfg
@@ -511,7 +515,7 @@ handleBinjaEvent = \case
 
     Snapshot.LoadSnapshot cid -> do
       bhash <- getCfgBinaryHash cid
-      cfg <- getCfg cid
+      cfg <- getStoredCfg cid
       sendToBinja . SBCfg cid bhash Nothing . convertPilCfg $ cfg
 
 
