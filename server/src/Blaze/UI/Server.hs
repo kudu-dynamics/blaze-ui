@@ -516,7 +516,6 @@ handleBinjaEvent = \case
     Snapshot.LoadSnapshot cid -> do
       bhash <- getCfgBinaryHash cid
       cfg <- getStoredCfg cid
-      CfgUI.addCfg cid cfg
       sendToBinja . SBCfg cid bhash Nothing . convertPilCfg $ cfg
 
 

@@ -61,7 +61,10 @@ def fix_flowgraph_edge(edge: FlowGraphEdge, swapped: bool) -> FlowGraphEdge:
     for new_edge in source.outgoing_edges:
         if new_edge.target == target:
 
-            # XXX the same or a similar bug requires this fixup
+            # XXX a similar bug requires this fixup: edge.style.style is
+            # assigned the binaryninjacore `BNEdgeStyle` struct, so we need to
+            # translate it to the python API types. This bug might get fixed in
+            # the near future, in which case this will hopefully be dead code
             if isinstance(new_edge.style.style, binaryninja.core.BNEdgeStyle):
                 core_style = new_edge.style.style
                 new_edge = copy.copy(new_edge)

@@ -112,6 +112,10 @@ def is_conditional_edge(edge: FlowGraphEdge) -> bool:
     if edge.type in (BranchType.TrueBranch, BranchType.FalseBranch):
         return True
 
+    # XXX this is to work around the same bug as in util:fix_flowgraph_edge:
+    # edge.style.style is assigned the binaryninjacore `BNEdgeStyle` struct, so
+    # we need to translate it to the python API types. This bug might get fixed
+    # in the near future, in which case this will hopefully be dead code
     if isinstance(edge.style.style, binaryninja.core.BNEdgeStyle):
         color = ThemeColor(edge.style.style.color)
     elif isinstance(edge.style, EdgeStyle):
