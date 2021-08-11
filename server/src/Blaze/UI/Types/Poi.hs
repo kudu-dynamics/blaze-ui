@@ -49,7 +49,9 @@ data BinjaToServer
   | DescribePoi { poiId :: PoiId
                 , description :: Maybe Text
                 }
-  
+
+  | ActivatePoiSearch { poiId :: PoiId }
+  | DeactivatePoiSearch
   deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 
 

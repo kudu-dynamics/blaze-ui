@@ -17,6 +17,7 @@ import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
 import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Poi as Poi
+import Blaze.UI.Types.Poi (Poi)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.Db (MonadDb(withDb))
 import qualified Blaze.UI.Types.Db as Db
@@ -24,7 +25,7 @@ import Blaze.UI.Types.BinaryManager (BinaryManager, BinaryManagerStorageDir(Bina
 import Blaze.UI.Types.Session (SessionId, ClientId)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.Pretty (Token)
-import Blaze.Types.Cfg.Analysis (Target)
+import Blaze.Types.Cfg.Analysis (CallNodeRating)
 
 
 data BinjaMessage a = BinjaMessage
@@ -43,7 +44,7 @@ data ServerToBinja = SBLogInfo { message :: Text }
                    | SBCfg { cfgId :: CfgId
                            -- So plugin can easily warn if it's out of date
                            , bndbHash :: BinaryHash
-                           -- TODO: send cfg with text
+                           , callNodeRatings :: Maybe [(UUID, CallNodeRating)]
                            , cfg :: CfgTransport [[Token]]
                            }
 
@@ -145,7 +146,7 @@ data EventLoopCtx = EventLoopCtx
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
   , dbConn :: TMVar Db.Conn
-  , activePoi :: TMVar Target
+  , activePoi :: TVar (Maybe Poi)
   } deriving (Generic)
 
 newtype EventLoopState = EventLoopState
@@ -196,7 +197,7 @@ data SessionState = SessionState
   , eventHandlerThread :: TMVar ThreadId
   , eventInbox :: TQueue Event
   , dbConn :: TMVar Db.Conn
-  , activePoi :: TMVar Target
+  , activePoi :: TVar (Maybe Poi)
   } deriving (Generic)
 
 emptySessionState :: HostBinaryPath -> BinaryManager -> TMVar Db.Conn -> STM SessionState
@@ -207,7 +208,7 @@ emptySessionState binPath bm tconn
     <*> newEmptyTMVar
     <*> newTQueue
     <*> return tconn
-    <*> newEmptyTMVar
+    <*> newTVar Nothing
 
 -- all the changeable fields should be STM vars
 -- so this can be updated across threads

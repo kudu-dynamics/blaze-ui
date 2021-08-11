@@ -42,6 +42,7 @@ import Blaze.UI.Types.Session ( SessionId
 import Blaze.Function (Function)
 import qualified Blaze.UI.Db.Poi as PoiDb
 import qualified Blaze.UI.Types.Poi as Poi
+import Blaze.Types.Cfg.Analysis (Target(Target))
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -160,7 +161,7 @@ spawnEventHandler cid st ss = do
                   (ss ^. #binjaOutboxes)
                   (ss ^. #cfgs)
                   (st ^. #dbConn)
-                  (st ^. #activePoi)
+                  (ss ^. #activePoi)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
         void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx
@@ -332,6 +333,27 @@ getTargetFunc :: BNBinaryView -> Address -> EventLoop Function
 getTargetFunc bv addr = liftIO (CG.getFunction bv addr) >>= \case
   Nothing -> logError $ "Could not find function at address: " <> show addr
   Just func -> return func
+
+-- | If active POI exists in ctx, this will convert it to a Target
+-- using the BinaryHash version of the bndb to identify the function.
+getActivePoiTarget :: BinaryHash -> EventLoop (Maybe Target)
+getActivePoiTarget bhash = do
+  ctx <- ask
+  liftIO (readTVarIO $ ctx ^. #activePoi) >>= \case
+    Nothing -> return Nothing
+    Just poi -> do
+      bv <- getBinaryView bhash
+      let addr = poi ^. #funcAddr
+      -- Should this throwError if it can't find the function?
+      -- That would mean whatever relies on getActivePoiTarget would also fail.
+      -- If we decide it should fail, replace with:
+      -- func <- getTargetFunc bv $ poi ^. #funcAddr
+      liftIO (CG.getFunction bv addr) >>= \case
+        Nothing -> do
+          sendToBinja . SBLogError $ "Could not find function at address: " <> show addr
+          return Nothing
+        Just func -> do
+          return . Just . Target func $ poi ^. #instrAddr
 
 mainEventLoop :: Event -> EventLoop ()
 mainEventLoop (BinjaEvent msg) = handleBinjaEvent msg
@@ -535,6 +557,17 @@ handleBinjaEvent = \case
     Poi.DescribePoi pid poiDescription -> do
       PoiDb.setName pid poiDescription
       sendLatestPois
+
+    Poi.ActivatePoiSearch pid -> PoiDb.getPoi pid >>= \case
+      Nothing -> logError $ "Cannot find POI in database: " <> show pid
+      Just poi -> do
+        ctx <- ask
+        liftIO . atomically . writeTVar (ctx ^. #activePoi) $ Just poi
+
+    Poi.DeactivatePoiSearch -> do
+      ctx <- ask
+      liftIO . atomically . writeTVar (ctx ^. #activePoi) $ Nothing
+
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do
