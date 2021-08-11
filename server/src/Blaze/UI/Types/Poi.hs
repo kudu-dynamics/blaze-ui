@@ -28,7 +28,8 @@ instance SqlType PoiId where
 
 newtype ServerToBinja
   = PoisOfBinary { pois :: [Poi] }
-  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
+  deriving (Eq, Ord, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 data BinjaToServer
   = GetPoisOfBinary
