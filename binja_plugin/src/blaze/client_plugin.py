@@ -40,6 +40,7 @@ from .types import (
     BinjaToServer,
     CfgId,
     HostBinaryPath,
+    PoiServerToBinja,
     ServerCfg,
     ServerToBinja,
     SnapshotBinjaToServer,
@@ -439,6 +440,10 @@ class BlazePlugin():
             snap_msg = cast(SnapshotServerToBinja, msg.get('snapshotMsg'))
             for dw in self.snaptree_dock_widgets[instance.bv_key]:
                 dw.handle_server_msg(snap_msg)
+
+        elif tag == 'SBPoi':
+            poi_msg = cast(PoiServerToBinja, msg.get('poiMsg'))
+            log.info(poi_msg)
 
         else:
             log.error("Unknown message type: %r", tag)
