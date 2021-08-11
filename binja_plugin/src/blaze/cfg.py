@@ -684,6 +684,33 @@ class ICFGWidget(FlowGraphWidget, QObject):
         if event.button() != Qt.MouseButton.RightButton:
             return super().mousePressEvent(event)
 
+        # NOTE synthesize left mouse button click/release in order to highlight the
+        # edge, line, or token under point
+        super().mousePressEvent(
+            QMouseEvent(
+                QEvent.Type.MouseButtonPress,
+                event.localPos(),
+                event.windowPos(),
+                event.globalPos(),
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButtons(Qt.MouseButton.LeftButton),
+                Qt.KeyboardModifiers(),
+                Qt.MouseEventSource.MouseEventSynthesizedByApplication,
+                event.device(),
+            ))
+        super().mouseReleaseEvent(
+            QMouseEvent(
+                QEvent.Type.MouseButtonRelease,
+                event.localPos(),
+                event.windowPos(),
+                event.globalPos(),
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButtons(Qt.MouseButton.LeftButton),
+                Qt.KeyboardModifiers(),
+                Qt.MouseEventSource.MouseEventSynthesizedByApplication,
+                event.device(),
+            ))
+
         if self.blaze_instance.graph is None:
             log.info('Right-click in ICFG widget, but no ICFG was created')
             return
