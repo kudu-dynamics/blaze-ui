@@ -61,6 +61,15 @@ def register_for_function(action, description):
     return wrapper
 
 
+def register_for_address(action, description):
+    def wrapper(f):
+        log.debug('Registering handler %r for action %r description %r', f, action, description)
+        PluginCommand.register_for_address(action, description, f)
+        return f
+
+    return wrapper
+
+
 def register(action, description):
     def wrapper(f):
         log.debug('Registering handler %r for action %r description %r', f, action, description)
@@ -475,6 +484,7 @@ class Action(str, enum.Enum):
     SEND_INSTRUCTION = r'Blaze\Send Instruction'
     TYPE_CHECK_FUNCTION = r'Blaze\Type Check Function'
     START_CFG = r'Blaze\Create ICFG'
+    MARK_POI = r'Blaze\Mark POI'
 
 
 @register_for_function(Action.START_CFG, 'Create ICFG')
@@ -486,6 +496,15 @@ def start_cfg(bv, func):
     blaze_instance.with_bndb_hash(
         lambda h: blaze_instance.send(
             BinjaToServer(tag='BSCfgNew', startFuncAddress=func.start, bndbHash=h)))
+
+
+@register_for_address(Action.MARK_POI, 'Mark POI')
+def mark_poi(bv, addr):
+    log.info(f'Handling {addr}')
+
+    
+
+    log.info("Mark POI handled.")
 
 
 def listen_start(bv):
