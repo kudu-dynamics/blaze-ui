@@ -159,6 +159,7 @@ spawnEventHandler cid st ss = do
                   (ss ^. #binjaOutboxes)
                   (ss ^. #cfgs)
                   (st ^. #dbConn)
+                  (st ^. #activePoi)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
         void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx

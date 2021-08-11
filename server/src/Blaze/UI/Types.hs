@@ -23,6 +23,7 @@ import Blaze.UI.Types.BinaryManager (BinaryManager, BinaryManagerStorageDir(Bina
 import Blaze.UI.Types.Session (SessionId, ClientId)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.Pretty (Token)
+import Blaze.Types.Cfg.Analysis (Target)
 
 
 data BinjaMessage a = BinjaMessage
@@ -139,6 +140,7 @@ data EventLoopCtx = EventLoopCtx
   , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
   , dbConn :: TMVar Db.Conn
+  , activePoi :: TMVar Target
   } deriving (Generic)
 
 newtype EventLoopState = EventLoopState
@@ -189,6 +191,7 @@ data SessionState = SessionState
   , eventHandlerThread :: TMVar ThreadId
   , eventInbox :: TQueue Event
   , dbConn :: TMVar Db.Conn
+  , activePoi :: TMVar Target
   } deriving (Generic)
 
 emptySessionState :: HostBinaryPath -> BinaryManager -> TMVar Db.Conn -> STM SessionState
@@ -199,6 +202,7 @@ emptySessionState binPath bm tconn
     <*> newEmptyTMVar
     <*> newTQueue
     <*> return tconn
+    <*> newEmptyTMVar
 
 -- all the changeable fields should be STM vars
 -- so this can be updated across threads
