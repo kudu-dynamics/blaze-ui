@@ -16,6 +16,7 @@ ClientId = UUID
 PoiId = UUID
 BinaryHash = str
 HostBinaryPath = str
+CallNodeRating = float
 
 # What Aeson encodes the unit value `()` as
 Unit = Literal[[]]
@@ -256,7 +257,7 @@ class PoiServerToBinja(TypedDict):
 
 class PoiBinjaToServerTotal(TypedDict, total=True):
     tag: Literal['GetPoisOfBinary', 'AddPoi', 'DeletePoi',
-                 'RenamePoi', 'DescribePoi']
+                 'RenamePoi', 'DescribePoi', 'ActivatePoiSearch', 'DeactivatePoiSearch']
 
 
 class PoiBinjaToServer(PoiBinjaToServerTotal, total=False):
@@ -280,6 +281,7 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
     cfg: ServerCfg
     snapshotMsg: SnapshotServerToBinja
     poiMsg: PoiServerToBinja
+    callNodeRatings: Optional[List[Tuple[UUID, CallNodeRating]]]
 
 
 class BinjaToServerTotal(TypedDict, total=True):

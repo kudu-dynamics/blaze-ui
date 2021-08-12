@@ -42,7 +42,7 @@ import Blaze.UI.Types.Session ( SessionId
 import Blaze.Function (Function)
 import qualified Blaze.UI.Db.Poi as PoiDb
 import qualified Blaze.UI.Types.Poi as Poi
-import Blaze.Types.Cfg.Analysis (Target(Target))
+import Blaze.Types.Cfg.Analysis (Target(Target), CallNodeRating)
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -221,10 +221,14 @@ autosaveCfg cid pcfg = getCfgType cid >>= \case
 -- | Used after `autosaveCfg`. If second CfgId is Nothing, just send first.
 -- If second is Just, send new CfgId and new snapshot tree.
 sendCfgAndSnapshots :: BinaryHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop ()
-sendCfgAndSnapshots bhash pcfg cid Nothing =
-  sendToBinja . SBCfg cid bhash . convertPilCfg $ pcfg
+sendCfgAndSnapshots bhash pcfg cid Nothing = do
+  bv <- getBinaryView bhash
+  callRatings <- getCallNodeRatings bv pcfg
+  sendToBinja . SBCfg cid bhash callRatings . convertPilCfg $ pcfg
 sendCfgAndSnapshots bhash pcfg _ (Just newCid) = do
-  sendToBinja . SBCfg newCid bhash . convertPilCfg $ pcfg
+  bv <- getBinaryView bhash
+  callRatings <- getCallNodeRatings bv pcfg
+  sendToBinja . SBCfg newCid bhash callRatings . convertPilCfg $ pcfg
   sendLatestClientSnapshots
 
 setCfg :: CfgId -> PilCfg -> EventLoop ()
@@ -335,14 +339,13 @@ getTargetFunc bv addr = liftIO (CG.getFunction bv addr) >>= \case
   Just func -> return func
 
 -- | If active POI exists in ctx, this will convert it to a Target
--- using the BinaryHash version of the bndb to identify the function.
-getActivePoiTarget :: BinaryHash -> EventLoop (Maybe Target)
-getActivePoiTarget bhash = do
+-- using the bv version of the bndb to identify the function.
+getActivePoiTarget :: BNBinaryView -> EventLoop (Maybe Target)
+getActivePoiTarget bv = do
   ctx <- ask
   liftIO (readTVarIO $ ctx ^. #activePoi) >>= \case
     Nothing -> return Nothing
     Just poi -> do
-      bv <- getBinaryView bhash
       let addr = poi ^. #funcAddr
       -- Should this throwError if it can't find the function?
       -- That would mean whatever relies on getActivePoiTarget would also fail.
@@ -354,6 +357,15 @@ getActivePoiTarget bhash = do
           return Nothing
         Just func -> do
           return . Just . Target func $ poi ^. #instrAddr
+
+getCallNodeRatings :: BNBinaryView -> PilCfg -> EventLoop (Maybe [(UUID, CallNodeRating)])
+getCallNodeRatings bv pcfg = getActivePoiTarget bv >>= \case
+  Nothing -> return Nothing
+  Just tgt -> do
+    -- TODO: cache the cnrCtx
+    cnrCtx <- liftIO . CfgA.getCallNodeRatingCtx . BNImporter $ bv
+    let ratings = CfgA.getCallNodeRatings cnrCtx tgt pcfg
+    return . Just . fmap (over _1 $ view #uuid) . HashMap.toList $ ratings
 
 mainEventLoop :: Event -> EventLoop ()
 mainEventLoop (BinjaEvent msg) = handleBinjaEvent msg
@@ -413,7 +425,8 @@ handleBinjaEvent = \case
               cfg
             CfgUI.addCfg cid cfg
             sendLatestSnapshots
-            sendToBinja . SBCfg cid bhash $ convertPilCfg cfg
+            callRatings <- getCallNodeRatings bv cfg
+            sendToBinja . SBCfg cid bhash callRatings . convertPilCfg $ cfg
         debug "Created new branch and added auto-cfg."
 
   BSCfgExpandCall cid callNode targetAddr -> do
@@ -517,7 +530,9 @@ handleBinjaEvent = \case
     Snapshot.LoadSnapshot cid -> do
       bhash <- getCfgBinaryHash cid
       cfg <- getCfg cid
-      sendToBinja . SBCfg cid bhash . convertPilCfg $ cfg
+      bv <- getBinaryView bhash
+      callRatings <- getCallNodeRatings bv cfg
+      sendToBinja . SBCfg cid bhash callRatings . convertPilCfg $ cfg
 
 
     Snapshot.SaveSnapshot cid -> do
