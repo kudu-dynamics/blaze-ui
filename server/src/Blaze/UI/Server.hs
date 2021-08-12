@@ -218,17 +218,24 @@ autosaveCfg cid pcfg = getCfgType cid >>= \case
     Db.saveNewCfg_ bid autoCid pcfg Snapshot.Autosave
     return $ Just autoCid
 
+sendCfgWithCallRatings :: BinaryHash -> PilCfg -> CfgId -> EventLoop ()
+sendCfgWithCallRatings bhash cfg cid = do
+  bv <- getBinaryView bhash
+  callRatings <- getCallNodeRatings bv cfg
+  sendToBinja . SBCfg cid bhash callRatings . convertPilCfg $ cfg
+
+refreshActiveCfg :: CfgId -> EventLoop ()
+refreshActiveCfg cid = do
+  (_, bhash) <- getCfgBinaryView cid
+  cfg <- getCfg cid
+  sendCfgWithCallRatings bhash cfg cid
+
 -- | Used after `autosaveCfg`. If second CfgId is Nothing, just send first.
 -- If second is Just, send new CfgId and new snapshot tree.
 sendCfgAndSnapshots :: BinaryHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop ()
-sendCfgAndSnapshots bhash pcfg cid Nothing = do
-  bv <- getBinaryView bhash
-  callRatings <- getCallNodeRatings bv pcfg
-  sendToBinja . SBCfg cid bhash callRatings . convertPilCfg $ pcfg
+sendCfgAndSnapshots bhash pcfg cid Nothing = sendCfgWithCallRatings bhash pcfg cid
 sendCfgAndSnapshots bhash pcfg _ (Just newCid) = do
-  bv <- getBinaryView bhash
-  callRatings <- getCallNodeRatings bv pcfg
-  sendToBinja . SBCfg newCid bhash callRatings . convertPilCfg $ pcfg
+  sendCfgWithCallRatings bhash pcfg newCid
   sendLatestClientSnapshots
 
 setCfg :: CfgId -> PilCfg -> EventLoop ()
@@ -573,16 +580,17 @@ handleBinjaEvent = \case
       PoiDb.setName pid poiDescription
       sendLatestPois
 
-    Poi.ActivatePoiSearch pid -> PoiDb.getPoi pid >>= \case
+    Poi.ActivatePoiSearch pid mcid -> PoiDb.getPoi pid >>= \case
       Nothing -> logError $ "Cannot find POI in database: " <> show pid
       Just poi -> do
         ctx <- ask
         liftIO . atomically . writeTVar (ctx ^. #activePoi) $ Just poi
+        whenJust mcid refreshActiveCfg
 
-    Poi.DeactivatePoiSearch -> do
+    Poi.DeactivatePoiSearch mcid -> do
       ctx <- ask
       liftIO . atomically . writeTVar (ctx ^. #activePoi) $ Nothing
-
+      whenJust mcid refreshActiveCfg
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do

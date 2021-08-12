@@ -13,6 +13,7 @@ import qualified Database.Selda.SqlType as Sql
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import Blaze.UI.Types.Db.Address ()
+import Blaze.UI.Types.Cfg (CfgId)
 
 
 newtype PoiId = PoiId UUID
@@ -50,8 +51,10 @@ data BinjaToServer
                 , description :: Maybe Text
                 }
 
-  | ActivatePoiSearch { poiId :: PoiId }
-  | DeactivatePoiSearch
+  | ActivatePoiSearch { poiId :: PoiId
+                      , activeCfg :: Maybe CfgId }
+  | DeactivatePoiSearch { activeCfg :: Maybe CfgId }
+
   deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 
 
