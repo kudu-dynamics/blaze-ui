@@ -1,8 +1,16 @@
 import logging as _logging
+from datetime import datetime
 from typing import List, TYPE_CHECKING
 
 import binaryninjaui
-from binaryninjaui import DockContextHandler, UIActionContext, ViewFrame
+from binaryninjaui import (
+    ContextMenuManager,
+    DockContextHandler,
+    Menu, 
+    UIActionContext,
+    UIActionHandler,
+    ViewFrame,
+)
 
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
     from PySide6.QtCore import Qt  # type: ignore
@@ -14,7 +22,7 @@ else:
     from PySide2.QtWidgets import QWidget, QListWidget, QListWidgetItem, QVBoxLayout  # type: ignore
 
 from .types import MenuOrder
-from .util import BNAction, try_debug
+from .util import BNAction, add_actions, bind_actions, try_debug
 
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance
@@ -24,7 +32,12 @@ log = _logging.getLogger(__name__)
 class PoiListItem(QListWidgetItem):
     def __init__(
             self,
-            parent: QListWidget):
+            parent: QListWidget,
+            name: str,
+            desc: str,
+            func_name: str,
+            instr_addr: int,
+            created_on: datetime):
         '''
         parent: the parent list widget
         '''
@@ -32,6 +45,22 @@ class PoiListItem(QListWidgetItem):
             self,
             parent,  # type: ignore
             type=QListWidgetItem.UserType)
+
+        self.name = name
+        self.desc = desc
+        self.func_name = func_name
+        self.instr_addr = instr_addr
+        self.created_on = created_on
+        
+        self.update_text()
+
+    def update_text(self):
+        if self.name:
+            item_str = f'{self.name} ({self.func_name} @ 0x{hex(self.instr_addr)})'
+            self.setText(item_str)
+        else:
+            item_str = f'{self.func_name} @ 0x{hex(self.instr_addr)}'
+            self.setText(item_str)
 
 
 class PoiListWidget(QListWidget):
@@ -42,6 +71,11 @@ class PoiListWidget(QListWidget):
         QListWidget.__init__(self, parent)
         self.blaze_instance: 'BlazeInstance' = blaze_instance
 
+        self.action_handler = UIActionHandler()
+        self.action_handler.setupActionHandler(self)
+        self.context_menu = Menu()
+        self.context_menu_manager = ContextMenuManager(self)
+
         # yapf: disable
         actions: List[BNAction] = [
             BNAction(
@@ -51,6 +85,9 @@ class PoiListWidget(QListWidget):
             ),
         ]
         #yapf: enable
+
+        bind_actions(self.action_handler, actions)
+        add_actions(self.context_menu, actions)
 
         log.debug('%r initialized', self)
 

@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 import enum
 import json
 import logging as _logging
@@ -31,7 +32,7 @@ else:
     from PySide2.QtWidgets import QApplication, QWidget  # type: ignore
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
-from .poi import PoiListDockWidget
+from .poi import PoiListDockWidget, PoiListItem
 from .settings import BlazeSettings
 from .snaptree import SnapTreeDockWidget
 from .types import (
@@ -208,6 +209,7 @@ class BlazePlugin():
                 view_frame=dock_handler.getViewFrame(),
                 parent=parent,
                 blaze_instance=self.ensure_instance(bv))
+            self.poi_dock_widgets[bv_key(bv)].append(widget)
             return widget
 
         self.dock_handler.addDockWidget(
@@ -504,12 +506,17 @@ def start_cfg(bv, func):
 
 
 @register_for_address(Action.MARK_POI, 'Mark POI')
-def mark_poi(bv, addr):
-    log.info(f'Handling {addr}')
-
-    
-
-    log.info("Mark POI handled.")
+def mark_poi(bv, addr): 
+    poi_list = None
+    for dw in blaze.poi_dock_widgets[bv_key(bv)]:
+        func = bv.get_functions_containing(addr)[0]
+        poi_item = PoiListItem(dw.poi_list_widget,
+                               '',
+                               '',
+                               func.name,
+                               addr,
+                               datetime.now())
+        dw.poi_list_widget.addItem(poi_item)
 
 
 def listen_start(bv):
