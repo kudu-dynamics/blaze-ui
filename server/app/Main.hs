@@ -25,7 +25,8 @@ main = do
       putText "blaze-ui-server <host> <websockets port> <http port> <sqlite filepath> <bndb dir>"
       P.error "Invalid args"
   conn <- Db.init $ cfg ^. #sqliteFilePath
-  void . forkIO $ WebServer.run cfg
-  Server.run cfg conn
+  appState <- initAppState cfg conn
+  void . forkIO $ WebServer.run appState
+  Server.run appState
   putText "Closing database connection"
   Db.close conn

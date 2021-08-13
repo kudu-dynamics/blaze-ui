@@ -43,6 +43,7 @@ import Blaze.Function (Function)
 import qualified Blaze.UI.Db.Poi as PoiDb
 import qualified Blaze.UI.Types.Poi as Poi
 import Blaze.Types.Cfg.Analysis (Target(Target), CallNodeRating)
+import qualified Blaze.UI.Types.CachedCalc as CC
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -72,7 +73,16 @@ getSessionState sid st = atomically $ do
           (st ^. #serverConfig . #binaryManagerStorageDir)
           (sid ^. #clientId)
           (sid ^. #hostBinaryPath)
-        ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn)
+        ccCallNodeRating <- do
+          mcc <- HashMap.lookup sid <$> readTVar (st ^. #callNodeRatingCtxs)
+          case mcc of
+            Just cc -> return cc -- I think this will never happen
+            Nothing -> do
+              cc <- CC.create
+              modifyTVar (st ^. #callNodeRatingCtxs)
+                $ HashMap.insert sid cc
+              return cc
+        ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
         modifyTVar (st ^. #binarySessions)
           $ HashMap.insert sid ss
         return (True, ss)
@@ -162,6 +172,7 @@ spawnEventHandler cid st ss = do
                   (ss ^. #cfgs)
                   (st ^. #dbConn)
                   (ss ^. #activePoi)
+                  (ss ^. #callNodeRatingCtx)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
         void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx
@@ -179,14 +190,15 @@ app st pconn = case splitPath of
     path = WS.requestPath $ WS.pendingRequest pconn
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
 
-run :: ServerConfig -> Db.Conn -> IO ()
-run cfg conn = do
-  st <- initAppState cfg conn
+run :: AppState -> IO ()
+run st = do
   putText $ "Starting Blaze UI Server at "
     <> serverHost cfg
     <> ":"
     <> show (serverWsPort cfg)
   WS.runServer (cs $ serverHost cfg) (serverWsPort cfg) (app st)
+  where
+    cfg = st ^. #serverConfig
 
 testClient :: BinjaMessage BinjaToServer -> WS.Connection -> IO (BinjaMessage ServerToBinja)
 testClient msg conn = do
