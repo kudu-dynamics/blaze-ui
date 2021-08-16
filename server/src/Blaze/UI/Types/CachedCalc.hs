@@ -16,8 +16,8 @@ create = fmap CachedCalc . newTVar $ HashMap.empty
 -- then inserts new v into TMVar.
 -- The empty TMVar is created separately so things can start waiting on it
 -- before calculation finishes.
-setCalc :: (Eq k, Hashable k) => k -> IO v -> CachedCalc k v -> IO (TMVar v)
-setCalc k action (CachedCalc cc) = do
+setCalc :: (Eq k, Hashable k) => k -> CachedCalc k v -> IO v -> IO (TMVar v)
+setCalc k (CachedCalc cc) action = do
   tmvar <- atomically $ do
     m <- readTVar cc
     case HashMap.lookup k m of
@@ -27,7 +27,9 @@ setCalc k action (CachedCalc cc) = do
         writeTVar cc $ HashMap.insert k emptyV m
         return emptyV
   void . forkIO $ do
+    putText "------- STARTING CALCULATION -----------"
     v <- action
+    putText "--------- FINISHED CALCULATION??? -----------"
     void . atomically $ tryPutTMVar tmvar v
   return tmvar
 

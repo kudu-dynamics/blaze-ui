@@ -63,34 +63,36 @@ data SessionError
 getSessionState :: SessionId
                 -> AppState
                 -> IO SessionState
-getSessionState sid st = atomically $ do
-  m <- readTVar $ st ^. #binarySessions
-  case HashMap.lookup sid m of
-    Just ss -> return ss
-    Nothing -> do
-      bm <- BM.create
-        (st ^. #serverConfig . #binaryManagerStorageDir)
-        (sid ^. #clientId)
-        (sid ^. #hostBinaryPath)
-      ccCallNodeRating <- do
-        mcc <- HashMap.lookup sid <$> readTVar (st ^. #callNodeRatingCtxs)
-        case mcc of
-          Just cc -> return cc -- I think this will never happen
-          Nothing -> do
-            cc <- CC.create
-            modifyTVar (st ^. #callNodeRatingCtxs)
-              $ HashMap.insert sid cc
-            return cc
-      ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
-      spawnEventHandler (sid ^. #clientId) st ss
-      modifyTVar (st ^. #binarySessions)
-        $ HashMap.insert sid ss
-      return ss
-   
+getSessionState sid st = do
+  (ss, justCreated) <- atomically $ do
+    m <- readTVar $ st ^. #binarySessions
+    case HashMap.lookup sid m of
+      Just ss -> return (ss, False)
+      Nothing -> do
+        bm <- BM.create
+          (st ^. #serverConfig . #binaryManagerStorageDir)
+          (sid ^. #clientId)
+          (sid ^. #hostBinaryPath)
+        ccCallNodeRating <- do
+          mcc <- HashMap.lookup sid <$> readTVar (st ^. #callNodeRatingCtxs)
+          case mcc of
+            Just cc -> return cc -- I think this will never happen
+            Nothing -> do
+              cc <- CC.create
+              modifyTVar (st ^. #callNodeRatingCtxs)
+                $ HashMap.insert sid cc
+              return cc
+        ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
+        modifyTVar (st ^. #binarySessions)
+          $ HashMap.insert sid ss
+        return (ss, True)
+  when justCreated $ spawnEventHandler (sid ^. #clientId) st ss
+  return ss
+    
+
 removeSessionState :: SessionId -> AppState -> IO ()
 removeSessionState sid st = atomically $ do
   modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
-  modifyTVar (st ^. #callNodeRatingCtxs)
 
 createBinjaOutbox :: WS.Connection
                   -> SessionState
@@ -117,7 +119,7 @@ sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
 -- started for this particular binja conn, since there might already be an outbox
 -- to a different binja.
 binjaApp :: HashMap SessionId ThreadId -> AppState -> WS.Connection -> IO ()
-  binjaApp localOutboxThreads st conn = do
+binjaApp localOutboxThreads st conn = do
   er <- receiveJSON conn :: IO (Either Text (BinjaMessage BinjaToServer))
   -- putText $ "got binja message: " <> show er
   case er of

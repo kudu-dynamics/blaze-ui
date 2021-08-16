@@ -3,7 +3,7 @@ module Main where
 import Blaze.UI.Prelude
 import qualified Prelude as P
 import qualified Blaze.UI.Server as Server
-import Blaze.UI.Types (ServerConfig(ServerConfig))
+import Blaze.UI.Types (ServerConfig(ServerConfig), initAppState)
 import Blaze.UI.Web.Server as WebServer
 import qualified System.Envy as Envy
 import System.IO ( BufferMode(LineBuffering)
