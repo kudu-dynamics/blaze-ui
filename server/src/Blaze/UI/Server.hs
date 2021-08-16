@@ -60,36 +60,37 @@ data SessionError
   deriving (Eq, Ord, Show, Generic)
 
 -- | returns session state or creates it.
--- bool indicates whether or not it was just now created
 getSessionState :: SessionId
                 -> AppState
-                -> IO (Bool, SessionState)
+                -> IO SessionState
 getSessionState sid st = atomically $ do
-    m <- readTVar $ st ^. #binarySessions
-    case HashMap.lookup sid m of
-      Just ss -> return (False, ss)
-      Nothing -> do
-        bm <- BM.create
-          (st ^. #serverConfig . #binaryManagerStorageDir)
-          (sid ^. #clientId)
-          (sid ^. #hostBinaryPath)
-        ccCallNodeRating <- do
-          mcc <- HashMap.lookup sid <$> readTVar (st ^. #callNodeRatingCtxs)
-          case mcc of
-            Just cc -> return cc -- I think this will never happen
-            Nothing -> do
-              cc <- CC.create
-              modifyTVar (st ^. #callNodeRatingCtxs)
-                $ HashMap.insert sid cc
-              return cc
-        ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
-        modifyTVar (st ^. #binarySessions)
-          $ HashMap.insert sid ss
-        return (True, ss)
-
+  m <- readTVar $ st ^. #binarySessions
+  case HashMap.lookup sid m of
+    Just ss -> return ss
+    Nothing -> do
+      bm <- BM.create
+        (st ^. #serverConfig . #binaryManagerStorageDir)
+        (sid ^. #clientId)
+        (sid ^. #hostBinaryPath)
+      ccCallNodeRating <- do
+        mcc <- HashMap.lookup sid <$> readTVar (st ^. #callNodeRatingCtxs)
+        case mcc of
+          Just cc -> return cc -- I think this will never happen
+          Nothing -> do
+            cc <- CC.create
+            modifyTVar (st ^. #callNodeRatingCtxs)
+              $ HashMap.insert sid cc
+            return cc
+      ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
+      spawnEventHandler (sid ^. #clientId) st ss
+      modifyTVar (st ^. #binarySessions)
+        $ HashMap.insert sid ss
+      return ss
+   
 removeSessionState :: SessionId -> AppState -> IO ()
-removeSessionState sid st = atomically
-  . modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
+removeSessionState sid st = atomically $ do
+  modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
+  modifyTVar (st ^. #callNodeRatingCtxs)
 
 createBinjaOutbox :: WS.Connection
                   -> SessionState
@@ -116,7 +117,7 @@ sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
 -- started for this particular binja conn, since there might already be an outbox
 -- to a different binja.
 binjaApp :: HashMap SessionId ThreadId -> AppState -> WS.Connection -> IO ()
-binjaApp localOutboxThreads st conn = do
+  binjaApp localOutboxThreads st conn = do
   er <- receiveJSON conn :: IO (Either Text (BinjaMessage BinjaToServer))
   -- putText $ "got binja message: " <> show er
   case er of
@@ -130,30 +131,28 @@ binjaApp localOutboxThreads st conn = do
           logInfo' txt = do
             reply . SBLogInfo $ txt
             putText txt
-      (justCreated, ss) <- getSessionState sid st
+      ss <- getSessionState sid st
       let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
                       . BinjaEvent
                       $ x ^. #action
-      case justCreated of
+      -- check to see if this conn has registered outbox thread
+      case HashMap.member sid localOutboxThreads of
         False -> do
-          -- check to see if this conn has registered outbox thread
-          case HashMap.member sid localOutboxThreads of
-            False -> do
-              outboxThread <- createBinjaOutbox conn ss cid hpath
-              pushEvent
-              logInfo' $ "Blaze Connected. Attached to existing session for binary: " <> show hpath
-              -- logInfo "For web plugin, go here:"
-              -- logInfo $ webUri (st ^. #serverConfig) sid
-              binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
-            True -> do
-              pushEvent >> binjaApp localOutboxThreads st conn
-
-        True -> do
-          logInfo' "Connected:"
-          spawnEventHandler cid st ss
           outboxThread <- createBinjaOutbox conn ss cid hpath
           pushEvent
+          logInfo' $ "Blaze Connected. Attached to existing session for binary: " <> show hpath
+          -- logInfo "For web plugin, go here:"
+          -- logInfo $ webUri (st ^. #serverConfig) sid
           binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
+        True -> do
+          pushEvent >> binjaApp localOutboxThreads st conn
+
+        -- True -> do
+        --   logInfo' "Connected:"
+        --   spawnEventHandler cid st ss
+        --   outboxThread <- createBinjaOutbox conn ss cid hpath
+        --   pushEvent
+        --   binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
 
 spawnEventHandler :: ClientId -> AppState -> SessionState -> IO ()
 spawnEventHandler cid st ss = do

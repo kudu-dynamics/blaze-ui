@@ -42,6 +42,7 @@ uploadBinary cfg = do
         . cs
         . Wai.fileContent
         $ finfo
+      let sid = mkSessionId clientId' hostBinaryPath'
       json h
       putText $ "New bndb uploaded: "
         <> HBP.toText hostBinaryPath'
@@ -53,8 +54,10 @@ showErrorPage = do
   setHeader "Content-Type" "text/html"
   html "This is the best page <i>ever</i>"
 
-run :: ServerConfig -> IO ()
-run cfg = do
+run :: AppState -> IO ()
+run st = do
   putText $ "Starting http server at http://" <> serverHost cfg <> ":"
     <> show (serverHttpPort cfg)
-  scotty (serverHttpPort cfg) $ server cfg
+  scotty (serverHttpPort cfg) $ server st
+  where
+    cfg = st ^. #serverConfig
