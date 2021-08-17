@@ -16,6 +16,7 @@ import Blaze.Function (Function)
 import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
 import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
+import qualified Blaze.UI.Types.Poi as Poi
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.Db (MonadDb(withDb))
 import qualified Blaze.UI.Types.Db as Db
@@ -53,7 +54,9 @@ data ServerToBinja = SBLogInfo { message :: Text }
                            }
 
                    | SBSnapshot { snapshotMsg :: Snapshot.ServerToBinja }
-                     
+
+                   | SBPoi { poiMsg :: Poi.ServerToBinja }
+
                    | SBNoop
                    deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
 
@@ -92,6 +95,8 @@ data BinjaToServer = BSConnect
                      { cfgId :: CfgId }
 
                    | BSSnapshot { snapshotMsg :: Snapshot.BinjaToServer }
+
+                   | BSPoi { poiMsg :: Poi.BinjaToServer }
 
                    | BSNoop
 

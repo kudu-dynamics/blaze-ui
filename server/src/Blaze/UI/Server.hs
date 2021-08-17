@@ -40,7 +40,8 @@ import Blaze.UI.Types.Session ( SessionId
                               , mkSessionId
                               )
 import Blaze.Function (Function)
-
+import qualified Blaze.UI.Db.Poi as PoiDb
+import qualified Blaze.UI.Types.Poi as Poi
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -282,7 +283,14 @@ sendLatestBinarySnapshots = do
 sendLatestSnapshots :: EventLoop ()
 sendLatestSnapshots = sendLatestBinarySnapshots
 
-
+sendLatestPois :: EventLoop ()
+sendLatestPois = do
+  ctx <- ask
+  pois <- PoiDb.getPoisOfBinary (ctx ^. #clientId) (ctx ^. #hostBinaryPath)
+  sendToBinja
+    . SBPoi
+    . Poi.PoisOfBinary
+    $ pois
 
 ------------------------------------------
 --- main event handler
@@ -530,6 +538,32 @@ handleBinjaEvent = \case
       Db.setCfgName cid name'
       logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
       sendLatestSnapshots
+
+  BSPoi poiMsg' -> case poiMsg' of
+    Poi.GetPoisOfBinary -> sendLatestPois
+
+    Poi.AddPoi funcAddr instrAddr poiName poiDescription -> do
+      ctx <- ask
+      PoiDb.saveNew
+        (ctx ^. #clientId)
+        (ctx ^. #hostBinaryPath)
+        funcAddr
+        instrAddr
+        poiName
+        poiDescription
+      sendLatestPois
+
+    Poi.DeletePoi pid -> do
+      PoiDb.delete pid
+      sendLatestPois
+
+    Poi.RenamePoi pid poiName -> do
+      PoiDb.setName pid poiName
+      sendLatestPois
+
+    Poi.DescribePoi pid poiDescription -> do
+      PoiDb.setName pid poiDescription
+      sendLatestPois
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do

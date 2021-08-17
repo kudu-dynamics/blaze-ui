@@ -26,6 +26,8 @@ import Blaze.UI.Types.Graph (graphFromTransport, graphToTransport)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import qualified Data.HashMap.Strict as HashMap
+import Blaze.UI.Types.Poi (poiTable)
+
 
 
 init :: FilePath -> IO Conn
@@ -34,6 +36,7 @@ init blazeSqliteFilePath = do
   runSelda conn $ do
     tryCreateTable cfgTable
     tryCreateTable snapshotBranchTable
+    tryCreateTable poiTable
   return conn
 
 close :: Conn -> IO ()
@@ -253,5 +256,4 @@ getAllBranchesForClient cid = do
       -> (HostBinaryPath, [(BranchId, Snapshot.Branch BranchTree)])
     f (bid, branch) = ( branch ^. #hostBinaryPath
                        , [(bid, branch)])
-
 
