@@ -442,9 +442,8 @@ class SnapTreeWidget(QTreeWidget):
         log.info(f'Loading snapshot for icfg {cfg_id}')
         snapshot_msg = SnapshotBinjaToServer(tag='LoadSnapshot', cfgId=cfg_id)
 
-        for dw in self.blaze_instance.blaze.icfg_dock_widgets[self.blaze_instance.bv_key]:
-            if dw.blaze_instance == self.blaze_instance:
-                dw.icfg_widget.recenter_node_id = None
+        for instance in self.blaze_instance.blaze.instances_by_key[self.blaze_instance.bv_key]:
+            instance.icfg_dock_widget.icfg_widget.recenter_node_id = None
 
         self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snapshot_msg))
 
