@@ -239,7 +239,7 @@ refreshActiveCfg cid = do
 -- If second is Just, send new CfgId and new snapshot tree.
 sendCfgAndSnapshots :: BinaryHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop ()
 sendCfgAndSnapshots bhash pcfg cid Nothing = sendCfgWithCallRatings bhash pcfg cid
-sendCfgAndSnapshots bhash pcfg _ (Just newCid) = do
+sendCfgAndSnapshots bhash pcfg _ (Just newCid) =
   sendCfgWithCallRatings bhash pcfg newCid
 
 sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
