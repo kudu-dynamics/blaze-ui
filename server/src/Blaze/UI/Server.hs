@@ -234,7 +234,7 @@ autosaveCfg cid pcfg = getCfgType cid >>= \case
 sendCfgWithCallRatings :: BinaryHash -> PilCfg -> CfgId -> EventLoop ()
 sendCfgWithCallRatings bhash cfg cid = do
   callRatings <- getCallNodeRatings bhash cfg
-  sendToBinja . SBCfg cid bhash callRatings . convertPilCfg $ cfg
+  sendToBinja . SBCfg cid bhash callRatings Nothing . convertPilCfg $ cfg
 
 refreshActiveCfg :: CfgId -> EventLoop ()
 refreshActiveCfg cid = do
@@ -248,7 +248,19 @@ sendCfgAndSnapshots :: BinaryHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop
 sendCfgAndSnapshots bhash pcfg cid Nothing = sendCfgWithCallRatings bhash pcfg cid
 sendCfgAndSnapshots bhash pcfg _ (Just newCid) = do
   sendCfgWithCallRatings bhash pcfg newCid
-  sendLatestClientSnapshots
+
+sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
+sendDiffCfg bhash cid old new = do
+  CfgUI.addCfg cid new
+  sendToBinja $ SBCfg cid bhash Nothing (Just changes) $ convertPilCfg old
+  where
+    changes = PendingChanges removedNodes' removedEdges'
+    removedNodes' = fmap Cfg.getNodeUUID
+                    . HashSet.toList
+                    $ CfgUI.getRemovedNodes old new
+    removedEdges' = fmap CfgUI.edgeToUUIDTuple
+                    . HashSet.toList
+                    $ CfgUI.getRemovedEdges old new
 
 setCfg :: CfgId -> PilCfg -> EventLoop ()
 setCfg cid pcfg = do
@@ -260,7 +272,11 @@ setCfg cid pcfg = do
 getCfg :: CfgId -> EventLoop PilCfg
 getCfg cid = CfgUI.getCfg cid >>= \case
   Just pcfg -> return pcfg
-  Nothing -> Db.getCfg cid >>= \case
+  Nothing -> getStoredCfg cid
+
+-- | Tries to getCfg from db. if db has it, add it to cache
+getStoredCfg :: CfgId -> EventLoop PilCfg
+getStoredCfg cid = Db.getCfg cid >>= \case
     Nothing -> throwError . EventLoopError $ "Could not find existing CFG with id " <> show cid
     Just pcfg -> do
       CfgUI.addCfg cid pcfg
@@ -299,7 +315,6 @@ sendLatestPois = do
     . SBPoi
     . Poi.PoisOfBinary
     $ pois
-
 
 ------------------------------------------
 --- main event handler
@@ -449,7 +464,7 @@ handleBinjaEvent = \case
             CfgUI.addCfg cid cfg
             sendLatestSnapshots
             callRatings <- getCallNodeRatings bhash cfg
-            sendToBinja . SBCfg cid bhash callRatings . convertPilCfg $ cfg
+            sendToBinja . SBCfg cid bhash callRatings Nothing . convertPilCfg $ cfg
         debug "Created new branch and added auto-cfg."
 
   BSCfgExpandCall cid callNode targetAddr -> do
@@ -490,8 +505,7 @@ handleBinjaEvent = \case
       Just (fullNode1, fullNode2) -> do
         let InterCfg cfg' = CfgA.prune (G.Edge fullNode1 fullNode2) $ InterCfg cfg
         printSimplifyStats cfg cfg'
-        autosaveCfg cid cfg'
-          >>= sendCfgAndSnapshots bhash cfg' cid
+        sendDiffCfg bhash cid cfg cfg'
 
   BSCfgRemoveNode cid node' -> do
     debug "Binja remove node"
@@ -506,8 +520,7 @@ handleBinjaEvent = \case
           let cfg' = G.removeNode fullNode cfg
               InterCfg prunedCfg = CfgA.simplify $ InterCfg cfg'
           printSimplifyStats cfg' prunedCfg
-          autosaveCfg cid prunedCfg
-            >>= sendCfgAndSnapshots bhash prunedCfg cid
+          sendDiffCfg bhash cid cfg cfg'
 
   BSCfgFocus cid node' -> do
     debug "Binja Focus"
@@ -521,8 +534,25 @@ handleBinjaEvent = \case
         else do
           let InterCfg cfg' = CfgA.focus fullNode $ InterCfg cfg
           printSimplifyStats cfg cfg'
-          autosaveCfg cid cfg'
-            >>= sendCfgAndSnapshots bhash cfg' cid
+          sendDiffCfg bhash cid cfg cfg'
+
+  BSCfgConfirmChanges cid ->
+    CfgUI.getCfg cid >>= \case
+      Nothing -> throwError . EventLoopError $ "Could not find existing CFG with id " <> show cid
+      Just pcfg -> do
+        bhash <- getCfgBinaryHash cid
+        autosaveCfg cid pcfg
+          >>= sendCfgAndSnapshots bhash pcfg cid
+
+  BSCfgRevertChanges cid -> Db.getCfg cid >>= \case
+    Nothing -> throwError . EventLoopError $ "Could not find existing CFG with id " <> show cid
+    Just pcfg -> do
+      CfgUI.addCfg cid pcfg
+      bhash <- getCfgBinaryHash cid
+      callRatings <- getCallNodeRatings bhash pcfg
+      sendToBinja . SBCfg cid bhash callRatings Nothing $ convertPilCfg pcfg
+      
+    
 
   BSNoop -> debug "Binja noop"
 
@@ -552,10 +582,9 @@ handleBinjaEvent = \case
 
     Snapshot.LoadSnapshot cid -> do
       bhash <- getCfgBinaryHash cid
-      cfg <- getCfg cid
+      cfg <- getStoredCfg cid
       callRatings <- getCallNodeRatings bhash cfg
-      sendToBinja . SBCfg cid bhash callRatings . convertPilCfg $ cfg
-
+      sendToBinja . SBCfg cid bhash callRatings Nothing . convertPilCfg $ cfg
 
     Snapshot.SaveSnapshot cid -> do
       Db.setCfgSnapshotType cid Snapshot.Immutable

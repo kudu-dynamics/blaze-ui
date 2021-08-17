@@ -57,9 +57,8 @@ uploadBinary st = do
       void . liftIO
         . CC.setCalc h (ss ^. #callNodeRatingCtx)
         $ do
-            putText "Calculating CallNodeRatingCtx..."
             r <- CfgA.getCallNodeRatingCtx $ BNImporter bv
-            putText $ "Calculated CallNodeRatingCtx."
+            putText "Calculated CallNodeRatingCtx."
             return r
 
       json h

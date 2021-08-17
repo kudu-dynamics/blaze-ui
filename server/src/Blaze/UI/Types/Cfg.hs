@@ -4,6 +4,7 @@ import Blaze.UI.Prelude hiding (Symbol)
 
 import Blaze.Types.Pil (Stmt)
 import Blaze.Types.Cfg ( CfNode, CfEdge(CfEdge), Cfg )
+import qualified Blaze.Types.Cfg as Cfg
 import qualified Blaze.Graph as G
 import qualified Data.HashMap.Strict as HashMap
 import Blaze.Pretty (Token, tokenize)
@@ -12,7 +13,6 @@ import Blaze.Cfg.Interprocedural (
   unInterCfg,
  )
 import System.Random (Random)
-import qualified Blaze.Types.Cfg as Cfg
 import Database.Selda.SqlType ( Lit(LCustom)
                               , SqlTypeRep(TBlob)
                               , SqlType
