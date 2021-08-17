@@ -35,6 +35,12 @@ data BinjaMessage a = BinjaMessage
 instance ToJSON a => ToJSON (BinjaMessage a)
 instance FromJSON a => FromJSON (BinjaMessage a)
 
+data PendingChanges = PendingChanges
+  { removedNodes :: [UUID]
+  , removedEdges :: [(UUID, UUID)]
+  -- Maybe TODO: add "addedNodes" and "addedEdges"
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+
 data ServerToBinja = SBLogInfo { message :: Text }
                    | SBLogWarn { message :: Text }
                    | SBLogError { message :: Text }
@@ -42,6 +48,7 @@ data ServerToBinja = SBLogInfo { message :: Text }
                    | SBCfg { cfgId :: CfgId
                            -- So plugin can easily warn if it's out of date
                            , bndbHash :: BinaryHash
+                           , pendingChanges :: Maybe PendingChanges
                            -- TODO: send cfg with text
                            , cfg :: CfgTransport [[Token]]
                            }
@@ -80,6 +87,12 @@ data BinjaToServer = BSConnect
                      { cfgId :: CfgId
                      , node :: CfNode ()
                      }
+
+                   | BSCfgConfirmChanges
+                     { cfgId :: CfgId }
+
+                   | BSCfgRevertChanges
+                     { cfgId :: CfgId }
 
                    | BSSnapshot { snapshotMsg :: Snapshot.BinjaToServer }
 

@@ -29,6 +29,7 @@ import qualified Data.HashMap.Strict as HashMap
 import Blaze.UI.Types.Poi (poiTable)
 
 
+
 init :: FilePath -> IO Conn
 init blazeSqliteFilePath = do
   conn <- open blazeSqliteFilePath
