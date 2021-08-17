@@ -52,7 +52,9 @@ data BinjaToServer
                 }
 
   | ActivatePoiSearch { poiId :: PoiId
-                      , activeCfg :: Maybe CfgId }
+                      , activeCfg :: Maybe CfgId
+                      }
+
   | DeactivatePoiSearch { activeCfg :: Maybe CfgId }
 
   deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
