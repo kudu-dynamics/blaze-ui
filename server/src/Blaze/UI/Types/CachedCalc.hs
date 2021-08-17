@@ -27,16 +27,21 @@ setCalc k (CachedCalc cc) action = do
         writeTVar cc $ HashMap.insert k emptyV m
         return emptyV
   void . forkIO $ do
-    putText "------- STARTING CALCULATION -----------"
     v <- action
-    putText "--------- FINISHED CALCULATION??? -----------"
     void . atomically $ tryPutTMVar tmvar v
   return tmvar
 
--- | Retrieves the cached calc. Returns Nothing
--- if the key cannot be found. Otherwise,
--- it waits until v is available.
+-- | Retrieves the cached calc. Returns Nothing if the key cannot be found.
+-- Otherwise, it waits until v is available.
 getCalc :: (Hashable k, Eq k) => k -> CachedCalc k v -> IO (Maybe v)
 getCalc k (CachedCalc cc) = (HashMap.lookup k <$> readTVarIO cc) >>= \case
   Nothing -> return Nothing
   Just tmvar -> fmap Just . atomically . readTMVar $ tmvar
+
+-- | Retrieves the cached calc or computes it and caches it.
+-- Blocks thread until return.
+calc :: (Hashable k, Eq k) => k -> CachedCalc k v -> IO v -> IO v
+calc k cc action = getCalc k cc >>= \case
+  Just v -> return v
+  Nothing -> setCalc k cc action >>= atomically . readTMVar
+  

@@ -57,8 +57,9 @@ uploadBinary st = do
       void . liftIO
         . CC.setCalc h (ss ^. #callNodeRatingCtx)
         $ do
+            putText "Calculating CallNodeRatingCtx..."
             r <- CfgA.getCallNodeRatingCtx $ BNImporter bv
-            print $ length (show r :: String)
+            putText $ "Calculated CallNodeRatingCtx."
             return r
 
       json h
@@ -66,8 +67,6 @@ uploadBinary st = do
         <> HBP.toText hostBinaryPath'
         <> " (" <> BinaryHash.toText h <> ")"
     saveBndb _ _ _ = return ()
-
-
 
 showErrorPage :: ActionM ()
 showErrorPage = do

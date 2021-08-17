@@ -233,8 +233,7 @@ autosaveCfg cid pcfg = getCfgType cid >>= \case
 
 sendCfgWithCallRatings :: BinaryHash -> PilCfg -> CfgId -> EventLoop ()
 sendCfgWithCallRatings bhash cfg cid = do
-  bv <- getBinaryView bhash
-  callRatings <- getCallNodeRatings bv cfg
+  callRatings <- getCallNodeRatings bhash cfg
   sendToBinja . SBCfg cid bhash callRatings . convertPilCfg $ cfg
 
 refreshActiveCfg :: CfgId -> EventLoop ()
@@ -378,14 +377,18 @@ getActivePoiTarget bv = do
         Just func -> do
           return . Just . Target func $ poi ^. #instrAddr
 
-getCallNodeRatings :: BNBinaryView -> PilCfg -> EventLoop (Maybe [(UUID, CallNodeRating)])
-getCallNodeRatings bv pcfg = getActivePoiTarget bv >>= \case
-  Nothing -> return Nothing
-  Just tgt -> do
-    -- TODO: cache the cnrCtx
-    cnrCtx <- liftIO . CfgA.getCallNodeRatingCtx . BNImporter $ bv
-    let ratings = CfgA.getCallNodeRatings cnrCtx tgt pcfg
-    return . Just . fmap (over _1 $ view #uuid) . HashMap.toList $ ratings
+getCallNodeRatings :: BinaryHash -> PilCfg -> EventLoop (Maybe [(UUID, CallNodeRating)])
+getCallNodeRatings bhash pcfg = do
+  bv <- getBinaryView bhash
+  getActivePoiTarget bv >>= \case
+    Nothing -> return Nothing
+    Just tgt -> do
+      ctx <- ask
+      -- TODO: cache the cnrCtx
+      cnrCtx <- liftIO . CC.calc bhash (ctx ^. #callNodeRatingCtx)
+        . CfgA.getCallNodeRatingCtx . BNImporter $ bv
+      let ratings = CfgA.getCallNodeRatings cnrCtx tgt pcfg
+      return . Just . fmap (over _1 $ view #uuid) . HashMap.toList $ ratings
 
 mainEventLoop :: Event -> EventLoop ()
 mainEventLoop (BinjaEvent msg) = handleBinjaEvent msg
@@ -445,7 +448,7 @@ handleBinjaEvent = \case
               cfg
             CfgUI.addCfg cid cfg
             sendLatestSnapshots
-            callRatings <- getCallNodeRatings bv cfg
+            callRatings <- getCallNodeRatings bhash cfg
             sendToBinja . SBCfg cid bhash callRatings . convertPilCfg $ cfg
         debug "Created new branch and added auto-cfg."
 
@@ -550,8 +553,7 @@ handleBinjaEvent = \case
     Snapshot.LoadSnapshot cid -> do
       bhash <- getCfgBinaryHash cid
       cfg <- getCfg cid
-      bv <- getBinaryView bhash
-      callRatings <- getCallNodeRatings bv cfg
+      callRatings <- getCallNodeRatings bhash cfg
       sendToBinja . SBCfg cid bhash callRatings . convertPilCfg $ cfg
 
 
