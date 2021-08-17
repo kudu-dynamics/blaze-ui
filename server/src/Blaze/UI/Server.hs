@@ -149,13 +149,6 @@ binjaApp localOutboxThreads st conn = do
         True -> do
           pushEvent >> binjaApp localOutboxThreads st conn
 
-        -- True -> do
-        --   logInfo' "Connected:"
-        --   spawnEventHandler cid st ss
-        --   outboxThread <- createBinjaOutbox conn ss cid hpath
-        --   pushEvent
-        --   binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
-
 spawnEventHandler :: ClientId -> AppState -> SessionState -> IO ()
 spawnEventHandler cid st ss = do
   b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
