@@ -88,7 +88,6 @@ getSessionState sid st = do
         return (ss, True)
   when justCreated $ spawnEventHandler (sid ^. #clientId) st ss
   return ss
-    
 
 removeSessionState :: SessionId -> AppState -> IO ()
 removeSessionState sid st = atomically $ do
