@@ -98,6 +98,15 @@ class PoiListWidget(QListWidget):
     def __del__(self):
         try_debug(log, 'Deleting %r', self)
 
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        if event.button() != Qt.LeftButton:
+            return super().mousePressEvent(event)
+
+        ev_pos = event.pos()
+        if (item := self.itemAt(ev_pos)):
+            self.clicked_item = item
+            self.set_active_poi(item.poiId)
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() != Qt.RightButton:
             return super().mousePressEvent(event)
@@ -107,20 +116,22 @@ class PoiListWidget(QListWidget):
             self.clicked_item = item
             self.context_menu_manager.show(self.context_menu, self.action_handler)
 
-    def ctx_menu_action_set_active_poi(self, context: UIActionContext) -> None:
+    def set_active_poi(self, poiId: PoiId) -> None:
         if not self.clicked_item or not self.blaze_instance.graph:
             return
 
         poi_msg = PoiBinjaToServer(
             tag='ActivatePoiSearch',
             poiId=self.clicked_item.poiId,
-<<<<<<< HEAD
             activeCfg=self.blaze_instance.graph.pil_icfg_id)
-=======
-            cfgId=self.blaze_instance.graph.pil_icfg_id)
->>>>>>> 987a725910027cb45ca60d0dee65bc04c58477a0
 
         self.blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
+
+    def ctx_menu_action_set_active_poi(self, context: UIActionContext) -> None:
+        if not self.clicked_item or not self.blaze_instance.graph:
+            return
+
+        self.set_active_poi(self.clicked_item.poiId)
 
     def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', _view_frame: ViewFrame):
         self.blaze_instance = blaze_instance
