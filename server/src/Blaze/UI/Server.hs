@@ -73,15 +73,7 @@ getSessionState sid st = do
           (st ^. #serverConfig . #binaryManagerStorageDir)
           (sid ^. #clientId)
           (sid ^. #hostBinaryPath)
-        ccCallNodeRating <- do
-          mcc <- HashMap.lookup sid <$> readTVar (st ^. #callNodeRatingCtxs)
-          case mcc of
-            Just cc -> return cc -- I think this will never happen
-            Nothing -> do
-              cc <- CC.create
-              modifyTVar (st ^. #callNodeRatingCtxs)
-                $ HashMap.insert sid cc
-              return cc
+        ccCallNodeRating <- CC.create
         ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
         modifyTVar (st ^. #binarySessions)
           $ HashMap.insert sid ss
