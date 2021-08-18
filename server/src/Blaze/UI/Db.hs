@@ -109,11 +109,6 @@ getCfg cid = fmap (view #cfg) <$> getSavedCfg cid >>= \case
   _ -> -- hopefully impossible
     P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show cid
 
-onlyOne :: [a] -> Maybe a
-onlyOne [] = Nothing
-onlyOne [x] = Just x
-onlyOne _ = P.error "Expected only one result"
-
 getCfgType :: MonadDb m => CfgId -> m (Maybe SnapshotType)
 getCfgType cid = withDb $ do
   fmap onlyOne . query $ do

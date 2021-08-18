@@ -1,4 +1,5 @@
 import logging as _logging
+import random
 from copy import deepcopy
 from typing import TYPE_CHECKING, Container, Dict, List, Mapping, Optional, Tuple, cast
 
@@ -13,6 +14,7 @@ from binaryninja.enums import (
     ThemeColor,
 )
 from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphEdge, FlowGraphNode
+from binaryninja.highlight import HighlightColor
 from binaryninja.function import DisassemblyTextLine, InstructionTextToken
 from binaryninja.interaction import (
     AddressField,
@@ -49,6 +51,7 @@ from .types import (
     BinjaToServer,
     CallDest,
     CallNode,
+    CallNodeRating,
     CfEdge,
     Cfg,
     CfgId,
@@ -175,6 +178,14 @@ def get_target_address(call_dest: CallDest) -> Optional[Address]:
         return func['address']
     else:
         return None
+
+
+def call_node_rating_color(rating: float) -> HighlightColor:
+    return HighlightColor(
+        HighlightStandardColor.RedHighlightColor,
+        HighlightStandardColor.GreenHighlightColor,
+        mix=int(rating * 255)
+    )
 
 
 def format_block_header(node: CfNode) -> DisassemblyTextLine:
@@ -332,14 +343,16 @@ class ICFGFlowGraph(FlowGraph):
         bv: BinaryView,
         cfg: Cfg,
         cfg_id: CfgId,
+        call_node_ratings: Optional[Dict[UUID, CallNodeRating]],
         pending_changes: PendingChanges,
     ):
         super().__init__()
         self.pil_icfg: Cfg = cfg
         self.pil_icfg_id: CfgId = cfg_id
         self.node_mapping: Dict[FlowGraphNode, CfNode] = {}
+        self.call_node_ratings = call_node_ratings
         self.pending_changes: PendingChanges = pending_changes
-
+        
         nodes: Dict[UUID, FlowGraphNode] = {}
 
         # Root node MUST be added to the FlowGraph first, otherwise weird FlowGraphWidget
@@ -359,13 +372,19 @@ class ICFGFlowGraph(FlowGraph):
             if node['contents']['uuid'] in self.pending_changes.removed_nodes:
                 fg_node.highlight = HighlightStandardColor.RedHighlightColor
             elif node['tag'] == 'Call':
-                if is_expandable_call_node(bv, cast(CallNode, node['contents'])):
-                    fg_node.highlight = HighlightStandardColor.YellowHighlightColor
+                call_node = cast(CallNode, node['contents'])
+                if is_expandable_call_node(bv, call_node):
+                    if self.call_node_ratings:
+                        rating = self.call_node_ratings.get(call_node['uuid']) or 0.0
+                        fg_node.highlight = call_node_rating_color(rating)
+                    else:
+                        fg_node.highlight = HighlightStandardColor.YellowHighlightColor
+                    
                 else:
                     fg_node.highlight = HighlightStandardColor.BlackHighlightColor
-            elif node['tag'] == 'EnterFunc':
+            elif node['tag'] == 'EnterFunc' and not self.call_node_ratings:
                 fg_node.highlight = HighlightStandardColor.GreenHighlightColor
-            elif node['tag'] == 'LeaveFunc':
+            elif node['tag'] == 'LeaveFunc' and not self.call_node_ratings:
                 fg_node.highlight = HighlightStandardColor.BlueHighlightColor
 
             nodes[node_id] = fg_node

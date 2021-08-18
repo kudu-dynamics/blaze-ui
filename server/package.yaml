@@ -109,6 +109,7 @@ library:
   - Blaze.UI.Types
   - Blaze.UI.Types.BinaryHash
   - Blaze.UI.Types.BinaryManager
+  - Blaze.UI.Types.CachedCalc
   - Blaze.UI.Types.Cfg
   - Blaze.UI.Types.Cfg.Snapshot
   - Blaze.UI.Types.Session

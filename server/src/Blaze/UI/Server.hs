@@ -42,6 +42,8 @@ import Blaze.UI.Types.Session ( SessionId
 import Blaze.Function (Function)
 import qualified Blaze.UI.Db.Poi as PoiDb
 import qualified Blaze.UI.Types.Poi as Poi
+import Blaze.Types.Cfg.Analysis (Target(Target), CallNodeRating)
+import qualified Blaze.UI.Types.CachedCalc as CC
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -58,27 +60,30 @@ data SessionError
   deriving (Eq, Ord, Show, Generic)
 
 -- | returns session state or creates it.
--- bool indicates whether or not it was just now created
 getSessionState :: SessionId
                 -> AppState
-                -> IO (Bool, SessionState)
-getSessionState sid st = atomically $ do
+                -> IO SessionState
+getSessionState sid st = do
+  (ss, justCreated) <- atomically $ do
     m <- readTVar $ st ^. #binarySessions
     case HashMap.lookup sid m of
-      Just ss -> return (False, ss)
+      Just ss -> return (ss, False)
       Nothing -> do
         bm <- BM.create
           (st ^. #serverConfig . #binaryManagerStorageDir)
           (sid ^. #clientId)
           (sid ^. #hostBinaryPath)
-        ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn)
+        ccCallNodeRating <- CC.create
+        ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
         modifyTVar (st ^. #binarySessions)
           $ HashMap.insert sid ss
-        return (True, ss)
+        return (ss, True)
+  when justCreated $ spawnEventHandler (sid ^. #clientId) st ss
+  return ss
 
 removeSessionState :: SessionId -> AppState -> IO ()
-removeSessionState sid st = atomically
-  . modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
+removeSessionState sid st = atomically $ do
+  modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
 
 createBinjaOutbox :: WS.Connection
                   -> SessionState
@@ -119,30 +124,21 @@ binjaApp localOutboxThreads st conn = do
           logInfo' txt = do
             reply . SBLogInfo $ txt
             putText txt
-      (justCreated, ss) <- getSessionState sid st
+      ss <- getSessionState sid st
       let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
                       . BinjaEvent
                       $ x ^. #action
-      case justCreated of
+      -- check to see if this conn has registered outbox thread
+      case HashMap.member sid localOutboxThreads of
         False -> do
-          -- check to see if this conn has registered outbox thread
-          case HashMap.member sid localOutboxThreads of
-            False -> do
-              outboxThread <- createBinjaOutbox conn ss cid hpath
-              pushEvent
-              logInfo' $ "Blaze Connected. Attached to existing session for binary: " <> show hpath
-              -- logInfo "For web plugin, go here:"
-              -- logInfo $ webUri (st ^. #serverConfig) sid
-              binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
-            True -> do
-              pushEvent >> binjaApp localOutboxThreads st conn
-
-        True -> do
-          logInfo' "Connected:"
-          spawnEventHandler cid st ss
           outboxThread <- createBinjaOutbox conn ss cid hpath
           pushEvent
+          logInfo' $ "Blaze Connected. Attached to existing session for binary: " <> show hpath
+          -- logInfo "For web plugin, go here:"
+          -- logInfo $ webUri (st ^. #serverConfig) sid
           binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
+        True -> do
+          pushEvent >> binjaApp localOutboxThreads st conn
 
 spawnEventHandler :: ClientId -> AppState -> SessionState -> IO ()
 spawnEventHandler cid st ss = do
@@ -160,6 +156,8 @@ spawnEventHandler cid st ss = do
                   (ss ^. #binjaOutboxes)
                   (ss ^. #cfgs)
                   (st ^. #dbConn)
+                  (ss ^. #activePoi)
+                  (ss ^. #callNodeRatingCtx)
 
         -- TOOD: maybe should save these threadIds to kill later or limit?
         void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx
@@ -177,14 +175,15 @@ app st pconn = case splitPath of
     path = WS.requestPath $ WS.pendingRequest pconn
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
 
-run :: ServerConfig -> Db.Conn -> IO ()
-run cfg conn = do
-  st <- initAppState cfg conn
+run :: AppState -> IO ()
+run st = do
   putText $ "Starting Blaze UI Server at "
     <> serverHost cfg
     <> ":"
     <> show (serverWsPort cfg)
   WS.runServer (cs $ serverHost cfg) (serverWsPort cfg) (app st)
+  where
+    cfg = st ^. #serverConfig
 
 testClient :: BinjaMessage BinjaToServer -> WS.Connection -> IO (BinjaMessage ServerToBinja)
 testClient msg conn = do
@@ -216,19 +215,28 @@ autosaveCfg cid pcfg = getCfgType cid >>= \case
     Db.saveNewCfg_ bid autoCid pcfg Snapshot.Autosave
     return $ Just autoCid
 
+sendCfgWithCallRatings :: BinaryHash -> PilCfg -> CfgId -> EventLoop ()
+sendCfgWithCallRatings bhash cfg cid = do
+  callRatings <- getCallNodeRatings bhash cfg
+  sendToBinja . SBCfg cid bhash callRatings Nothing . convertPilCfg $ cfg
+
+refreshActiveCfg :: CfgId -> EventLoop ()
+refreshActiveCfg cid = do
+  (_, bhash) <- getCfgBinaryView cid
+  cfg <- getCfg cid
+  sendCfgWithCallRatings bhash cfg cid
+
 -- | Used after `autosaveCfg`. If second CfgId is Nothing, just send first.
 -- If second is Just, send new CfgId and new snapshot tree.
 sendCfgAndSnapshots :: BinaryHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop ()
-sendCfgAndSnapshots bhash pcfg cid Nothing =
-  sendToBinja $ SBCfg cid bhash Nothing $ convertPilCfg pcfg
-sendCfgAndSnapshots bhash pcfg _ (Just newCid) = do
-  sendToBinja $ SBCfg newCid bhash Nothing $ convertPilCfg pcfg
-  sendLatestClientSnapshots
+sendCfgAndSnapshots bhash pcfg cid Nothing = sendCfgWithCallRatings bhash pcfg cid
+sendCfgAndSnapshots bhash pcfg _ (Just newCid) =
+  sendCfgWithCallRatings bhash pcfg newCid
 
 sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
 sendDiffCfg bhash cid old new = do
   CfgUI.addCfg cid new
-  sendToBinja $ SBCfg cid bhash (Just changes) $ convertPilCfg old
+  sendToBinja $ SBCfg cid bhash Nothing (Just changes) $ convertPilCfg old
   where
     changes = PendingChanges removedNodes' removedEdges'
     removedNodes' = fmap Cfg.getNodeUUID
@@ -348,6 +356,39 @@ getTargetFunc bv addr = liftIO (CG.getFunction bv addr) >>= \case
   Nothing -> logError $ "Could not find function at address: " <> show addr
   Just func -> return func
 
+-- | If active POI exists in ctx, this will convert it to a Target
+-- using the bv version of the bndb to identify the function.
+getActivePoiTarget :: BNBinaryView -> EventLoop (Maybe Target)
+getActivePoiTarget bv = do
+  ctx <- ask
+  liftIO (readTVarIO $ ctx ^. #activePoi) >>= \case
+    Nothing -> return Nothing
+    Just poi -> do
+      let addr = poi ^. #funcAddr
+      -- Should this throwError if it can't find the function?
+      -- That would mean whatever relies on getActivePoiTarget would also fail.
+      -- If we decide it should fail, replace with:
+      -- func <- getTargetFunc bv $ poi ^. #funcAddr
+      liftIO (CG.getFunction bv addr) >>= \case
+        Nothing -> do
+          sendToBinja . SBLogError $ "Could not find function at address: " <> show addr
+          return Nothing
+        Just func -> do
+          return . Just . Target func $ poi ^. #instrAddr
+
+getCallNodeRatings :: BinaryHash -> PilCfg -> EventLoop (Maybe [(UUID, CallNodeRating)])
+getCallNodeRatings bhash pcfg = do
+  bv <- getBinaryView bhash
+  getActivePoiTarget bv >>= \case
+    Nothing -> return Nothing
+    Just tgt -> do
+      ctx <- ask
+      -- TODO: cache the cnrCtx
+      cnrCtx <- liftIO . CC.calc bhash (ctx ^. #callNodeRatingCtx)
+        . CfgA.getCallNodeRatingCtx . BNImporter $ bv
+      let ratings = CfgA.getCallNodeRatings cnrCtx tgt pcfg
+      return . Just . fmap (over _1 $ view #uuid) . HashMap.toList $ ratings
+
 mainEventLoop :: Event -> EventLoop ()
 mainEventLoop (BinjaEvent msg) = handleBinjaEvent msg
 
@@ -406,7 +447,8 @@ handleBinjaEvent = \case
               cfg
             CfgUI.addCfg cid cfg
             sendLatestSnapshots
-            sendToBinja . SBCfg cid bhash Nothing $ convertPilCfg cfg
+            callRatings <- getCallNodeRatings bhash cfg
+            sendToBinja . SBCfg cid bhash callRatings Nothing . convertPilCfg $ cfg
         debug "Created new branch and added auto-cfg."
 
   BSCfgExpandCall cid callNode targetAddr -> do
@@ -491,7 +533,8 @@ handleBinjaEvent = \case
     Just pcfg -> do
       CfgUI.addCfg cid pcfg
       bhash <- getCfgBinaryHash cid
-      sendToBinja $ SBCfg cid bhash Nothing $ convertPilCfg pcfg
+      callRatings <- getCallNodeRatings bhash pcfg
+      sendToBinja . SBCfg cid bhash callRatings Nothing $ convertPilCfg pcfg
       
     
 
@@ -524,8 +567,8 @@ handleBinjaEvent = \case
     Snapshot.LoadSnapshot cid -> do
       bhash <- getCfgBinaryHash cid
       cfg <- getStoredCfg cid
-      sendToBinja . SBCfg cid bhash Nothing . convertPilCfg $ cfg
-
+      callRatings <- getCallNodeRatings bhash cfg
+      sendToBinja . SBCfg cid bhash callRatings Nothing . convertPilCfg $ cfg
 
     Snapshot.SaveSnapshot cid -> do
       Db.setCfgSnapshotType cid Snapshot.Immutable
@@ -564,6 +607,18 @@ handleBinjaEvent = \case
     Poi.DescribePoi pid poiDescription -> do
       PoiDb.setName pid poiDescription
       sendLatestPois
+
+    Poi.ActivatePoiSearch pid mcid -> PoiDb.getPoi pid >>= \case
+      Nothing -> logError $ "Cannot find POI in database: " <> show pid
+      Just poi -> do
+        ctx <- ask
+        liftIO . atomically . writeTVar (ctx ^. #activePoi) $ Just poi
+        whenJust mcid refreshActiveCfg
+
+    Poi.DeactivatePoiSearch mcid -> do
+      ctx <- ask
+      liftIO . atomically . writeTVar (ctx ^. #activePoi) $ Nothing
+      whenJust mcid refreshActiveCfg
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do
