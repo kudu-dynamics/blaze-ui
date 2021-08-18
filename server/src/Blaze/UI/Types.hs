@@ -238,17 +238,12 @@ data AppState = AppState
   { serverConfig :: ServerConfig
   , binarySessions :: TVar (HashMap SessionId SessionState)
   , dbConn :: TMVar Db.Conn
-  , callNodeRatingCtxs :: TVar (HashMap
-                                SessionId
-                                (CachedCalc BinaryHash CallNodeRatingCtx)
-                               )
   } deriving (Generic)
 
 initAppState :: ServerConfig -> Db.Conn -> IO AppState
 initAppState cfg' conn = AppState cfg'
   <$> newTVarIO HashMap.empty
   <*> newTMVarIO conn
-  <*> newTVarIO HashMap.empty
 
 lookupSessionState :: SessionId -> AppState -> STM (Maybe SessionState)
 lookupSessionState sid st = do
