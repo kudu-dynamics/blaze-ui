@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 import enum
 import json
 import logging as _logging
@@ -31,6 +32,7 @@ else:
     from PySide2.QtWidgets import QApplication, QWidget  # type: ignore
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
+from .poi import PoiListDockWidget, PoiListItem
 from .settings import BlazeSettings
 from .snaptree import SnapTreeDockWidget
 from .types import (
@@ -40,6 +42,7 @@ from .types import (
     CfgId,
     PendingChanges,
     HostBinaryPath,
+    PoiBinjaToServer,
     PoiServerToBinja,
     ServerCfg,
     ServerPendingChanges,
@@ -58,6 +61,15 @@ def register_for_function(action, description):
     def wrapper(f):
         log.debug('Registering handler %r for action %r description %r', f, action, description)
         PluginCommand.register_for_function(action, description, f)
+        return f
+
+    return wrapper
+
+
+def register_for_address(action, description):
+    def wrapper(f):
+        log.debug('Registering handler %r for action %r description %r', f, action, description)
+        PluginCommand.register_for_address(action, description, f)
         return f
 
     return wrapper
@@ -155,7 +167,7 @@ class BlazePlugin():
             self.icfg_dock_widgets[bv_key(bv)].append(widget)
             return widget
 
-        self.dock_handler.addDockWidget( \
+        self.dock_handler.addDockWidget(
             "Blaze ICFG",
             create_icfg_widget,
             Qt.DockWidgetArea.RightDockWidgetArea,
@@ -188,6 +200,30 @@ class BlazePlugin():
         )
 
         log.debug('Created snaptree dock widget')
+
+        # -- Add POI List View
+
+        self.poi_dock_widgets: Dict[str, List[PoiListDockWidget]] = DefaultDict(list)
+
+        def create_poi_widget(name: str, parent: ViewFrame, bv: BinaryView) -> QWidget:
+            dock_handler = DockHandler.getActiveDockHandler()
+            widget = PoiListDockWidget(
+                name=name,
+                view_frame=dock_handler.getViewFrame(),
+                parent=parent,
+                blaze_instance=self.ensure_instance(bv))
+            self.poi_dock_widgets[bv_key(bv)].append(widget)
+            return widget
+
+        self.dock_handler.addDockWidget(
+            "Blaze POI List",
+            create_poi_widget,
+            Qt.DockWidgetArea.BottomDockWidgetArea,
+            Qt.Orientation.Vertical,
+            True  # default visibility
+        )
+
+        log.debug('Create POI list widget')
 
         log.debug('%r initialized', self)
 
@@ -422,7 +458,8 @@ class BlazePlugin():
 
         elif tag == 'SBPoi':
             poi_msg = cast(PoiServerToBinja, msg.get('poiMsg'))
-            log.info(poi_msg)
+            for dw in self.poi_dock_widgets[instance.bv_key]:
+                dw.handle_server_msg(poi_msg)
 
         else:
             log.error("Unknown message type: %r", tag)
@@ -468,6 +505,7 @@ class Action(str, enum.Enum):
     SEND_INSTRUCTION = r'Blaze\Send Instruction'
     TYPE_CHECK_FUNCTION = r'Blaze\Type Check Function'
     START_CFG = r'Blaze\Create ICFG'
+    MARK_POI = r'Blaze\Mark POI'
 
 
 @register_for_function(Action.START_CFG, 'Create ICFG')
@@ -479,6 +517,20 @@ def start_cfg(bv, func):
     blaze_instance.with_bndb_hash(
         lambda h: blaze_instance.send(
             BinjaToServer(tag='BSCfgNew', startFuncAddress=func.start, bndbHash=h)))
+
+
+@register_for_address(Action.MARK_POI, 'Mark POI')
+def mark_poi(bv, addr): 
+    poi_list = None
+    if funcs := bv.get_functions_containing(addr):
+        # TODO: Decide how to handle multiple functions containing addr
+        func = funcs[0]
+        poi_msg = PoiBinjaToServer(
+            tag='AddPoi', funcAddr=func.start, instrAddr=addr, name=None, description=None)
+        blaze_instance = blaze.ensure_instance(bv)
+        blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
+    else:
+        log.warn(r'No function containing address: 0x%x', addr)
 
 
 def listen_start(bv):

@@ -14,8 +14,6 @@ from binaryninjaui import (
     ViewFrame,
 )
 
-from .util import try_debug
-
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QMouseEvent  # type: ignore
@@ -43,7 +41,14 @@ from .types import (
     SnapshotInfo,
     SnapshotServerToBinja,
 )
-from .util import BNAction, add_actions, bind_actions, try_debug
+from .util import (
+    BNAction,
+    ITEM_DATE_FMT_OUT,
+    add_actions,
+    bind_actions,
+    servertime_to_clienttime,
+    try_debug,
+)
 
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance
@@ -97,22 +102,6 @@ class SnapTreeColumn(enum.Enum):
     NAME = "Name"
     TYPE = "Category"
     TIME = "Timestamp"
-
-
-ITEM_DATE_FMT_IN = 'YYYY-DD-SSTHH:MM:SS'
-ITEM_DATE_FMT_OUT = '%b %d, %Y @ %H:%M:%S'
-
-
-def servertime_to_clienttime(timestamp) -> str:
-    """
-    Timestamps coming in from the server have 7-digit floats instead of 6
-    We need to remove those... Regex is best, but for now we're just getting Zulu time
-    """
-    if timestamp.endswith('Z'):
-        return timestamp[:len(ITEM_DATE_FMT_IN)]
-    else:
-        # TODO non-Zulu time
-        return timestamp[:len(ITEM_DATE_FMT_IN)]
 
 
 class SnapTreeItem(QTreeWidgetItem):
@@ -422,7 +411,10 @@ class SnapTreeWidget(QTreeWidget):
                 self.addTopLevelItem(item)
                 self.expandItem(item)
 
-            item.process_branch_data(bid, data)
+            if item:
+                item.process_branch_data(bid, data)
+            else:
+                log.error(r'No matching item for function at 0x%x', func_addr)
 
         self.clean_stale_branches([bid for bid, _ in branches])
         if self.focused_icfg:
@@ -525,7 +517,7 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
                 if bpath == self.blaze_instance.bv_key:
                     self.snaptree_widget.update_branches_of_binary(cast(list, data))
                     break
-
+ 
         if snap_msg.get('tag') == 'BranchesOfBinary':
             if snap_msg.get('hostBinaryPath') == self.blaze_instance.bv_key:
                 self.snaptree_widget.update_branches_of_binary(cast(list, snap_msg.get('branches')))

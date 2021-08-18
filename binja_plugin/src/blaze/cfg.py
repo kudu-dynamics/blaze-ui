@@ -62,6 +62,7 @@ from .types import (
     LeaveFuncNode,
     MenuOrder,
     PendingChanges,
+    PoiBinjaToServer,
     ServerCfg,
     SnapshotBinjaToServer,
     tokens_from_server,
@@ -467,6 +468,11 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 # how would you check to see an icfg is loaded?
                 isValid = lambda ctx: True,
             ),
+            BNAction(
+                'Blaze', 'Deactive POI', MenuOrder.EARLY,
+                activate=self.context_menu_action_deactivate_poi,
+                isValid=lambda ctx: True,
+            ),
 
         ]
         # yapf: enable
@@ -487,6 +493,12 @@ class ICFGWidget(FlowGraphWidget, QObject):
         log.debug('Requesting backend save snapshot of %r', cfg_id)
 
         self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snapshot_msg))
+
+    def deactivate_poi(self):
+        assert self.blaze_instance.graph
+        cfg_id = self.blaze_instance.graph.pil_icfg_id
+        poi_msg = PoiBinjaToServer(tag='DeactivatePoiSearch', activeCfg=cfg_id)
+        self.blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
 
     def prune(self, from_node: CfNode, to_node: CfNode):
         '''
@@ -692,6 +704,10 @@ class ICFGWidget(FlowGraphWidget, QObject):
         log.debug('User requested Save ICFG')
         self.save_icfg()
 
+    def context_menu_action_deactivate_poi(self, context: UIActionContext):
+        log.debug('Deactivating POI')
+        self.deactivate_poi()
+
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any
@@ -835,20 +851,26 @@ class ICFGToolbarWidget(QWidget):
 
     def accept(self) -> None:
         log.debug('User accepted ICFG changes')
-        self.blaze_instance.send(
-            BinjaToServer(
-                tag='BSCfgConfirmChanges',
-                cfgId=self.blaze_instance.graph.pil_icfg_id,
-            ))
+        if not self.blaze_instance.graph:
+            log.warn('There is no graph associated with Blaze.')
+        else:
+            self.blaze_instance.send(
+                BinjaToServer(
+                    tag='BSCfgConfirmChanges',
+                    cfgId=self.blaze_instance.graph.pil_icfg_id,
+                ))
 
     def reject(self) -> None:
         # TODO send BSRejectIcfg message
         log.debug('User rejected ICFG changes')
-        self.blaze_instance.send(
-            BinjaToServer(
-                tag='BSCfgRevertChanges',
-                cfgId=self.blaze_instance.graph.pil_icfg_id,
-            ))
+        if not self.blaze_instance.graph:
+            log.warn('There is no graph associated with Blaze.')
+        else:
+            self.blaze_instance.send(
+                BinjaToServer(
+                    tag='BSCfgRevertChanges',
+                    cfgId=self.blaze_instance.graph.pil_icfg_id,
+                ))
 
 
 class ICFGDockWidget(QWidget, DockContextHandler):
