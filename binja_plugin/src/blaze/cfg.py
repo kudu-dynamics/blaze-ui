@@ -375,7 +375,8 @@ class ICFGFlowGraph(FlowGraph):
                 call_node = cast(CallNode, node['contents'])
                 if is_expandable_call_node(bv, call_node):
                     if self.call_node_ratings:
-                        rating = self.call_node_ratings.get(call_node['uuid']) or 0.0
+                        score_obj = self.call_node_ratings.get(call_node['uuid'])
+                        rating = score_obj.get('score') if score_obj else 0.0
                         fg_node.highlight = call_node_rating_color(rating)
                     else:
                         fg_node.highlight = HighlightStandardColor.YellowHighlightColor
