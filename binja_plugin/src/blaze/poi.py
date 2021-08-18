@@ -114,7 +114,11 @@ class PoiListWidget(QListWidget):
         poi_msg = PoiBinjaToServer(
             tag='ActivatePoiSearch',
             poiId=self.clicked_item.poiId,
+<<<<<<< HEAD
             activeCfg=self.blaze_instance.graph.pil_icfg_id)
+=======
+            cfgId=self.blaze_instance.graph.pil_icfg_id)
+>>>>>>> 987a725910027cb45ca60d0dee65bc04c58477a0
 
         self.blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
 
