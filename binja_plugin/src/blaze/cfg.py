@@ -835,20 +835,26 @@ class ICFGToolbarWidget(QWidget):
 
     def accept(self) -> None:
         log.debug('User accepted ICFG changes')
-        self.blaze_instance.send(
-            BinjaToServer(
-                tag='BSCfgConfirmChanges',
-                cfgId=self.blaze_instance.graph.pil_icfg_id,
-            ))
+        if not self.blaze_instance.graph:
+            log.warn('There is no graph associated with Blaze.')
+        else:
+            self.blaze_instance.send(
+                BinjaToServer(
+                    tag='BSCfgConfirmChanges',
+                    cfgId=self.blaze_instance.graph.pil_icfg_id,
+                ))
 
     def reject(self) -> None:
         # TODO send BSRejectIcfg message
         log.debug('User rejected ICFG changes')
-        self.blaze_instance.send(
-            BinjaToServer(
-                tag='BSCfgRevertChanges',
-                cfgId=self.blaze_instance.graph.pil_icfg_id,
-            ))
+        if not self.blaze_instance.graph:
+            log.warn('There is no graph associated with Blaze.')
+        else:
+            self.blaze_instance.send(
+                BinjaToServer(
+                    tag='BSCfgRevertChanges',
+                    cfgId=self.blaze_instance.graph.pil_icfg_id,
+                ))
 
 
 class ICFGDockWidget(QWidget, DockContextHandler):
