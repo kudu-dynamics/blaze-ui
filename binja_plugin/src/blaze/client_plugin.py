@@ -42,6 +42,7 @@ from .types import (
     CfgId,
     PendingChanges,
     HostBinaryPath,
+    PoiBinjaToServer,
     PoiServerToBinja,
     ServerCfg,
     ServerPendingChanges,
@@ -457,7 +458,8 @@ class BlazePlugin():
 
         elif tag == 'SBPoi':
             poi_msg = cast(PoiServerToBinja, msg.get('poiMsg'))
-            log.info(poi_msg)
+            for dw in self.poi_dock_widgets[instance.bv_key]:
+                dw.handle_server_msg(poi_msg)
 
         else:
             log.error("Unknown message type: %r", tag)
@@ -520,15 +522,15 @@ def start_cfg(bv, func):
 @register_for_address(Action.MARK_POI, 'Mark POI')
 def mark_poi(bv, addr): 
     poi_list = None
-    for dw in blaze.poi_dock_widgets[bv_key(bv)]:
-        func = bv.get_functions_containing(addr)[0]
-        poi_item = PoiListItem(dw.poi_list_widget,
-                               '',
-                               '',
-                               func.name,
-                               addr,
-                               datetime.now())
-        dw.poi_list_widget.addItem(poi_item)
+    if funcs := bv.get_functions_containing(addr):
+        # TODO: Decide how to handle multiple functions containing addr
+        func = funcs[0]
+        poi_msg = PoiBinjaToServer(
+            tag='AddPoi', funcAddr=func.start, instrAddr=addr, name=None, description=None)
+        blaze_instance = blaze.ensure_instance(bv)
+        blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
+    else:
+        log.warn(r'No function containing address: 0x%x', addr)
 
 
 def listen_start(bv):

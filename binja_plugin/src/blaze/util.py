@@ -117,3 +117,19 @@ def try_debug(log: _logging.Logger, msg: str, *args, **kwargs) -> None:
 def bv_key(bv_or_path: Union[BinaryView, str, PathLike]) -> str:
     path = bv_or_path.file.filename if isinstance(bv_or_path, BinaryView) else str(bv_or_path)
     return path if path.endswith('.bndb') else path + '.bndb'
+
+
+ITEM_DATE_FMT_IN = 'YYYY-DD-SSTHH:MM:SS'
+ITEM_DATE_FMT_OUT = '%b %d, %Y @ %H:%M:%S'
+
+
+def servertime_to_clienttime(timestamp) -> str:
+    """
+    Timestamps coming in from the server have 7-digit floats instead of 6
+    We need to remove those... Regex is best, but for now we're just getting Zulu time
+    """
+    if timestamp.endswith('Z'):
+        return timestamp[:len(ITEM_DATE_FMT_IN)]
+    else:
+        # TODO non-Zulu time
+        return timestamp[:len(ITEM_DATE_FMT_IN)]
