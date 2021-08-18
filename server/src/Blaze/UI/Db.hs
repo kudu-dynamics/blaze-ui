@@ -29,6 +29,7 @@ import qualified Data.HashMap.Strict as HashMap
 import Blaze.UI.Types.Poi (poiTable)
 
 
+
 init :: FilePath -> IO Conn
 init blazeSqliteFilePath = do
   conn <- open blazeSqliteFilePath
@@ -107,11 +108,6 @@ getCfg cid = fmap (view #cfg) <$> getSavedCfg cid >>= \case
   [Blob x] -> return . Just . Cfg.fromTransport $ x
   _ -> -- hopefully impossible
     P.error $ "PRIMARY KEY apparently not UNIQUE for id: " <> show cid
-
-onlyOne :: [a] -> Maybe a
-onlyOne [] = Nothing
-onlyOne [x] = Just x
-onlyOne _ = P.error "Expected only one result"
 
 getCfgType :: MonadDb m => CfgId -> m (Maybe SnapshotType)
 getCfgType cid = withDb $ do

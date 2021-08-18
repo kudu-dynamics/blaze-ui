@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 import enum
-from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict, Union, cast
+from dataclasses import dataclass
+from typing import Any, Dict, List, Literal, Optional, Set, Tuple, TypedDict, Union, cast
 
 from binaryninja.enums import InstructionTextTokenContext, InstructionTextTokenType
 from binaryninja.function import DisassemblyTextLine, InstructionTextToken
@@ -16,6 +17,7 @@ ClientId = UUID
 PoiId = UUID
 BinaryHash = str
 HostBinaryPath = str
+CallNodeRating = float
 
 # What Aeson encodes the unit value `()` as
 Unit = Literal[[]]
@@ -48,15 +50,18 @@ class Ctx(TypedDict):
 
 PilExpr = object
 
+
 class ConstFuncPtrOp(TypedDict):
     address: Address
     symbol: Optional[Symbol]
+
 
 class ExternPtrOp(TypedDict):
     address: Address
     offset: ByteOffset
     symbol: Optional[Symbol]
-    
+
+
 class CallDest(TypedDict):
     tag: Literal['CallAddr', 'CallFunc', 'CallExpr', 'CallExprs', 'CallExtern']
     contents: Union[ConstFuncPtrOp, Function, PilExpr, List[PilExpr], ExternPtrOp]
@@ -256,7 +261,7 @@ class PoiServerToBinja(TypedDict):
 
 class PoiBinjaToServerTotal(TypedDict, total=True):
     tag: Literal['GetPoisOfBinary', 'AddPoi', 'DeletePoi',
-                 'RenamePoi', 'DescribePoi']
+                 'RenamePoi', 'DescribePoi', 'ActivatePoiSearch', 'DeactivatePoiSearch']
 
 
 class PoiBinjaToServer(PoiBinjaToServerTotal, total=False):
@@ -267,7 +272,26 @@ class PoiBinjaToServer(PoiBinjaToServerTotal, total=False):
     poiId: PoiId
 
 
-#########
+class ServerPendingChanges(TypedDict, total=True):
+    removedNodes: List[UUID]
+    removedEdges: List[List[UUID]]
+
+
+@dataclass
+class PendingChanges:
+    removed_nodes: Set[UUID]
+    removed_edges: Set[Tuple[UUID, UUID]]
+
+    @property
+    def has_changes(self) -> bool:
+        return bool(self.removed_nodes) or bool(self.removed_edges)
+
+
+def pending_changes_from_server(p: ServerPendingChanges) -> PendingChanges:
+    return PendingChanges(
+        removed_nodes=set(p['removedNodes']),
+        removed_edges=set(cast(Tuple[UUID, UUID], tuple(e)) for e in p['removedEdges']),
+    )
 
 class ServerToBinjaTotal(TypedDict, total=True):
     tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshot', 'SBPoi']
@@ -280,11 +304,14 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
     cfg: ServerCfg
     snapshotMsg: SnapshotServerToBinja
     poiMsg: PoiServerToBinja
+    callNodeRatings: Optional[List[Tuple[UUID, CallNodeRating]]]
+    pendingChanges: Optional[ServerPendingChanges]
 
 
 class BinjaToServerTotal(TypedDict, total=True):
     tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
-                 'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop', 'BSCfgFocus', 'BSPoi']
+                 'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop', 'BSCfgFocus',
+                 'BSCfgConfirmChanges', 'BSCfgRevertChanges', 'BSPoi']
 
 
 class BinjaToServer(BinjaToServerTotal, total=False):

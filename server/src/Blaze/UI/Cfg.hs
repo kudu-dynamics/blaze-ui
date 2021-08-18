@@ -7,9 +7,13 @@ import Blaze.UI.Prelude
 import qualified Blaze.UI.Types.Cfg as Exports
 import Blaze.UI.Types (EventLoop)
 import qualified Data.HashMap.Strict as HashMap
+import qualified Data.HashSet as HashSet
 import Blaze.Types.Pil (Stmt)
 import Blaze.UI.Types.Cfg (CfgId)
-import Blaze.Types.Cfg (Cfg)
+import Blaze.Types.Cfg (Cfg, CfNode, CfEdge)
+import qualified Blaze.Types.Graph as G
+import qualified Blaze.Types.Cfg as Cfg
+
 
 -- | Changes CfgId key in graph cache.
 -- Used whenever an auto-saved cfg is turned into a snapshot.
@@ -44,3 +48,16 @@ getCfg cid = do
   liftIO . atomically $ do
     m <- readTVar cfgMapTVar
     maybe (return Nothing) (fmap Just . readTVar) $ HashMap.lookup cid m
+
+getRemovedNodes :: Cfg a -> Cfg a -> HashSet (CfNode ())
+getRemovedNodes old new =
+  HashSet.difference (G.nodes $ old ^. #graph) (G.nodes $ new ^. #graph) 
+
+getRemovedEdges :: Cfg a -> Cfg a -> HashSet (CfEdge ())
+getRemovedEdges old new = HashSet.difference (f old) (f new) 
+  where
+    f = HashSet.fromList . fmap Cfg.fromLEdge . G.edges . view #graph
+
+edgeToUUIDTuple :: CfEdge a -> (UUID, UUID)
+edgeToUUIDTuple e = (Cfg.getNodeUUID $ e ^. #src, Cfg.getNodeUUID $ e ^. #dst)
+                    

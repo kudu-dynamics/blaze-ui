@@ -76,3 +76,8 @@ runSelda (Conn conn) m = runSeldaT m conn
 
 class (MonadMask m, MonadIO m, Monad m) => MonadDb m where
   withDb :: SeldaT SQLite m a -> m a
+
+onlyOne :: [a] -> Maybe a
+onlyOne [] = Nothing
+onlyOne [x] = Just x
+onlyOne _ = P.error "Expected only one result"

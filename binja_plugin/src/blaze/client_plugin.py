@@ -25,7 +25,7 @@ from websockets.client import WebSocketClientProtocol
 REQUEST_ACTIVITY_TIMEOUT = 5
 
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
-    from PySide6.QtCore import Qt  # type: ignore
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication, QWidget  # type: ignore
 else:
     from PySide2.QtCore import Qt  # type: ignore
@@ -40,13 +40,15 @@ from .types import (
     BinjaMessage,
     BinjaToServer,
     CfgId,
+    PendingChanges,
     HostBinaryPath,
     PoiBinjaToServer,
     PoiServerToBinja,
     ServerCfg,
+    ServerPendingChanges,
     ServerToBinja,
-    SnapshotBinjaToServer,
     SnapshotServerToBinja,
+    pending_changes_from_server,
 )
 from .util import bv_key, try_debug
 
@@ -286,11 +288,11 @@ class BlazePlugin():
                 'clientId': self.settings.client_id,
             }
             try:
-                r = requests.post(uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
+                r = requests.post(
+                    uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
             except requests.exceptions.RequestException as e:
                 log.error('Failed to upload BNDB: ' + str(e))
                 return None
-            
 
         if r.status_code != requests.codes['ok']:
             log.error(
@@ -359,8 +361,6 @@ class BlazePlugin():
         except Exception as e:
             log.error("Websocket error: " + str(e))
             return None
-
-            
 
     async def recv_loop(self, websocket: WebSocketClientProtocol) -> None:
         async for ws_msg in websocket:
@@ -431,11 +431,23 @@ class BlazePlugin():
         elif tag == 'SBCfg':
             cfg_id = cast(CfgId, msg.get('cfgId'))
             cfg = cfg_from_server(cast(ServerCfg, msg.get('cfg')))
+            server_pending_changes = msg.get('pendingChanges')
+            server_call_node_ratings = msg.get('callNodeRatings')
 
-            instance.graph = ICFGFlowGraph(instance.bv, cfg, cfg_id)
+            if server_call_node_ratings:
+                call_node_ratings = dict(server_call_node_ratings)
+            else:
+                call_node_ratings = None
+
+            if server_pending_changes is None:
+                server_pending_changes = ServerPendingChanges(removedNodes=[], removedEdges=[])
+
+            pending_changes = pending_changes_from_server(server_pending_changes)
+
+            instance.graph = ICFGFlowGraph(instance.bv, cfg, cfg_id, call_node_ratings, pending_changes)
 
             for dw in self.icfg_dock_widgets[instance.bv_key]:
-                dw.icfg_widget.setGraph(instance.graph)
+                dw.set_graph(instance.graph)
             for dw in self.snaptree_dock_widgets[instance.bv_key]:
                 dw.snaptree_widget.focus_icfg(cfg_id)
 

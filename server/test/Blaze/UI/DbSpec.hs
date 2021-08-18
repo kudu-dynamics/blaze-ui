@@ -16,6 +16,7 @@ import Blaze.UI.Types
 import qualified Data.HashMap.Strict as HashMap
 import System.Directory (removeFile)
 import System.IO.Temp (emptySystemTempFile)
+import qualified Blaze.UI.Types.CachedCalc as CC
 import Blaze.Types.Cfg as Cfg
 import qualified Data.HashSet as HashSet
 import Blaze.Util.Spec (mkUuid1)
@@ -41,6 +42,8 @@ mockEventLoopCtx conn = EventLoopCtx cid hpath
   <*> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
   <*> newTMVarIO conn
+  <*> newTVarIO Nothing
+  <*> atomically CC.create
   where
     bmdir = "/tmp/blaze/bm"
     hpath = "/tmp/blaze/spec"

@@ -60,3 +60,10 @@ getPoisOfBinary cid hpath = withDb . query $ do
                .&& poi ! #hostBinaryPath .== literal hpath
              )
     return poi
+
+getPoi :: MonadDb m => PoiId -> m (Maybe Poi)
+getPoi pid = withDb $ do
+  fmap onlyOne . query $ do
+    poi <- select poiTable
+    restrict (poi ! #poiId .== literal pid)
+    return poi

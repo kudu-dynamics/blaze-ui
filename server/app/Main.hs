@@ -3,7 +3,7 @@ module Main where
 import Blaze.UI.Prelude
 import qualified Prelude as P
 import qualified Blaze.UI.Server as Server
-import Blaze.UI.Types (ServerConfig(ServerConfig))
+import Blaze.UI.Types (ServerConfig(ServerConfig), initAppState)
 import Blaze.UI.Web.Server as WebServer
 import qualified System.Envy as Envy
 import System.IO ( BufferMode(LineBuffering)
@@ -25,7 +25,8 @@ main = do
       putText "blaze-ui-server <host> <websockets port> <http port> <sqlite filepath> <bndb dir>"
       P.error "Invalid args"
   conn <- Db.init $ cfg ^. #sqliteFilePath
-  void . forkIO $ WebServer.run cfg
-  Server.run cfg conn
+  appState <- initAppState cfg conn
+  void . forkIO $ WebServer.run appState
+  Server.run appState
   putText "Closing database connection"
   Db.close conn
