@@ -1,6 +1,6 @@
 import logging as _logging
 from datetime import datetime
-from typing import List, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
 import binaryninjaui
 from binaryninjaui import (
@@ -21,8 +21,8 @@ else:
     from PySide2.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
     from PySide2.QtWidgets import QWidget, QListWidget, QListWidgetItem, QVBoxLayout  # type: ignore
 
-from .types import MenuOrder
-from .util import BNAction, add_actions, bind_actions, try_debug
+from .types import BinjaToServer, MenuOrder, PoiBinjaToServer, PoiId, PoiServerToBinja
+from .util import BNAction, add_actions, bind_actions, servertime_to_clienttime, try_debug
 
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance
@@ -33,19 +33,21 @@ class PoiListItem(QListWidgetItem):
     def __init__(
             self,
             parent: QListWidget,
+            poiId: PoiId,
             name: str,
             desc: str,
             func_name: str,
             instr_addr: int,
             created_on: datetime):
-        '''
+        """
         parent: the parent list widget
-        '''
+        """
         QListWidgetItem.__init__(
             self,
             parent,  # type: ignore
             type=QListWidgetItem.UserType)
 
+        self.poiId = poiId
         self.name = name
         self.desc = desc
         self.func_name = func_name
@@ -64,9 +66,9 @@ class PoiListItem(QListWidgetItem):
 
 
 class PoiListWidget(QListWidget):
-    '''
+    """
     A list view for displaying and selecting POIs/destination locations.
-    '''
+    """
     def __init__(self, parent: QWidget, blaze_instance: 'BlazeInstance'):
         QListWidget.__init__(self, parent)
         self.blaze_instance: 'BlazeInstance' = blaze_instance
@@ -75,6 +77,8 @@ class PoiListWidget(QListWidget):
         self.action_handler.setupActionHandler(self)
         self.context_menu = Menu()
         self.context_menu_manager = ContextMenuManager(self)
+
+        self.clicked_item: Optional[PoiListItem] = None
 
         # yapf: disable
         actions: List[BNAction] = [
@@ -107,13 +111,21 @@ class PoiListWidget(QListWidget):
         if not self.clicked_item:
             return
 
-        log.debug('Set Active POI action')
+        
         return
 
+    def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', _view_frame: ViewFrame):
+        self.blaze_instance = blaze_instance
+
+        # Load POIs when switching BVs
+        poi_msg = PoiBinjaToServer(tag='GetPoisOfBinary')
+        self.blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
+
+
 class PoiListDockWidget(QWidget, DockContextHandler):
-    '''
+    """
     Binary Ninja dock widget containing the POI list view.
-    '''
+    """
     def __init__(
         self, name: str, view_frame: ViewFrame, parent: QWidget, 
         blaze_instance: 'BlazeInstance'):
@@ -134,3 +146,37 @@ class PoiListDockWidget(QWidget, DockContextHandler):
 
     def __del__(self):
         try_debug(log, 'Deleting %r', self)
+
+    def handle_server_msg(self, poi_msg: PoiServerToBinja):
+        """
+        Handle POI messages from the Blaze server.
+        """
+        # Clear existing list of POIs
+        self.poi_list_widget.clear()
+
+        # The only message currently sent from the server is the list of POIs
+        for poi in poi_msg.get('pois'):
+            # TODO: Handle cases where function isn't found 
+            func = self.blaze_instance.bv.get_function_at(poi.get('funcAddr'))
+            if func:
+                created_time = datetime.fromisoformat(
+                    servertime_to_clienttime(poi.get('created')))
+                poi_item = PoiListItem(self.poi_list_widget,
+                                        poi.get('poiId'),
+                                        poi.get('name', ''),
+                                        poi.get('description', ''),
+                                        func.name,
+                                        poi.get('instrAddr'),
+                                        poi.get('created'))
+                self.poi_list_widget.addItem(poi_item)
+            else:
+                log.info('No function found at address 0x%x for %s', 
+                            poi.funcAddr, self.blaze_instance.bv)
+
+    def notifyViewChanged(self, view_frame: ViewFrame) -> None:
+        if view_frame is None:
+            log.error('view_frame is None')
+        else:
+            view = view_frame.getCurrentViewInterface()
+            self.blaze_instance = self.blaze_instance.blaze.ensure_instance(view.getData())
+            self.poi_list_widget.notifyInstanceChanged(self.blaze_instance, view_frame)
