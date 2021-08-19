@@ -471,7 +471,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             BNAction(
                 'Blaze', 'Deactive POI', MenuOrder.EARLY,
                 activate=self.context_menu_action_deactivate_poi,
-                isValid=lambda ctx: True,
+                isValid=lambda ctx: self.has_active_poi(),
             ),
 
         ]
@@ -821,6 +821,15 @@ class ICFGWidget(FlowGraphWidget, QObject):
                         self.blaze_instance.bv,
                         cast(CallNode, cf_node['contents'])))
         return False
+
+    def has_active_poi(self) -> bool:
+        '''
+        Check if there a POI displayed with the ICFG being displayed.
+        '''
+        if self.blaze_instance.graph:
+            return self.blaze_instance.graph.call_node_ratings != None
+        else:
+            return False
 
 
 class ICFGToolbarWidget(QWidget):
