@@ -17,7 +17,7 @@ ClientId = UUID
 PoiId = UUID
 BinaryHash = str
 HostBinaryPath = str
-CallNodeRating = float
+
 
 # What Aeson encodes the unit value `()` as
 Unit = Literal[[]]
@@ -211,6 +211,23 @@ class BranchTreeListItem(TypedDict, total=True):
     children: List['BranchTreeListItem']
 
 
+class CallNodeRatingTotal(TypedDict, total=True):
+    tag: Literal['Unreachable', 'Reachable']
+
+
+class CallNodeRating(CallNodeRatingTotal, total=False):
+    score: float
+
+
+class ServerPoiSearchResults(TypedDict, total=True):
+    callNodeRatings: List[Tuple[UUID, CallNodeRating]]
+    presentTargetNodes: List[UUID]
+
+class PoiSearchResults(TypedDict, total=True):
+    callNodeRatings: Dict[UUID, CallNodeRating]
+    presentTargetNodes: Set[UUID]
+
+
 BranchTreeList = List[BranchTreeListItem]
 
 
@@ -304,7 +321,7 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
     cfg: ServerCfg
     snapshotMsg: SnapshotServerToBinja
     poiMsg: PoiServerToBinja
-    callNodeRatings: Optional[List[Tuple[UUID, CallNodeRating]]]
+    poiSearchResults: Optional[PoiSearchResults]
     pendingChanges: Optional[ServerPendingChanges]
 
 

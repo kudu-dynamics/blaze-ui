@@ -42,7 +42,7 @@ import Blaze.UI.Types.Session ( SessionId
 import Blaze.Function (Function)
 import qualified Blaze.UI.Db.Poi as PoiDb
 import qualified Blaze.UI.Types.Poi as Poi
-import Blaze.Types.Cfg.Analysis (Target(Target), CallNodeRating)
+import Blaze.Types.Cfg.Analysis (Target(Target))
 import qualified Blaze.UI.Types.CachedCalc as CC
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
@@ -217,8 +217,8 @@ autosaveCfg cid pcfg = getCfgType cid >>= \case
 
 sendCfgWithCallRatings :: BinaryHash -> PilCfg -> CfgId -> EventLoop ()
 sendCfgWithCallRatings bhash cfg cid = do
-  callRatings <- getCallNodeRatings bhash cfg
-  sendToBinja . SBCfg cid bhash callRatings Nothing . convertPilCfg $ cfg
+  poiSearch <- getPoiSearchResults bhash cfg
+  sendToBinja . SBCfg cid bhash poiSearch Nothing . convertPilCfg $ cfg
 
 refreshActiveCfg :: CfgId -> EventLoop ()
 refreshActiveCfg cid = do
@@ -376,8 +376,8 @@ getActivePoiTarget bv = do
         Just func -> do
           return . Just . Target func $ poi ^. #instrAddr
 
-getCallNodeRatings :: BinaryHash -> PilCfg -> EventLoop (Maybe [(UUID, CallNodeRating)])
-getCallNodeRatings bhash pcfg = do
+getPoiSearchResults :: BinaryHash -> PilCfg -> EventLoop (Maybe PoiSearchResults)
+getPoiSearchResults bhash pcfg = do
   bv <- getBinaryView bhash
   getActivePoiTarget bv >>= \case
     Nothing -> return Nothing
@@ -387,7 +387,12 @@ getCallNodeRatings bhash pcfg = do
       cnrCtx <- liftIO . CC.calc bhash (ctx ^. #callNodeRatingCtx)
         . CfgA.getCallNodeRatingCtx . BNImporter $ bv
       let ratings = CfgA.getCallNodeRatings cnrCtx tgt pcfg
-      return . Just . fmap (over _1 $ view #uuid) . HashMap.toList $ ratings
+          ratings' = fmap (over _1 $ view #uuid) . HashMap.toList $ ratings
+
+          -- Should do we care about the Target function? or just the addr here?
+          present = fmap Cfg.getNodeUUID . HashSet.toList
+                    $ CfgA.getNodesContainingAddress (tgt ^. #address) pcfg
+      return . Just $ PoiSearchResults ratings' present
 
 mainEventLoop :: Event -> EventLoop ()
 mainEventLoop (BinjaEvent msg) = handleBinjaEvent msg
@@ -447,8 +452,8 @@ handleBinjaEvent = \case
               cfg
             CfgUI.addCfg cid cfg
             sendLatestSnapshots
-            callRatings <- getCallNodeRatings bhash cfg
-            sendToBinja . SBCfg cid bhash callRatings Nothing . convertPilCfg $ cfg
+            poiSearch <- getPoiSearchResults bhash cfg
+            sendToBinja . SBCfg cid bhash poiSearch Nothing . convertPilCfg $ cfg
         debug "Created new branch and added auto-cfg."
 
   BSCfgExpandCall cid callNode targetAddr -> do
@@ -533,8 +538,8 @@ handleBinjaEvent = \case
     Just pcfg -> do
       CfgUI.addCfg cid pcfg
       bhash <- getCfgBinaryHash cid
-      callRatings <- getCallNodeRatings bhash pcfg
-      sendToBinja . SBCfg cid bhash callRatings Nothing $ convertPilCfg pcfg
+      poiSearch <- getPoiSearchResults bhash pcfg
+      sendToBinja . SBCfg cid bhash poiSearch Nothing $ convertPilCfg pcfg
       
     
 
@@ -567,8 +572,8 @@ handleBinjaEvent = \case
     Snapshot.LoadSnapshot cid -> do
       bhash <- getCfgBinaryHash cid
       cfg <- getStoredCfg cid
-      callRatings <- getCallNodeRatings bhash cfg
-      sendToBinja . SBCfg cid bhash callRatings Nothing . convertPilCfg $ cfg
+      poiSearch <- getPoiSearchResults bhash cfg
+      sendToBinja . SBCfg cid bhash poiSearch Nothing . convertPilCfg $ cfg
 
     Snapshot.SaveSnapshot cid -> do
       Db.setCfgSnapshotType cid Snapshot.Immutable
