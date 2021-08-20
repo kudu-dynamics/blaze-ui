@@ -227,11 +227,11 @@ refreshActiveCfg cid = do
   sendCfgWithCallRatings bhash cfg cid
 
 -- | Used after `autosaveCfg`. If second CfgId is Nothing, just send first.
--- If second is Just, send new CfgId and new snapshot tree.
+-- If second is Just, send new CfgId. In both cases, send new snapshot tree.
 sendCfgAndSnapshots :: BinaryHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop ()
-sendCfgAndSnapshots bhash pcfg cid Nothing = sendCfgWithCallRatings bhash pcfg cid
-sendCfgAndSnapshots bhash pcfg _ (Just newCid) =
-  sendCfgWithCallRatings bhash pcfg newCid
+sendCfgAndSnapshots bhash pcfg cid newCid = do
+  sendCfgWithCallRatings bhash pcfg $ fromMaybe cid newCid
+  sendLatestClientSnapshots
 
 sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
 sendDiffCfg bhash cid old new = do

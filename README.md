@@ -99,18 +99,18 @@ $ docker-compose up
 
 ## Installing Blaze in BinaryNinja
 
-After starting the wheel server (which also functions as a BinaryNinja plugin repository), open BinaryNinja and edit these settings (`Edit > Preferences > Settings` or `Ctrl-,`):
-
-- `Plugin Manager > Unofficial 3rd Party Plugin Repository Display Name` can be set to anything. Example: `localhost`
-- `Plugin Manager > Unofficial 3rd Party Plugin Repository URL` should be the value of `BLAZE_WHEEL_SERVER_URL`
-
-Open the Plugin Manager (`Edit > Preferences > Manage Plugins` or `Ctrl-Shift-M`), `install` Blaze, then `enable` it.
-
-Set the following settings:
-- `Blaze > Unique Client ID` shouldn't need to be changed, but as a sanity check, it should already be set and begin with the local username followed by `_`
-- `Blaze > Blaze Host` should point at the host which is running the blaze server (e.g. `localhost`)
-- `Blaze > Blaze WebSocket Port` should be the value of `BLAZE_UI_WS_PORT` (`31337` by default)
-- `Blaze > Blaze HTTP Port` should be the value of `BLAZE_UI_HTTP_PORT` (`31338` by default)
+1. After starting the wheel server (which also functions as a BinaryNinja plugin repository), open BinaryNinja and edit these settings (`Edit > Preferences > Settings` or `Ctrl-,`):
+   - `Plugin Manager > Unofficial 3rd Party Plugin Repository Display Name` can be set to anything. Example: `localhost`
+   - `Plugin Manager > Unofficial 3rd Party Plugin Repository URL` should be the value of `BLAZE_WHEEL_SERVER_URL`
+2. Open the Plugin Manager (`Edit > Preferences > Manage Plugins` or `Ctrl-Shift-M`), and `uninstall` any old version of Blaze
+3. Restart Binary Ninja
+4. Open the Plugin Manager again, `install` Blaze, then `enable` it
+5. Set the following settings:
+   - `Blaze > Unique Client ID` shouldn't need to be changed, but as a sanity check, it should already be set and begin with the local username followed by `_`
+   - `Blaze > Blaze Host` should point at the host which is running the blaze server (e.g. `localhost`)
+   - `Blaze > Blaze WebSocket Port` should be the value of `BLAZE_UI_WS_PORT` (`31337` by default)
+   - `Blaze > Blaze HTTP Port` should be the value of `BLAZE_UI_HTTP_PORT` (`31338` by default)
+6. Restart Binary Ninja
 
 
 ## Using Blaze
