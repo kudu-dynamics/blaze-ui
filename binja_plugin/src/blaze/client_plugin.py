@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime
 import enum
 import json
 import logging as _logging
@@ -10,9 +9,9 @@ import threading
 from typing import (
     Callable,
     DefaultDict,
+    Dict,
     Iterable,
     Literal,
-    MutableMapping,
     Optional,
     Set,
     Union,
@@ -42,7 +41,7 @@ else:
     from PySide2.QtWidgets import QApplication, QWidget  # type: ignore
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
-from .poi import PoiListDockWidget, PoiListItem
+from .poi import PoiListDockWidget
 from .settings import BlazeSettings
 from .snaptree import SnapTreeDockWidget
 from .types import (
@@ -50,10 +49,9 @@ from .types import (
     BinjaMessage,
     BinjaToServer,
     CfgId,
-    PendingChanges,
-    HostBinaryPath,
     PoiBinjaToServer,
     PoiServerToBinja,
+    ServerBranchesOfClient,
     ServerCfg,
     ServerPendingChanges,
     ServerToBinja,
@@ -102,6 +100,7 @@ class BlazeInstance():
         self.bndbHash: Optional[BinaryHash] = None
         self._icfg_dock_widget: Optional[ICFGDockWidget] = None
         self._snaptree_dock_widget: Optional[SnapTreeDockWidget] = None
+        self._poi_list_dock_widget: Optional[PoiListDockWidget] = None
 
         log.debug('%r initialized', self)
 
@@ -121,7 +120,7 @@ class BlazeInstance():
     @property
     def icfg_dock_widget(self) -> ICFGDockWidget:
         if self._icfg_dock_widget is None:
-            raise ValueError('BlazeInstance.icfg_dock_widget accessed before being set')
+            raise ValueError('BlazeInstance._icfg_dock_widget accessed before being set')
 
         return self._icfg_dock_widget
 
@@ -132,13 +131,24 @@ class BlazeInstance():
     @property
     def snaptree_dock_widget(self) -> SnapTreeDockWidget:
         if self._snaptree_dock_widget is None:
-            raise ValueError('BlazeInstance.snaptree_dock_widget accessed before being set')
+            raise ValueError('BlazeInstance._snaptree_dock_widget accessed before being set')
 
         return self._snaptree_dock_widget
 
     @snaptree_dock_widget.setter
     def snaptree_dock_widget(self, dw: SnapTreeDockWidget) -> None:
         self._snaptree_dock_widget = dw
+
+    @property
+    def poi_list_dock_widget(self) -> PoiListDockWidget:
+        if self._poi_list_dock_widget is None:
+            raise ValueError('BlazeInstance._poi_list_dock_widget accessed before being set')
+
+        return self._poi_list_dock_widget
+
+    @poi_list_dock_widget.setter
+    def poi_list_dock_widget(self, dw: PoiListDockWidget) -> None:
+        self._poi_list_dock_widget = dw
 
     def with_bndb_hash(self, callback: Callable[[BinaryHash], None]) -> None:
         def set_hash_and_do_callback(h: BinaryHash) -> None:
@@ -173,8 +183,8 @@ class UploadBndb(BackgroundTaskThread):
 
 class BlazePlugin():
     def __init__(self) -> None:
-        self.instances_by_bv: MutableMapping[BinaryView, BlazeInstance] = {}
-        self.instances_by_key: MutableMapping[str, Set[BlazeInstance]] = DefaultDict(set)
+        self._instance_by_bv: Dict[BinaryView, BlazeInstance] = {}
+        self._instances_by_key: DefaultDict[str, Set[BlazeInstance]] = DefaultDict(set)
         self.out_queue: "queue.Queue[Union[Literal['SHUTDOWN'], BinjaMessage]]" = queue.Queue()
 
         self.websocket_thread: Optional[threading.Thread] = None
@@ -234,8 +244,6 @@ class BlazePlugin():
 
         # -- Add POI List View
 
-        self.poi_dock_widgets: Dict[str, List[PoiListDockWidget]] = DefaultDict(list)
-
         def create_poi_widget(name: str, parent: ViewFrame, bv: BinaryView) -> QWidget:
             dock_handler = DockHandler.getActiveDockHandler()
             widget = PoiListDockWidget(
@@ -243,7 +251,7 @@ class BlazePlugin():
                 view_frame=dock_handler.getViewFrame(),
                 parent=parent,
                 blaze_instance=self.ensure_instance(bv))
-            self.poi_dock_widgets[bv_key(bv)].append(widget)
+            self.ensure_instance(bv).poi_list_dock_widget = widget
             return widget
 
         self.dock_handler.addDockWidget(
@@ -260,6 +268,12 @@ class BlazePlugin():
 
     def __del__(self):
         try_debug(log, 'Deleting %r', self)
+
+    def instance_by_bv(self, bv: BinaryView) -> Optional[BlazeInstance]:
+        return self._instance_by_bv.get(bv)
+
+    def instances_by_key(self, key: str) -> Set[BlazeInstance]:
+        return self._instances_by_key[key]
 
     def _init_thread(self) -> None:
         if not self.websocket_thread or not self.websocket_thread.is_alive():
@@ -345,13 +359,13 @@ class BlazePlugin():
             that was created
         '''
 
-        if (instance := self.instances_by_bv.get(bv)) is not None:
+        if (instance := self._instance_by_bv.get(bv)) is not None:
             return instance
 
         log.info('Creating new blaze instance for BV: %r', bv)
         instance = BlazeInstance(bv, self)
-        self.instances_by_bv[bv] = instance
-        self.instances_by_key[bv_key(bv)].add(instance)
+        self._instance_by_bv[bv] = instance
+        self._instances_by_key[bv_key(bv)].add(instance)
 
         return instance
 
@@ -399,13 +413,13 @@ class BlazePlugin():
                 continue
 
             relevant_instances: Set[BlazeInstance] = \
-                self.instances_by_key[bv_key(msg['hostBinaryPath'])]
+                self.instances_by_key(bv_key(msg['hostBinaryPath']))
 
             if not relevant_instances:
                 log.error(
                     "Couldn't find existing blaze instance for %r",
                     msg['hostBinaryPath'],
-                    extra={'blaze_instances': repr(self.instances_by_bv)})
+                    extra={'blaze_instances': repr(self._instance_by_bv)})
                 continue
 
             # log.debug('Blaze: received %r', msg)
@@ -483,13 +497,28 @@ class BlazePlugin():
 
         elif tag == 'SBSnapshot':
             snap_msg = cast(SnapshotServerToBinja, msg.get('snapshotMsg'))
+
             for instance in relevant_instances:
-                instance.snaptree_dock_widget.handle_server_msg(snap_msg)
+                log.info('Try instance: %r', instance)
+                if snap_msg['tag'] == 'BranchesOfClient':
+                    for bpath, data in cast(ServerBranchesOfClient,
+                                            snap_msg.get('branchesOfClient')):
+                        if bpath == instance.bv_key:
+                            instance.snaptree_dock_widget.snaptree_widget.update_branches_of_binary(
+                                cast(list, data))
+                            break
+
+                if snap_msg['tag'] == 'BranchesOfBinary':
+                    log.info('branches of binary')
+                    if snap_msg.get('hostBinaryPath') == instance.bv_key:
+                        log.info('YES')
+                        instance.snaptree_dock_widget.snaptree_widget.update_branches_of_binary(
+                            cast(list, snap_msg.get('branches')))
 
         elif tag == 'SBPoi':
             poi_msg = cast(PoiServerToBinja, msg.get('poiMsg'))
-            for dw in self.poi_dock_widgets[instance.bv_key]:
-                dw.handle_server_msg(poi_msg)
+            for instance in relevant_instances:
+                instance.poi_list_dock_widget.handle_server_msg(poi_msg)
 
         else:
             log.error("Unknown message type: %r", tag)
@@ -519,9 +548,9 @@ class BlazeNotificationListener(UIContextNotification):
                 'bv_filename': file.getFilename()
             })
 
-        instance = self.blaze_plugin.instances_by_bv[bv]
-        del self.blaze_plugin.instances_by_bv[bv]
-        self.blaze_plugin.instances_by_key[bv_key(bv)].discard(instance)
+        instance = self.blaze_plugin._instance_by_bv[bv]
+        del self.blaze_plugin._instance_by_bv[bv]
+        self.blaze_plugin._instances_by_key[bv_key(bv)].discard(instance)
 
 
 blaze = BlazePlugin()
@@ -539,7 +568,7 @@ class Action(str, enum.Enum):
 
 @register_for_function(Action.START_CFG, 'Create ICFG')
 def start_cfg(bv, func):
-    for instance in blaze.instances_by_key[bv_key(bv)]:
+    for instance in blaze.instances_by_key(bv_key(bv)):
         instance._icfg_dock_widget.icfg_widget.recenter_node_id = None
 
     blaze_instance = blaze.ensure_instance(bv)
