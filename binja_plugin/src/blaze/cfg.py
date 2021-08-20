@@ -858,7 +858,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         Check if there a POI displayed with the ICFG being displayed.
         '''
         if self.blaze_instance.graph:
-            return self.blaze_instance.graph.call_node_ratings != None
+            return self.blaze_instance.graph.poi_search_results != None
         else:
             return False
 
