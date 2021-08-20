@@ -499,7 +499,6 @@ class BlazePlugin():
             snap_msg = cast(SnapshotServerToBinja, msg.get('snapshotMsg'))
 
             for instance in relevant_instances:
-                log.info('Try instance: %r', instance)
                 if snap_msg['tag'] == 'BranchesOfClient':
                     for bpath, data in cast(ServerBranchesOfClient,
                                             snap_msg.get('branchesOfClient')):
@@ -509,9 +508,7 @@ class BlazePlugin():
                             break
 
                 if snap_msg['tag'] == 'BranchesOfBinary':
-                    log.info('branches of binary')
                     if snap_msg.get('hostBinaryPath') == instance.bv_key:
-                        log.info('YES')
                         instance.snaptree_dock_widget.snaptree_widget.update_branches_of_binary(
                             cast(list, snap_msg.get('branches')))
 
