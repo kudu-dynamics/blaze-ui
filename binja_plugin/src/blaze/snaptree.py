@@ -442,9 +442,8 @@ class SnapTreeWidget(QTreeWidget):
         log.info(f'Loading snapshot for icfg {cfg_id}')
         snapshot_msg = SnapshotBinjaToServer(tag='LoadSnapshot', cfgId=cfg_id)
 
-        for dw in self.blaze_instance.blaze.icfg_dock_widgets[self.blaze_instance.bv_key]:
-            if dw.blaze_instance == self.blaze_instance:
-                dw.icfg_widget.recenter_node_id = None
+        for instance in self.blaze_instance.blaze.instances_by_key(self.blaze_instance.bv_key):
+            instance.icfg_dock_widget.icfg_widget.recenter_node_id = None
 
         self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snapshot_msg))
 
@@ -507,20 +506,6 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
 
     def __del__(self):
         try_debug(log, 'Deleting %r', self)
-
-    def handle_server_msg(self, snap_msg: SnapshotServerToBinja):
-        '''
-        this is where I delegate snapshot server messages
-        '''
-        if snap_msg.get('tag') == 'BranchesOfClient':
-            for bpath, data in cast(ServerBranchesOfClient, snap_msg.get('branchesOfClient')):
-                if bpath == self.blaze_instance.bv_key:
-                    self.snaptree_widget.update_branches_of_binary(cast(list, data))
-                    break
- 
-        if snap_msg.get('tag') == 'BranchesOfBinary':
-            if snap_msg.get('hostBinaryPath') == self.blaze_instance.bv_key:
-                self.snaptree_widget.update_branches_of_binary(cast(list, snap_msg.get('branches')))
 
         # self.snaptree_widget._debug_()
 
