@@ -87,11 +87,11 @@ def muted_color(muteness: float, color: HighlightColor) -> HighlightColor:
     )
 
 
-poi_present_target_color = HighlightStandardColor.WhiteHighlightColor
-poi_node_not_found_color = muted_color(0.8, HighlightStandardColor.YellowHighlightColor)
-poi_unreachable_color = muted_color(0.7, HighlightStandardColor.YellowHighlightColor)
-poi_reachable_meh_color = HighlightStandardColor.OrangeHighlightColor
-poi_reachable_good_color = HighlightStandardColor.RedHighlightColor
+POI_PRESENT_TARGET_COLOR = HighlightStandardColor.WhiteHighlightColor
+POI_NODE_NOT_FOUND_COLOR = muted_color(0.8, HighlightStandardColor.YellowHighlightColor)
+POI_UNREACHABLE_COLOR = muted_color(0.7, HighlightStandardColor.YellowHighlightColor)
+POI_REACHABLE_MEH_COLOR = HighlightStandardColor.OrangeHighlightColor
+POI_REACHABLE_GOOD_COLOR = HighlightStandardColor.RedHighlightColor
 
 def cfg_from_server(cfg: ServerCfg) -> Cfg:
     nodes = {k['contents']['uuid']: v for k, v in cfg['nodes']}
@@ -199,13 +199,13 @@ def get_target_address(call_dest: CallDest) -> Optional[Address]:
 
 def call_node_rating_color(rating: CallNodeRating) -> HighlightColor:
     if rating.get('tag') == 'Unreachable':
-        return poi_unreachable_color
+        return POI_UNREACHABLE_COLOR
 
     elif rating.get('tag') == 'Reachable':
         score = rating.get('score')
         return HighlightColor(
-            poi_reachable_meh_color,
-            poi_reachable_good_color,
+            POI_REACHABLE_MEH_COLOR,
+            POI_REACHABLE_GOOD_COLOR,
             mix=int(min(255, max(0, score * 255)))
         )
 
@@ -398,7 +398,7 @@ class ICFGFlowGraph(FlowGraph):
             if node['contents']['uuid'] in self.pending_changes.removed_nodes:
                 fg_node.highlight = HighlightStandardColor.RedHighlightColor
             elif self.poi_search_results and (node['contents']['uuid'] in self.poi_search_results.get('presentTargetNodes')):
-                fg_node.highlight = poi_present_target_color
+                fg_node.highlight = POI_PRESENT_TARGET_COLOR
             elif node['tag'] == 'Call':
                 call_node = cast(CallNode, node['contents'])
                 if is_expandable_call_node(bv, call_node):
@@ -409,9 +409,9 @@ class ICFGFlowGraph(FlowGraph):
                             rating = cast(CallNodeRating, score_obj)
                             fg_node.highlight = call_node_rating_color(rating)
                         else:
-                            fg_node.highlight = poi_node_not_found_color
+                            fg_node.highlight = POI_NODE_NOT_FOUND_COLOR
                     else:
-                        fg_node.highlight = poi_node_not_found_color
+                        fg_node.highlight = POI_NODE_NOT_FOUND_COLOR
                 else:
                     fg_node.highlight = HighlightStandardColor.BlackHighlightColor
             elif node['tag'] == 'EnterFunc':
