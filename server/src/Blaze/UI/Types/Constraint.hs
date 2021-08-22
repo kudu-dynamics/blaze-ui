@@ -8,11 +8,12 @@ import qualified Blaze.Types.Pil as Pil
 data ConstraintError
   = VarNameNotFound Text
   | InvalidOperator Text
-  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 newtype ServerToBinja
   = SBInvalidConstraint { parseError :: ConstraintError }
-  deriving (Eq, Ord, Show, Generic)
+  deriving stock (Eq, Ord, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
 data BinjaToServer
@@ -21,7 +22,8 @@ data BinjaToServer
                   , stmtIndex :: Word64
                   , exprText :: Text
                   }
-  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving anyclass (ToJSON, FromJSON)
 
 
 dummyParse :: Text -> Either ConstraintError Pil.Stmt
