@@ -21,6 +21,7 @@ from binaryninja.interaction import (
     MessageBoxButtonResult,
     MessageBoxButtonSet,
     MessageBoxIcon,
+    TextLineField,
     get_form_input,
     show_message_box,
 )
@@ -507,8 +508,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             BNAction(
                 'Blaze', 'Save ICFG Snapshot', MenuOrder.EARLY,
                 activate = self.context_menu_action_save_icfg_snapshot,
-                # how would you check to see an icfg is loaded?
-                isValid = lambda ctx: True,
+                isValid=lambda ctx: self.has_icfg(),
             ),
             BNAction(
                 'Blaze', 'Deactivate POI', MenuOrder.EARLY,
@@ -519,6 +519,11 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 'Blaze', 'Go to Address', MenuOrder.EARLY,
                 activate = self.context_menu_action_go_to_address,
                 isValid=lambda ctx: self.has_icfg(),
+            ),
+            BNAction(
+              'Blaze', 'Add Constraint', MenuOrder.EARLY,
+              activate=self.context_menu_action_add_constraint,
+              isValid=lambda ctx: self.has_icfg(),
             ),
         ]
         # yapf: enable
@@ -777,6 +782,19 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         if target_fg_node := self.get_fg_node(target_cf_node):
             self.showNode(target_fg_node)
+
+    def context_menu_action_add_constraint(self, context: UIActionContext):
+        log.debug('Add Constraint')
+        # Get constraint from user
+        text_field = TextLineField('Constraint:')
+        confirm: bool = get_form_input([text_field], 'Add Constraint')
+        if not confirm or not text_field.result:
+            return
+        text: str = text_field.result
+
+        # Send constraint to server
+        log.info(f'Constraint: {text}')
+        # TODO: Implement this and add server response handler
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
