@@ -289,6 +289,37 @@ class PoiBinjaToServer(PoiBinjaToServerTotal, total=False):
     poiId: PoiId
 
 
+# Constraint messages
+VarNameNotFound = str
+
+
+InvalidOperator = str
+
+
+class ConstraintError(TypedDict):
+    tag: Literal['VarNameNotFound', 'InvalidOperator']
+    contents: Union[VarNameNotFound, InvalidOperator]
+
+
+class ConstraintServerToBinjaTotal(TypedDict, total=True):
+    tag: Literal['SBInvalidConstraint']
+
+
+class ConstraintServerToBinja(TypedDict, total=False):
+    parseError: ConstraintError
+
+
+class ConstraintBinjaToServerTotal(TypedDict, total=True):
+    tag: Literal['AddConstraint']
+
+
+class ConstraintBinjaToServer(ConstraintBinjaToServerTotal, total=False):
+    cfgId: CfgId
+    node: UUID
+    stmtIndex: Word64
+    exprText: str
+
+
 class ServerPendingChanges(TypedDict, total=True):
     removedNodes: List[UUID]
     removedEdges: List[List[UUID]]
@@ -328,7 +359,7 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
 class BinjaToServerTotal(TypedDict, total=True):
     tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
                  'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop', 'BSCfgFocus',
-                 'BSCfgConfirmChanges', 'BSCfgRevertChanges', 'BSPoi']
+                 'BSCfgConfirmChanges', 'BSCfgRevertChanges', 'BSPoi', 'BSConstraint']
 
 
 class BinjaToServer(BinjaToServerTotal, total=False):
@@ -343,6 +374,7 @@ class BinjaToServer(BinjaToServerTotal, total=False):
     node: CfNode
     targetAddress: Word64
     poiMsg: PoiBinjaToServer
+    constraintMsg: ConstraintBinjaToServer
 
 
 class BinjaMessage(TypedDict):
