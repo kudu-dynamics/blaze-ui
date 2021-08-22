@@ -492,7 +492,7 @@ class BlazePlugin():
             for instance in relevant_instances:
                 instance.graph = ICFGFlowGraph(
                     instance.bv, cfg, cfg_id, call_node_ratings, pending_changes)
-                instance.icfg_dock_widget.icfg_widget.setGraph(instance.graph)
+                instance.icfg_dock_widget.set_graph(instance.graph)
                 instance.snaptree_dock_widget.snaptree_widget.focus_icfg(cfg_id)
 
         elif tag == 'SBSnapshot':
