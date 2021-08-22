@@ -639,7 +639,7 @@ handleBinjaEvent = \case
               <> " for Cfg "
               <> show cid
         (node':others) -> do
-          when (not . null $ others) $ do
+          unless (null others) $ do
             logWarn $ "AddConstraint: found multiple nodes with UUID "
               <> show nid
               <> " in Cfg "
