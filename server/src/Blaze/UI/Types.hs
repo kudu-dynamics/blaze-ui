@@ -14,6 +14,7 @@ import qualified Binja.Function as BNFunc
 import qualified Data.Aeson.Types as Aeson
 import Blaze.Function (Function)
 import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
+import qualified Blaze.UI.Types.Constraint as C
 import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Poi as Poi
@@ -62,6 +63,8 @@ data ServerToBinja = SBLogInfo { message :: Text }
 
                    | SBPoi { poiMsg :: Poi.ServerToBinja }
 
+                   | SBConstraint { constraintMsg :: C.ServerToBinja }
+
                    | SBNoop
                    deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
 
@@ -102,6 +105,8 @@ data BinjaToServer = BSConnect
                    | BSSnapshot { snapshotMsg :: Snapshot.BinjaToServer }
 
                    | BSPoi { poiMsg :: Poi.BinjaToServer }
+
+                   | BSConstraint { constraintMsg :: C.BinjaToServer }
 
                    | BSNoop
 

@@ -27,6 +27,7 @@ import qualified Blaze.Cfg.Interprocedural as ICfg
 import Blaze.Pretty (prettyIndexedStmts, showHex)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
+import qualified Blaze.UI.Types.Constraint as C
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, Branch, BranchTree, SnapshotType)
 import qualified Blaze.UI.Cfg.Snapshot as Snapshot
@@ -507,9 +508,9 @@ handleBinjaEvent = \case
         then sendToBinja $ SBLogError "Cannot remove root node"
         else do
           let cfg' = G.removeNode fullNode cfg
-              InterCfg prunedCfg = CfgA.simplify $ InterCfg cfg'
-          printSimplifyStats cfg' prunedCfg
-          sendDiffCfg bhash cid cfg cfg'
+              InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
+          printSimplifyStats cfg' simplifiedCfg
+          sendDiffCfg bhash cid cfg simplifiedCfg
 
   BSCfgFocus cid node' -> do
     debug "Binja Focus"
@@ -624,6 +625,41 @@ handleBinjaEvent = \case
       ctx <- ask
       liftIO . atomically . writeTVar (ctx ^. #activePoi) $ Nothing
       whenJust mcid refreshActiveCfg
+
+  BSConstraint constraintMsg' -> case constraintMsg' of
+    C.AddConstraint cid nid stmtIndex exprText -> do
+      cfg <- getCfg cid
+      let matchingNode = filter ((== nid) . Cfg.getNodeUUID)
+                         . HashSet.toList
+                         . Cfg.nodes
+                         $ cfg
+      case matchingNode of
+        [] -> logError $ "AddConstraint: could not find matching node "
+              <> show nid
+              <> " for Cfg "
+              <> show cid
+        (node':others) -> do
+          when (not . null $ others) $ do
+            logWarn $ "AddConstraint: found multiple nodes with UUID "
+              <> show nid
+              <> " in Cfg "
+              <> show cid
+              <> ". Using first match."
+          let stmts = Cfg.getNodeData node'
+          when (fromIntegral stmtIndex > length stmts) $ do
+            logWarn $ "AddConstraint: requested constraint stmt index "
+              <> show stmtIndex
+              <> " exceeds length of node's statements (" <> show (length stmts) <> "). "
+              <> "Adding to end."
+          case C.dummyParse exprText of
+            Left err -> sendToBinja . SBConstraint . C.SBInvalidConstraint $ err
+            Right stmt -> do
+              let (stmtsA, stmtsB) = splitAt (fromIntegral stmtIndex) stmts
+                  stmts' = stmtsA <> [stmt] <> stmtsB
+                  cfg' = Cfg.setNodeData stmts' node' cfg
+                  InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
+              bhash <- getCfgBinaryHash cid
+              sendDiffCfg bhash cid cfg simplifiedCfg
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do
