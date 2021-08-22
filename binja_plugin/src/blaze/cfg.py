@@ -197,6 +197,17 @@ def get_target_address(call_dest: CallDest) -> Optional[Address]:
         return None
 
 
+def node_contains_addr(node: CfNode, addr: Address) -> bool:
+    tag = node['tag']
+    if tag in ('EnterFunc', 'LeaveFunc'):
+        return False
+    elif tag == 'BasicBlock':
+        return (addr >= node['contents']['start'] and
+                addr <= node['contents']['end'])
+    elif tag == 'Call':
+        return node['contents']['start'] == addr
+
+
 def call_node_rating_color(rating: CallNodeRating) -> HighlightColor:
     if rating.get('tag') == 'Unreachable':
         return POI_UNREACHABLE_COLOR
@@ -500,11 +511,15 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 isValid = lambda ctx: True,
             ),
             BNAction(
-                'Blaze', 'Deactive POI', MenuOrder.EARLY,
+                'Blaze', 'Deactivate POI', MenuOrder.EARLY,
                 activate=self.context_menu_action_deactivate_poi,
                 isValid=lambda ctx: self.has_active_poi(),
             ),
-
+            BNAction(
+                'Blaze', 'Go to Address', MenuOrder.EARLY,
+                activate = self.context_menu_action_go_to_address,
+                isValid=lambda ctx: self.has_icfg(),
+            ),
         ]
         # yapf: enable
 
@@ -739,6 +754,30 @@ class ICFGWidget(FlowGraphWidget, QObject):
         log.debug('Deactivating POI')
         self.deactivate_poi()
 
+    def context_menu_action_go_to_address(self, context: UIActionContext):
+        log.debug('Go to Address')
+        # Get address from user
+        addr_field = AddressField("Address:")
+        confirm: bool = get_form_input([addr_field], 'Go to Address')
+        if not confirm or not addr_field.result:
+            return
+        addr: Address = addr_field.result
+
+        # Find node(s) containing address
+        nodes = self.find_nodes_containing(addr)
+        if not nodes:
+            log.info(f'No nodes found containing address: 0x{addr:02x}')
+            return
+
+        # TODO: Select node if multiple matches
+        target_cf_node: CfNode = nodes[0]
+
+        # Recenter on node
+        self.recenter_node_id = target_cf_node['contents']['uuid']
+
+        if target_fg_node := self.get_fg_node(target_cf_node):
+            self.showNode(target_fg_node)
+
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any
@@ -839,6 +878,13 @@ class ICFGWidget(FlowGraphWidget, QObject):
         assert self.blaze_instance.graph
         return self.blaze_instance.graph.node_mapping.get(node)
 
+    def get_fg_node(self, node: CfNode) -> Optional[FlowGraphNode]:
+        assert self.blaze_instance.graph
+        for fg_node, cf_node in self.blaze_instance.graph.node_mapping.items():
+            if cf_node == node:
+                return fg_node
+        return None
+
     def _clicked_node_is_expandable_call_node(self, _ctx: UIActionContext) -> bool:
         '''
         Helper function for checking if the node just clicked is a call node
@@ -852,6 +898,14 @@ class ICFGWidget(FlowGraphWidget, QObject):
                         self.blaze_instance.bv,
                         cast(CallNode, cf_node['contents'])))
         return False
+
+    def find_nodes_containing(self, addr: Address) -> List[CfNode]:
+        assert self.blaze_instance.graph
+        return [node for node in self.blaze_instance.graph.nodes.values()
+                     if node_contains_addr(node, addr)]
+
+    def has_icfg(self) -> bool:
+        return self.blaze_instance.graph != None
 
     def has_active_poi(self) -> bool:
         '''
