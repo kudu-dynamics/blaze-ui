@@ -527,7 +527,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
             BNAction(
                 'Blaze', 'Add Constraint', MenuOrder.EARLY,
                 activate=self.context_menu_action_add_constraint,
-                isValid=lambda ctx: self.clicked_node is not None,
+                isValid=lambda ctx: (self.clicked_node is not None and
+                                     self.get_cf_node(self.clicked_node).get('tag') == 'BasicBlock')
+                                    
             ),
         ]
         # yapf: enable
@@ -558,11 +560,12 @@ class ICFGWidget(FlowGraphWidget, QObject):
     def add_constraint(self, node: CfNode, stmtIndex: Word64, expr: str) -> None:
         assert self.blaze_instance.graph
 
-        log.info(node)
+        node_uuid = node['contents']['uuid']
+        self.recenter_node_id = node_uuid
         # Send constraint to server
         constraint_msg = ConstraintBinjaToServer(tag='AddConstraint', 
                                                  cfgId=self.blaze_instance.graph.pil_icfg_id,
-                                                 node=node['contents']['uuid'],
+                                                 node=node_uuid,
                                                  stmtIndex=stmtIndex,
                                                  exprText=expr)
         self.blaze_instance.send(BinjaToServer(tag='BSConstraint', 
@@ -908,8 +911,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         #self.clicked_line = self.getLineForMouseEvent(event)
         self.clicked_token = self.getTokenForMouseEvent(event)
-
-        log.info(dir(self))
 
         if (fg_edge := self.getEdgeForMouseEvent(event)):
             fg_edge, swapped = fg_edge

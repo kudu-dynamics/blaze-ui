@@ -24,7 +24,7 @@ import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
 import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
 import qualified Blaze.Cfg.Interprocedural as ICfg
-import Blaze.Pretty (prettyIndexedStmts, showHex, prettyPrint)
+import Blaze.Pretty (prettyIndexedStmts, showHex)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.UI.Types.Constraint as C
@@ -235,10 +235,16 @@ sendCfgAndSnapshots bhash pcfg cid newCid = do
   sendLatestClientSnapshots
 
 sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
-sendDiffCfg bhash cid old new = do
-  CfgUI.addCfg cid new
-  sendToBinja $ SBCfg cid bhash Nothing (Just changes) $ convertPilCfg old
+sendDiffCfg bhash cid old new
+  | isEmptyChanges changes = do
+      setCfg cid new
+      sendCfgWithCallRatings bhash new cid
+  | otherwise = do
+      CfgUI.addCfg cid new
+      sendToBinja $ SBCfg cid bhash Nothing (Just changes) $ convertPilCfg old
   where
+    isEmptyChanges (PendingChanges [] []) = True
+    isEmptyChanges _ = False
     changes = PendingChanges removedNodes' removedEdges'
     removedNodes' = fmap Cfg.getNodeUUID
                     . HashSet.toList
@@ -660,9 +666,8 @@ handleBinjaEvent = \case
                   stmts' = stmtsA <> [stmt] <> stmtsB
                   cfg' = Cfg.setNodeData stmts' node' cfg
                   InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
-              prettyPrint simplifiedCfg
               bhash <- getCfgBinaryHash cid
-              sendDiffCfg bhash cid cfg simplifiedCfg
+              sendDiffCfg bhash cid cfg' simplifiedCfg
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do
