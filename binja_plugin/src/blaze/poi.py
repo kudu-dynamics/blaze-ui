@@ -190,7 +190,7 @@ class PoiListDockWidget(QWidget, DockContextHandler):
                 self.poi_list_widget.addItem(poi_item)
             else:
                 log.info('No function found at address 0x%x for %s', 
-                            poi.funcAddr, self.blaze_instance.bv)
+                            poi.get('funcAddr'), self.blaze_instance.bv)
 
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
         if view_frame is None:

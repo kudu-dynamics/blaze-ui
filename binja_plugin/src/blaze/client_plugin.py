@@ -50,10 +50,12 @@ from .types import (
     BinjaToServer,
     CfgId,
     PoiBinjaToServer,
+    PoiSearchResults,
     PoiServerToBinja,
     ServerBranchesOfClient,
     ServerCfg,
     ServerPendingChanges,
+    ServerPoiSearchResults,
     ServerToBinja,
     SnapshotServerToBinja,
     pending_changes_from_server,
@@ -477,12 +479,12 @@ class BlazePlugin():
             cfg_id = cast(CfgId, msg.get('cfgId'))
             cfg = cfg_from_server(cast(ServerCfg, msg.get('cfg')))
             server_pending_changes = msg.get('pendingChanges')
-            server_call_node_ratings = msg.get('callNodeRatings')
+            server_poi_search_results = msg.get('poiSearchResults')
 
-            if server_call_node_ratings:
-                call_node_ratings = dict(server_call_node_ratings)
+            if server_poi_search_results:
+                poi_search_results = PoiSearchResults(callNodeRatings=dict(server_poi_search_results.get('callNodeRatings') or []), presentTargetNodes=set(server_poi_search_results.get('presentTargetNodes') or []))
             else:
-                call_node_ratings = None
+                poi_search_results = None
 
             if server_pending_changes is None:
                 server_pending_changes = ServerPendingChanges(removedNodes=[], removedEdges=[])
@@ -491,7 +493,7 @@ class BlazePlugin():
 
             for instance in relevant_instances:
                 instance.graph = ICFGFlowGraph(
-                    instance.bv, cfg, cfg_id, call_node_ratings, pending_changes)
+                    instance.bv, cfg, cfg_id, poi_search_results, pending_changes)
                 instance.icfg_dock_widget.set_graph(instance.graph)
                 instance.snaptree_dock_widget.snaptree_widget.focus_icfg(cfg_id)
 

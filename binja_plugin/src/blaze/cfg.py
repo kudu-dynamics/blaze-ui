@@ -63,6 +63,7 @@ from .types import (
     MenuOrder,
     PendingChanges,
     PoiBinjaToServer,
+    PoiSearchResults,
     ServerCfg,
     SnapshotBinjaToServer,
     tokens_from_server,
@@ -76,6 +77,21 @@ VERBOSE = False
 
 log = _logging.getLogger(__name__)
 
+
+def muted_color(muteness: float, color: HighlightColor) -> HighlightColor:
+    "Mutes a color. 0.0 muteness is totally black. 1.0 is totally color"
+    return HighlightColor(
+        HighlightStandardColor.BlackHighlightColor,
+        color,
+        mix=int(min(255, max(0, muteness * 255)))
+    )
+
+
+POI_PRESENT_TARGET_COLOR = HighlightStandardColor.WhiteHighlightColor
+POI_NODE_NOT_FOUND_COLOR = muted_color(0.8, HighlightStandardColor.YellowHighlightColor)
+POI_UNREACHABLE_COLOR = muted_color(0.7, HighlightStandardColor.YellowHighlightColor)
+POI_REACHABLE_MEH_COLOR = HighlightStandardColor.OrangeHighlightColor
+POI_REACHABLE_GOOD_COLOR = HighlightStandardColor.RedHighlightColor
 
 def cfg_from_server(cfg: ServerCfg) -> Cfg:
     nodes = {k['contents']['uuid']: v for k, v in cfg['nodes']}
@@ -192,13 +208,22 @@ def node_contains_addr(node: CfNode, addr: Address) -> bool:
         return node['contents']['start'] == addr
 
 
-def call_node_rating_color(rating: float) -> HighlightColor:
-    return HighlightColor(
-        HighlightStandardColor.RedHighlightColor,
-        HighlightStandardColor.GreenHighlightColor,
-        mix=int(rating * 255)
-    )
+def call_node_rating_color(rating: CallNodeRating) -> HighlightColor:
+    if rating.get('tag') == 'Unreachable':
+        return POI_UNREACHABLE_COLOR
 
+    elif rating.get('tag') == 'Reachable':
+        score = rating.get('score')
+        return HighlightColor(
+            POI_REACHABLE_MEH_COLOR,
+            POI_REACHABLE_GOOD_COLOR,
+            mix=int(min(255, max(0, score * 255)))
+        )
+
+    else:
+        log.info(rating)
+        log.error('Unhandled CallNodeRating tag')
+    
 
 def format_block_header(node: CfNode) -> DisassemblyTextLine:
     node_id = node['contents']['uuid']
@@ -355,14 +380,14 @@ class ICFGFlowGraph(FlowGraph):
         bv: BinaryView,
         cfg: Cfg,
         cfg_id: CfgId,
-        call_node_ratings: Optional[Dict[UUID, CallNodeRating]],
+        poi_search_results: Optional[PoiSearchResults],
         pending_changes: PendingChanges,
     ):
         super().__init__()
         self.pil_icfg: Cfg = cfg
         self.pil_icfg_id: CfgId = cfg_id
         self.node_mapping: Dict[FlowGraphNode, CfNode] = {}
-        self.call_node_ratings = call_node_ratings
+        self.poi_search_results = poi_search_results
         self.pending_changes: PendingChanges = pending_changes
         
         nodes: Dict[UUID, FlowGraphNode] = {}
@@ -383,23 +408,29 @@ class ICFGFlowGraph(FlowGraph):
 
             if node['contents']['uuid'] in self.pending_changes.removed_nodes:
                 fg_node.highlight = HighlightStandardColor.RedHighlightColor
+            elif self.poi_search_results and (node['contents']['uuid'] in self.poi_search_results.get('presentTargetNodes')):
+                fg_node.highlight = POI_PRESENT_TARGET_COLOR
             elif node['tag'] == 'Call':
                 call_node = cast(CallNode, node['contents'])
                 if is_expandable_call_node(bv, call_node):
-                    if self.call_node_ratings:
-                        score_obj = self.call_node_ratings.get(call_node['uuid'])
-                        rating = score_obj.get('score') if score_obj else 0.0
-                        fg_node.highlight = call_node_rating_color(rating)
+                    if self.poi_search_results:
+                        ratings = self.poi_search_results.get('callNodeRatings')
+                        score_obj = ratings.get(call_node['uuid'])
+                        if score_obj:
+                            rating = cast(CallNodeRating, score_obj)
+                            fg_node.highlight = call_node_rating_color(rating)
+                        else:
+                            fg_node.highlight = POI_NODE_NOT_FOUND_COLOR
                     else:
-                        fg_node.highlight = HighlightStandardColor.YellowHighlightColor
-                    
+                        fg_node.highlight = POI_NODE_NOT_FOUND_COLOR
                 else:
                     fg_node.highlight = HighlightStandardColor.BlackHighlightColor
-            elif node['tag'] == 'EnterFunc' and not self.call_node_ratings:
-                fg_node.highlight = HighlightStandardColor.GreenHighlightColor
-            elif node['tag'] == 'LeaveFunc' and not self.call_node_ratings:
-                fg_node.highlight = HighlightStandardColor.BlueHighlightColor
-
+            elif node['tag'] == 'EnterFunc':
+                opacity = 0.8 if self.poi_search_results else 1.0
+                fg_node.highlight = muted_color(opacity, HighlightStandardColor.GreenHighlightColor)
+            elif node['tag'] == 'LeaveFunc':
+                opacity = 0.8 if self.poi_search_results else 1.0
+                fg_node.highlight = muted_color(opacity, HighlightStandardColor.BlueHighlightColor)
             nodes[node_id] = fg_node
             self.append(fg_node)
 
@@ -881,7 +912,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         Check if there a POI displayed with the ICFG being displayed.
         '''
         if self.blaze_instance.graph:
-            return self.blaze_instance.graph.call_node_ratings != None
+            return self.blaze_instance.graph.poi_search_results != None
         else:
             return False
 
