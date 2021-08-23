@@ -88,9 +88,9 @@ def muted_color(muteness: float, color: HighlightColor) -> HighlightColor:
 
 
 POI_PRESENT_TARGET_COLOR = HighlightStandardColor.WhiteHighlightColor
-POI_NODE_NOT_FOUND_COLOR = muted_color(0.8, HighlightStandardColor.YellowHighlightColor)
-POI_UNREACHABLE_COLOR = muted_color(0.7, HighlightStandardColor.YellowHighlightColor)
-POI_REACHABLE_MEH_COLOR = HighlightStandardColor.OrangeHighlightColor
+POI_NODE_NOT_FOUND_COLOR = muted_color(0.4, HighlightStandardColor.YellowHighlightColor)
+POI_UNREACHABLE_COLOR = HighlightStandardColor.BlackHighlightColor
+POI_REACHABLE_MEH_COLOR = HighlightStandardColor.YellowHighlightColor
 POI_REACHABLE_GOOD_COLOR = HighlightStandardColor.RedHighlightColor
 
 def cfg_from_server(cfg: ServerCfg) -> Cfg:
