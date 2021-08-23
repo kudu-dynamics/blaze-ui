@@ -58,6 +58,7 @@ from .types import (
     CfgId,
     CfNode,
     ConstFuncPtrOp,
+    ConstraintBinjaToServer,
     EnterFuncNode,
     Function,
     LeaveFuncNode,
@@ -67,6 +68,7 @@ from .types import (
     PoiSearchResults,
     ServerCfg,
     SnapshotBinjaToServer,
+    Word64,
     tokens_from_server,
 )
 from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge, try_debug
@@ -550,6 +552,21 @@ class ICFGWidget(FlowGraphWidget, QObject):
         cfg_id = self.blaze_instance.graph.pil_icfg_id
         poi_msg = PoiBinjaToServer(tag='DeactivatePoiSearch', activeCfg=cfg_id)
         self.blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
+    
+    def add_constraint(self, node: CfNode, stmtIndex: Word64, expr: str) -> None:
+        assert self.blaze_instance.graph
+
+        cfg_id = self.blaze_instance.graph.pil_icfg_id
+
+        # Send constraint to server
+        # constraint_msg = ConstraintBinjaToServer(tag='AddConstraint', 
+        #                                          cfgId=self.blaze_instance.graph.pil_icfg_id,
+        #                                          node=None,
+        #                                          stmtIndex=None,
+        #                                          exprText=expr)
+        # self.blaze_instance.send(BinjaToServer(tag='BSConstraint', 
+        #                                        constraintMsg=constraint_msg))
+
 
     def prune(self, from_node: CfNode, to_node: CfNode):
         '''
@@ -785,6 +802,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
     def context_menu_action_add_constraint(self, context: UIActionContext):
         log.debug('Add Constraint')
+        
         # Get constraint from user
         text_field = TextLineField('Constraint:')
         confirm: bool = get_form_input([text_field], 'Add Constraint')
@@ -792,9 +810,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
             return
         text: str = text_field.result
 
-        # Send constraint to server
-        log.info(f'Constraint: {text}')
-        # TODO: Implement this and add server response handler
+        self.add_constraint(text)
+
+        # TODO: Implement add server response handler
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
