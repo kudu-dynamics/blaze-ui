@@ -483,6 +483,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         self.clicked_node: Optional[FlowGraphNode] = None
         self.clicked_edge: Optional[FlowGraphEdge] = None
+        self.clicked_line: Optional[DisassemblyTextLine] = None
+        self.clicked_token: Optional[HighlightTokenState] = None
 
         # Node ID which, once we get a new ICFG back, we should recenter on
         self.recenter_node_id: Optional[UUID] = None
@@ -523,9 +525,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 isValid=lambda ctx: self.has_icfg(),
             ),
             BNAction(
-              'Blaze', 'Add Constraint', MenuOrder.EARLY,
-              activate=self.context_menu_action_add_constraint,
-              isValid=lambda ctx: self.has_icfg(),
+                'Blaze', 'Add Constraint', MenuOrder.EARLY,
+                activate=self.context_menu_action_add_constraint,
+                isValid=lambda ctx: self.clicked_node is not None,
             ),
         ]
         # yapf: enable
@@ -556,16 +558,15 @@ class ICFGWidget(FlowGraphWidget, QObject):
     def add_constraint(self, node: CfNode, stmtIndex: Word64, expr: str) -> None:
         assert self.blaze_instance.graph
 
-        cfg_id = self.blaze_instance.graph.pil_icfg_id
-
+        log.info(node)
         # Send constraint to server
-        # constraint_msg = ConstraintBinjaToServer(tag='AddConstraint', 
-        #                                          cfgId=self.blaze_instance.graph.pil_icfg_id,
-        #                                          node=None,
-        #                                          stmtIndex=None,
-        #                                          exprText=expr)
-        # self.blaze_instance.send(BinjaToServer(tag='BSConstraint', 
-        #                                        constraintMsg=constraint_msg))
+        constraint_msg = ConstraintBinjaToServer(tag='AddConstraint', 
+                                                 cfgId=self.blaze_instance.graph.pil_icfg_id,
+                                                 node=node['contents']['uuid'],
+                                                 stmtIndex=stmtIndex,
+                                                 exprText=expr)
+        self.blaze_instance.send(BinjaToServer(tag='BSConstraint', 
+                                               constraintMsg=constraint_msg))
 
 
     def prune(self, from_node: CfNode, to_node: CfNode):
@@ -810,8 +811,19 @@ class ICFGWidget(FlowGraphWidget, QObject):
             return
         text: str = text_field.result
 
-        self.add_constraint(text)
+        if not self.clicked_node:
+            log.error(f'Did not right-click on a CFG node')
+            return
 
+        cf_node = self.get_cf_node(self.clicked_node)
+
+        if not cf_node:
+            log.error(f"Could not find matching CFG node")
+            return
+
+        self.add_constraint(cf_node, 0, text)
+        # get_node, lookup in map
+        # get_line -- dissassembly text line
         # TODO: Implement add server response handler
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
@@ -893,6 +905,11 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         # self.clicked_node: Optional[FlowGraphNode] = self.getNodeForMouseEvent(event)
         self.clicked_node = self.getNodeForMouseEvent(event)
+
+        #self.clicked_line = self.getLineForMouseEvent(event)
+        self.clicked_token = self.getTokenForMouseEvent(event)
+
+        log.info(dir(self))
 
         if (fg_edge := self.getEdgeForMouseEvent(event)):
             fg_edge, swapped = fg_edge

@@ -24,7 +24,7 @@ import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
 import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
 import qualified Blaze.Cfg.Interprocedural as ICfg
-import Blaze.Pretty (prettyIndexedStmts, showHex)
+import Blaze.Pretty (prettyIndexedStmts, showHex, prettyPrint)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.UI.Types.Constraint as C
@@ -652,12 +652,15 @@ handleBinjaEvent = \case
               <> " exceeds length of node's statements (" <> show (length stmts) <> "). "
               <> "Adding to end."
           case C.dummyParse exprText of
-            Left err -> sendToBinja . SBConstraint . C.SBInvalidConstraint $ err
+            Left err -> do
+              putText $ "Error parsing user constraint: " <> show err
+              sendToBinja . SBConstraint . C.SBInvalidConstraint $ err
             Right stmt -> do
               let (stmtsA, stmtsB) = splitAt (fromIntegral stmtIndex) stmts
                   stmts' = stmtsA <> [stmt] <> stmtsB
                   cfg' = Cfg.setNodeData stmts' node' cfg
                   InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
+              prettyPrint simplifiedCfg
               bhash <- getCfgBinaryHash cid
               sendDiffCfg bhash cid cfg simplifiedCfg
 
