@@ -290,27 +290,21 @@ class PoiBinjaToServer(PoiBinjaToServerTotal, total=False):
 
 
 # Constraint messages
-VarNameNotFound = str
-
-InvalidOperator = str
-
-ParseError = str
-
 class ConstraintError(TypedDict):
     tag: Literal['VarNameNotFound', 'InvalidOperator', 'ParseError']
-    contents: Union[VarNameNotFound, InvalidOperator, ParseError]
+    contents: Union[str, str, str]
 
 
 class ConstraintServerToBinjaTotal(TypedDict, total=True):
-    tag: Literal['SBInvalidConstraint']
+    pass # tag: Literal['SBInvalidConstraint']
 
 
-class ConstraintServerToBinja(TypedDict, total=False):
+class ConstraintServerToBinja(ConstraintServerToBinjaTotal, total=False):
     parseError: ConstraintError
 
 
 class ConstraintBinjaToServerTotal(TypedDict, total=True):
-    tag: Literal['AddConstraint']
+    pass # tag: Literal['AddConstraint']
 
 
 class ConstraintBinjaToServer(ConstraintBinjaToServerTotal, total=False):
