@@ -45,6 +45,8 @@ import qualified Blaze.UI.Db.Poi as PoiDb
 import qualified Blaze.UI.Types.Poi as Poi
 import Blaze.Types.Cfg.Analysis (Target(Target))
 import qualified Blaze.UI.Types.CachedCalc as CC
+import qualified Blaze.Pil.Parse as Parse
+import qualified Blaze.Types.Pil as Pil
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -657,12 +659,13 @@ handleBinjaEvent = \case
               <> show stmtIndex
               <> " exceeds length of node's statements (" <> show (length stmts) <> "). "
               <> "Adding to end."
-          case C.dummyParse exprText of
+          case Parse.run Parse.parseExpr exprText of
             Left err -> do
-              putText $ "Error parsing user constraint: " <> show err
-              sendToBinja . SBConstraint . C.SBInvalidConstraint $ err
-            Right stmt -> do
-              let (stmtsA, stmtsB) = splitAt (fromIntegral stmtIndex) stmts
+              putText $ "Error parsing user constraint: " <> err
+              sendToBinja . SBConstraint . C.SBInvalidConstraint . C.ParseError $ err
+            Right expr -> do
+              let stmt = Pil.Constraint . Pil.ConstraintOp $ expr
+                  (stmtsA, stmtsB) = splitAt (fromIntegral stmtIndex) stmts
                   stmts' = stmtsA <> [stmt] <> stmtsB
                   cfg' = Cfg.setNodeData stmts' node' cfg
                   InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'

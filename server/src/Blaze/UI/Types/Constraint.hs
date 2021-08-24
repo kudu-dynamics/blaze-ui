@@ -8,6 +8,7 @@ import qualified Blaze.Types.Pil as Pil
 data ConstraintError
   = VarNameNotFound Text
   | InvalidOperator Text
+  | ParseError Text
   deriving stock (Eq, Ord, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
