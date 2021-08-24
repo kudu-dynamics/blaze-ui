@@ -292,13 +292,13 @@ class PoiBinjaToServer(PoiBinjaToServerTotal, total=False):
 # Constraint messages
 VarNameNotFound = str
 
-
 InvalidOperator = str
 
+ParseError = str
 
 class ConstraintError(TypedDict):
-    tag: Literal['VarNameNotFound', 'InvalidOperator']
-    contents: Union[VarNameNotFound, InvalidOperator]
+    tag: Literal['VarNameNotFound', 'InvalidOperator', 'ParseError']
+    contents: Union[VarNameNotFound, InvalidOperator, ParseError]
 
 
 class ConstraintServerToBinjaTotal(TypedDict, total=True):

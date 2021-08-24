@@ -825,9 +825,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             return
 
         self.add_constraint(cf_node, 0, text)
-        # get_node, lookup in map
-        # get_line -- dissassembly text line
-        # TODO: Implement add server response handler
+
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
@@ -909,7 +907,10 @@ class ICFGWidget(FlowGraphWidget, QObject):
         # self.clicked_node: Optional[FlowGraphNode] = self.getNodeForMouseEvent(event)
         self.clicked_node = self.getNodeForMouseEvent(event)
 
-        #self.clicked_line = self.getLineForMouseEvent(event)
+        # TODO: make hacky way to get clicked line
+        # (getLineForMouseEvent is not implemented)
+        # self.clicked_line = self.getLineForMouseEvent(event)
+
         self.clicked_token = self.getTokenForMouseEvent(event)
 
         if (fg_edge := self.getEdgeForMouseEvent(event)):

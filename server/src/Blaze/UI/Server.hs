@@ -663,6 +663,8 @@ handleBinjaEvent = \case
             Left err -> do
               putText $ "Error parsing user constraint: " <> err
               sendToBinja . SBConstraint . C.SBInvalidConstraint . C.ParseError $ err
+              -- TODO: handle above message directly in binja, maybe remove below
+              logWarn $ "Parse Error: " <> err
             Right expr -> do
               let stmt = Pil.Constraint . Pil.ConstraintOp $ expr
                   (stmtsA, stmtsB) = splitAt (fromIntegral stmtIndex) stmts
