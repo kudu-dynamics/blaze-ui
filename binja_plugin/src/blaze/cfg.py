@@ -38,11 +38,11 @@ from binaryninjaui import (
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
     from PySide6.QtCore import QEvent, QObject, Qt
     from PySide6.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
-    from PySide6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget  # type: ignore
+    from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget  # type: ignore
 else:
     from PySide2.QtCore import QEvent, QObject, Qt  # type: ignore
     from PySide2.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
-    from PySide2.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget  # type: ignore
+    from PySide2.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget  # type: ignore
 
 from .types import (
     BINARYNINJAUI_CUSTOM_EVENT,
@@ -988,14 +988,18 @@ class ICFGToolbarWidget(QWidget):
         self.build()
 
     def build(self):
-        accept_button = QPushButton('Accept')
-        accept_button.clicked.connect(self.accept)
-        reject_button = QPushButton('Reject')
-        reject_button.clicked.connect(self.reject)
+        self.accept_button = QPushButton('Accept')
+        self.accept_button.clicked.connect(self.accept)
+        self.reject_button = QPushButton('Reject')
+        self.reject_button.clicked.connect(self.reject)
 
-        layout = QHBoxLayout()
-        layout.addWidget(accept_button)
-        layout.addWidget(reject_button)
+        self.simplification_stats_label = QLabel()
+        self.update_stats(0, 0, None, None)
+
+        layout = QGridLayout()
+        layout.addWidget(self.accept_button, 0, 0, 1, 1)
+        layout.addWidget(self.reject_button, 0, 1, 1, 1)
+        layout.addWidget(self.simplification_stats_label, 0, 2, 1, 2, Qt.AlignmentFlag.AlignRight)
         self.setLayout(layout)
 
     def accept(self) -> None:
@@ -1020,6 +1024,26 @@ class ICFGToolbarWidget(QWidget):
                     tag='BSCfgRevertChanges',
                     cfgId=self.blaze_instance.graph.pil_icfg_id,
                 ))
+
+    def update_stats(
+        self,
+        nodes: int,
+        edges: int,
+        diff_nodes: int,
+        diff_edges: int,
+    ) -> None:
+        s = ''
+        if diff_nodes:
+            s += f'Nodes: {nodes}{diff_nodes:+} = {nodes + diff_nodes}, '
+        else:
+            s += f'Nodes: {nodes}, '
+
+        if diff_edges:
+            s += f'Edges: {edges}{diff_edges:+} = {edges + diff_edges}'
+        else:
+            s += f'Edges: {edges}'
+
+        self.simplification_stats_label.setText(s)
 
 
 class ICFGDockWidget(QWidget, DockContextHandler):
@@ -1047,7 +1071,8 @@ class ICFGDockWidget(QWidget, DockContextHandler):
             view_frame,
             self.blaze_instance,
         )
-        self.icfg_toolbar_widget.hide()
+        self.icfg_toolbar_widget.accept_button.hide()
+        self.icfg_toolbar_widget.reject_button.hide()
         layout.setContentsMargins(0, 0, 0, 0)  # type: ignore
         layout.setSpacing(0)
         layout.addWidget(self.icfg_toolbar_widget)
@@ -1060,7 +1085,16 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         try_debug(log, 'Deleting %r', self)
 
     def set_graph(self, graph: ICFGFlowGraph):
-        self.icfg_toolbar_widget.setVisible(graph.pending_changes.has_changes)
+        self.icfg_toolbar_widget.accept_button.setVisible(graph.pending_changes.has_changes)
+        self.icfg_toolbar_widget.reject_button.setVisible(graph.pending_changes.has_changes)
+
+        self.icfg_toolbar_widget.update_stats(
+            nodes=len(graph.pil_icfg['nodes']),
+            edges=len(graph.pil_icfg['edges']),
+            diff_nodes=-len(graph.pending_changes.removed_nodes),
+            diff_edges=-len(graph.pending_changes.removed_edges),
+        )
+
         self.icfg_widget.setGraph(graph)
 
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
