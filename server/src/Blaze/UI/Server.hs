@@ -27,6 +27,7 @@ import qualified Blaze.Cfg.Interprocedural as ICfg
 import Blaze.Pretty (prettyIndexedStmts, showHex)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
+import qualified Blaze.UI.Types.Constraint as C
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, Branch, BranchTree, SnapshotType)
 import qualified Blaze.UI.Cfg.Snapshot as Snapshot
@@ -44,6 +45,8 @@ import qualified Blaze.UI.Db.Poi as PoiDb
 import qualified Blaze.UI.Types.Poi as Poi
 import Blaze.Types.Cfg.Analysis (Target(Target))
 import qualified Blaze.UI.Types.CachedCalc as CC
+import qualified Blaze.Pil.Parse as Parse
+import qualified Blaze.Types.Pil as Pil
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -234,10 +237,16 @@ sendCfgAndSnapshots bhash pcfg cid newCid = do
   sendLatestClientSnapshots
 
 sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
-sendDiffCfg bhash cid old new = do
-  CfgUI.addCfg cid new
-  sendToBinja $ SBCfg cid bhash Nothing (Just changes) $ convertPilCfg old
+sendDiffCfg bhash cid old new
+  | isEmptyChanges changes = do
+      setCfg cid new
+      sendCfgWithCallRatings bhash new cid
+  | otherwise = do
+      CfgUI.addCfg cid new
+      sendToBinja $ SBCfg cid bhash Nothing (Just changes) $ convertPilCfg old
   where
+    isEmptyChanges (PendingChanges [] []) = True
+    isEmptyChanges _ = False
     changes = PendingChanges removedNodes' removedEdges'
     removedNodes' = fmap Cfg.getNodeUUID
                     . HashSet.toList
@@ -507,9 +516,9 @@ handleBinjaEvent = \case
         then sendToBinja $ SBLogError "Cannot remove root node"
         else do
           let cfg' = G.removeNode fullNode cfg
-              InterCfg prunedCfg = CfgA.simplify $ InterCfg cfg'
-          printSimplifyStats cfg' prunedCfg
-          sendDiffCfg bhash cid cfg cfg'
+              InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
+          printSimplifyStats cfg' simplifiedCfg
+          sendDiffCfg bhash cid cfg simplifiedCfg
 
   BSCfgFocus cid node' -> do
     debug "Binja Focus"
@@ -624,6 +633,46 @@ handleBinjaEvent = \case
       ctx <- ask
       liftIO . atomically . writeTVar (ctx ^. #activePoi) $ Nothing
       whenJust mcid refreshActiveCfg
+
+  BSConstraint constraintMsg' -> case constraintMsg' of
+    C.AddConstraint cid nid stmtIndex exprText -> do
+      cfg <- getCfg cid
+      let matchingNode = filter ((== nid) . Cfg.getNodeUUID)
+                         . HashSet.toList
+                         . Cfg.nodes
+                         $ cfg
+      case matchingNode of
+        [] -> logError $ "AddConstraint: could not find matching node "
+              <> show nid
+              <> " for Cfg "
+              <> show cid
+        (node':others) -> do
+          unless (null others) $ do
+            logWarn $ "AddConstraint: found multiple nodes with UUID "
+              <> show nid
+              <> " in Cfg "
+              <> show cid
+              <> ". Using first match."
+          let stmts = Cfg.getNodeData node'
+          when (fromIntegral stmtIndex > length stmts) $ do
+            logWarn $ "AddConstraint: requested constraint stmt index "
+              <> show stmtIndex
+              <> " exceeds length of node's statements (" <> show (length stmts) <> "). "
+              <> "Adding to end."
+          case Parse.run Parse.parseExpr exprText of
+            Left err -> do
+              putText $ "Error parsing user constraint: " <> err
+              sendToBinja . SBConstraint . C.SBInvalidConstraint . C.ParseError $ err
+              -- TODO: handle above message directly in binja, maybe remove below
+              logWarn $ "Parse Error:\n" <> err
+            Right expr -> do
+              let stmt = Pil.Constraint . Pil.ConstraintOp $ expr
+                  (stmtsA, stmtsB) = splitAt (fromIntegral stmtIndex) stmts
+                  stmts' = stmtsA <> [stmt] <> stmtsB
+                  cfg' = Cfg.setNodeData stmts' node' cfg
+                  InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
+              bhash <- getCfgBinaryHash cid
+              sendDiffCfg bhash cid cfg' simplifiedCfg
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do

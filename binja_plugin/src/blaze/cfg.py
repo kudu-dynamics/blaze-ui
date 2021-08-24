@@ -21,6 +21,7 @@ from binaryninja.interaction import (
     MessageBoxButtonResult,
     MessageBoxButtonSet,
     MessageBoxIcon,
+    TextLineField,
     get_form_input,
     show_message_box,
 )
@@ -57,6 +58,7 @@ from .types import (
     CfgId,
     CfNode,
     ConstFuncPtrOp,
+    ConstraintBinjaToServer,
     EnterFuncNode,
     Function,
     LeaveFuncNode,
@@ -66,6 +68,7 @@ from .types import (
     PoiSearchResults,
     ServerCfg,
     SnapshotBinjaToServer,
+    Word64,
     tokens_from_server,
 )
 from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge, try_debug
@@ -480,6 +483,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         self.clicked_node: Optional[FlowGraphNode] = None
         self.clicked_edge: Optional[FlowGraphEdge] = None
+        self.clicked_line: Optional[DisassemblyTextLine] = None
+        self.clicked_token: Optional[HighlightTokenState] = None
 
         # Node ID which, once we get a new ICFG back, we should recenter on
         self.recenter_node_id: Optional[UUID] = None
@@ -507,8 +512,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             BNAction(
                 'Blaze', 'Save ICFG Snapshot', MenuOrder.EARLY,
                 activate = self.context_menu_action_save_icfg_snapshot,
-                # how would you check to see an icfg is loaded?
-                isValid = lambda ctx: True,
+                isValid=lambda ctx: self.has_icfg(),
             ),
             BNAction(
                 'Blaze', 'Deactivate POI', MenuOrder.EARLY,
@@ -519,6 +523,13 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 'Blaze', 'Go to Address', MenuOrder.EARLY,
                 activate = self.context_menu_action_go_to_address,
                 isValid=lambda ctx: self.has_icfg(),
+            ),
+            BNAction(
+                'Blaze', 'Add Constraint', MenuOrder.EARLY,
+                activate=self.context_menu_action_add_constraint,
+                isValid=lambda ctx: (self.clicked_node is not None and
+                                     self.get_cf_node(self.clicked_node).get('tag') == 'BasicBlock')
+                                    
             ),
         ]
         # yapf: enable
@@ -545,6 +556,21 @@ class ICFGWidget(FlowGraphWidget, QObject):
         cfg_id = self.blaze_instance.graph.pil_icfg_id
         poi_msg = PoiBinjaToServer(tag='DeactivatePoiSearch', activeCfg=cfg_id)
         self.blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
+    
+    def add_constraint(self, node: CfNode, stmtIndex: Word64, expr: str) -> None:
+        assert self.blaze_instance.graph
+
+        node_uuid = node['contents']['uuid']
+        self.recenter_node_id = node_uuid
+        # Send constraint to server
+        constraint_msg = ConstraintBinjaToServer(tag='AddConstraint', 
+                                                 cfgId=self.blaze_instance.graph.pil_icfg_id,
+                                                 node=node_uuid,
+                                                 stmtIndex=stmtIndex,
+                                                 exprText=expr)
+        self.blaze_instance.send(BinjaToServer(tag='BSConstraint', 
+                                               constraintMsg=constraint_msg))
+
 
     def prune(self, from_node: CfNode, to_node: CfNode):
         '''
@@ -778,6 +804,29 @@ class ICFGWidget(FlowGraphWidget, QObject):
         if target_fg_node := self.get_fg_node(target_cf_node):
             self.showNode(target_fg_node)
 
+    def context_menu_action_add_constraint(self, context: UIActionContext):
+        log.debug('Add Constraint')
+        
+        # Get constraint from user
+        text_field = TextLineField('Constraint:')
+        confirm: bool = get_form_input([text_field], 'Add Constraint')
+        if not confirm or not text_field.result:
+            return
+        text: str = text_field.result
+
+        if not self.clicked_node:
+            log.error(f'Did not right-click on a CFG node')
+            return
+
+        cf_node = self.get_cf_node(self.clicked_node)
+
+        if not cf_node:
+            log.error(f"Could not find matching CFG node")
+            return
+
+        self.add_constraint(cf_node, 0, text)
+
+
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any
@@ -857,6 +906,12 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         # self.clicked_node: Optional[FlowGraphNode] = self.getNodeForMouseEvent(event)
         self.clicked_node = self.getNodeForMouseEvent(event)
+
+        # TODO: make hacky way to get clicked line
+        # (getLineForMouseEvent is not implemented)
+        # self.clicked_line = self.getLineForMouseEvent(event)
+
+        self.clicked_token = self.getTokenForMouseEvent(event)
 
         if (fg_edge := self.getEdgeForMouseEvent(event)):
             fg_edge, swapped = fg_edge
