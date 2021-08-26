@@ -64,6 +64,7 @@ spec = describe "Blaze.UI.Db" $ do
     bid <- runIO randomIO
     cid <- runIO randomIO
     bv <- runIO $ unsafeFromRight <$> BN.getBinaryView diveBin
+    runIO $ BN.updateAnalysisAndWait bv
     let imp = BNImporter bv
     selectDive <- runIO $ fromJust <$> CG.getFunction imp 0x804e080
     (ImportResult _ originalCfg _) <- runIO $ fromJust <$> getCfg imp selectDive
