@@ -89,6 +89,7 @@ def muted_color(muteness: float, color: HighlightColor) -> HighlightColor:
         mix=int(min(255, max(0, muteness * 255)))
     )
 
+
 REGULAR_CALL_NODE_COLOR = muted_color(0.8, HighlightStandardColor.YellowHighlightColor)
 POI_PRESENT_TARGET_COLOR = HighlightStandardColor.WhiteHighlightColor
 POI_NODE_NOT_FOUND_COLOR = muted_color(0.4, HighlightStandardColor.YellowHighlightColor)
