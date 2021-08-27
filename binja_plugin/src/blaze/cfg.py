@@ -90,6 +90,7 @@ def muted_color(muteness: float, color: HighlightColor) -> HighlightColor:
     )
 
 
+REGULAR_CALL_NODE_COLOR = muted_color(0.8, HighlightStandardColor.YellowHighlightColor)
 POI_PRESENT_TARGET_COLOR = HighlightStandardColor.WhiteHighlightColor
 POI_NODE_NOT_FOUND_COLOR = muted_color(0.4, HighlightStandardColor.YellowHighlightColor)
 POI_UNREACHABLE_COLOR = HighlightStandardColor.BlackHighlightColor
@@ -425,7 +426,7 @@ class ICFGFlowGraph(FlowGraph):
                         else:
                             fg_node.highlight = POI_NODE_NOT_FOUND_COLOR
                     else:
-                        fg_node.highlight = POI_NODE_NOT_FOUND_COLOR
+                        fg_node.highlight = REGULAR_CALL_NODE_COLOR
                 else:
                     fg_node.highlight = HighlightStandardColor.BlackHighlightColor
             elif node['tag'] == 'EnterFunc':
