@@ -8,9 +8,10 @@ RUN --mount=type=cache,id=blaze-apt,target=/var/cache/apt,sharing=locked \
     apt install -yq \
         zlib1g-dev
 
-COPY server/ /blaze/blaze-ui/server/
-COPY .ci/ /blaze/blaze-ui/.ci/
-WORKDIR /blaze/blaze-ui/server
+COPY server/ /blaze/build/blaze-ui/server/
+COPY .ci/ /blaze/build/blaze-ui/.ci/
+COPY ./ /blaze/src/blaze-ui/
+WORKDIR /blaze/build/blaze-ui/server
 
 RUN stack build --test --no-run-tests --ghc-options -fdiagnostics-color=always
 
@@ -22,7 +23,7 @@ CMD ["stack", "exec", "blaze-server"]
 
 
 FROM main as minimal
-RUN cd /blaze/blaze-ui/server && stack install --copy-bins --local-bin-path /blaze/bin
+RUN cd /blaze/build/blaze-ui/server && stack install --copy-bins --local-bin-path /blaze/bin
 SHELL ["/bin/bash", "-c"]
 WORKDIR /blaze
 RUN shopt -s nullglob && \
@@ -31,7 +32,7 @@ RUN shopt -s nullglob && \
         /var/apt/lists \
         /root/.local/bin/stack \
         /usr/local/bin/stack \
-        /blaze/{binary-analysis,binaryninja-haskell,blaze,blaze-ui} \
+        /blaze/build \
         /root/.stack \
         /usr/share/binaryninja-api
 
