@@ -196,7 +196,7 @@ test:branch:
     GIT_STRATEGY: none
     GIT_CLEAN_FLAGS: none
   script:
-    - cd /blaze/blaze-ui/server
+    - cd /blaze/build/blaze-ui/server
     - STACK_TEST_TIMEOUT=1800 ../.ci/scripts/run_stack_test.py
 
 test:detached:
@@ -212,7 +212,7 @@ test:detached:
     GIT_STRATEGY: none
     GIT_CLEAN_FLAGS: none
   script:
-    - cd /blaze/blaze-ui/server
+    - cd /blaze/build/blaze-ui/server
     - STACK_TEST_TIMEOUT=1800 ../.ci/scripts/run_stack_test.py
 
 # If we just pushed to the default branch, tag the images as :latest and push
@@ -282,7 +282,7 @@ pages:
     GIT_CLEAN_FLAGS: none
   script:
     - haddock_flags=(--no-haddock-deps)
-    - pushd /blaze/blaze-ui/server
+    - pushd /blaze/build/blaze-ui/server
     - stack haddock "${haddock_flags[@]}"
     - docs_dir=$(stack path --local-doc-root "${haddock_flags[@]}")
     - popd
