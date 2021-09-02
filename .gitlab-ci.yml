@@ -1,5 +1,5 @@
 stages:
-  - lint
+  - check
   - build
   - test
   - deploy
@@ -70,22 +70,60 @@ workflow:
     - *script-bootstrap-dind
     - *script-before-info
 
-.haskell-job:
+.generic-job:
   extends: .dind
-  image: ${REPO_DOCKER_REGISTRY}/blaze-service:commit-${CI_COMMIT_SHA}
+  image: scratch
   # Skip .dind before_script, especially the environment info, since we don't
   # care about most of it after the build stage
   before_script:
     - *script-before-info
 
-lint:
-  stage: lint
+.haskell-job:
+  extends: .generic-job
+  image: ${REPO_DOCKER_REGISTRY}/blaze-service:commit-${CI_COMMIT_SHA}
+
+.python-job:
+  extends: .generic-job
+  image: python:3.8-slim
+
+.python-setup: &python-setup
+  - echo -e "section_start:`date +%s`:setup-python[collapsed=true]\r\e[0KSet up python dependencies"
+  - pushd binja_plugin >/dev/null
+  - poetry install
+  - source "$(poetry env info --path)"/bin/activate
+  - popd >/dev/null
+  - echo -e "section_end:`date +%s`:setup-python\r\e[0K"
+
+lint:server:
+  stage: check
   extends: .dind
   image: ${BLAZE_IMAGE}
   needs: []
   script:
     - hlint --color=always server/src server/test
   allow_failure: true
+
+typecheck:plugin:warnings:
+  stage: check
+  extends: .dind
+  image: ${CI_REGISTRY}/${CI_PROJECT_NAMESPACE}/devops/binaryninja-python-base:latest
+  needs: []
+  script:
+    - *python-setup
+    - cd binja_plugin
+    - FORCE_COLOR=2 pyright src/blaze
+  allow_failure: true
+
+typecheck:plugin:errors:
+  stage: check
+  extends: .dind
+  image: ${CI_REGISTRY}/${CI_PROJECT_NAMESPACE}/devops/binaryninja-python-base:latest
+  needs: []
+  script:
+    - *python-setup
+    - cd binja_plugin
+    - sed -Ei 's/"warning"/"none"/g' pyrightconfig.json
+    - FORCE_COLOR=2 pyright src/blaze
 
 # We need 2 build jobs: one for branch pipelines and one for MR pipelines
 # - build:branch pushes to
