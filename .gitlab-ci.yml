@@ -141,6 +141,7 @@ build:branch:
     - docker push "${squashed_blaze_image}:branch-${CI_COMMIT_REF_SLUG}"
     - docker push "${wheel_server_image}:commit-${CI_COMMIT_SHA}"
     - docker push "${wheel_server_image}:branch-${CI_COMMIT_REF_SLUG}"
+    - echo -e "section_end:`date +%s`:docker-push\r\e[0K"
 
 build:detached:
   stage: build

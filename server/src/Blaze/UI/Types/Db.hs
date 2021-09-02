@@ -34,7 +34,7 @@ instance (ToJSON a, FromJSON a, Typeable (Blob a)) => SqlType (Blob a) where
    sqlType _ = TBlob
 
    fromSql (SqlBlob s) = case Aeson.decode (cs s) of
-     Nothing -> P.error "Could not convert json blob"
+     Nothing -> P.error "Cold not convert json blob"
      Just x -> Blob x
    fromSql x = P.error $ "Unexpected sql field type: " <> show x
 
