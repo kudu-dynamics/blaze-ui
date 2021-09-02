@@ -1,10 +1,20 @@
 {
     "stubPath": "./stubs",
+    "useLibraryCodeForTypes": true,
     "reportUnnecessaryComparison": "warning",
     "reportOptionalSubscript": "error",
     "reportOptionalMemberAccess": "error",
     "reportOptionalCall": "error",
     "reportOptionalIterable": "error",
     "reportOptionalContextManager": "error",
-    "reportOptionalOperand": "error"
+    "reportOptionalOperand": "error",
+    "reportUnknownParameterType": "warning",
+    "reportUnknownArgumentType": "warning",
+    "reportUnknownLambdaType": "warning",
+    "reportUnknownVariableType": "warning",
+    "reportUnusedImport": "warning",
+    "reportDuplicateImport": "warning",
+    "reportUninitializedInstanceVariable": "warning",
+    "reportUnnecessaryIsInstance": "warning",
+    "reportUnnecessaryCast": "warning"
 }
