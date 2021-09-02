@@ -3,7 +3,7 @@ from typing import List, overload
 from binaryninja import AddressRange, BinaryView, DisassemblyTextLine, Function, FunctionGraphType
 from binaryninja.binaryview import BinaryView
 from binaryninja.function import AddressRange
-from PySide2.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget
 
 from ._dockhandler import DockHandler
 from ._filecontext import *

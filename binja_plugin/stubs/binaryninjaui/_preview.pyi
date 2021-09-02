@@ -1,4 +1,4 @@
-from PySide2.QtGui import QWheelEvent
+from PySide6.QtGui import QWheelEvent
 
 
 class PreviewScrollHandler:

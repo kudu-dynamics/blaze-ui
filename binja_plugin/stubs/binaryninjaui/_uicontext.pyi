@@ -2,7 +2,7 @@ from typing import List
 
 from binaryninja import BinaryView, FileMetadata
 from binaryninja.binaryview import BinaryView
-from PySide2.QtWidgets import QMainWindow, QWidget
+from PySide6.QtWidgets import QMainWindow, QWidget
 
 from ._action import UIActionHandler
 from ._filecontext import *

@@ -1,51 +1,52 @@
 import logging as _logging
 from datetime import datetime
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING, cast
 
 import binaryninjaui
 from binaryninjaui import (
     ContextMenuManager,
     DockContextHandler,
-    Menu, 
+    Menu,
     UIActionContext,
     UIActionHandler,
     ViewFrame,
 )
 
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
-    from PySide6.QtCore import Qt  # type: ignore
-    from PySide6.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
-    from PySide6.QtWidgets import QWidget, QListWidget, QListWidgetItem, QVBoxLayout  # type: ignore
-else:
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QWidget, QListWidget, QListWidgetItem, QVBoxLayout
+elif not TYPE_CHECKING:
     from PySide2.QtCore import Qt  # type: ignore
-    from PySide2.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
+    from PySide2.QtGui import QMouseEvent  # type: ignore
     from PySide2.QtWidgets import QWidget, QListWidget, QListWidgetItem, QVBoxLayout  # type: ignore
+else:
+    raise Exception('Cannot typecheck with Qt <6')
 
 from .types import BinjaToServer, MenuOrder, PoiBinjaToServer, PoiId, PoiServerToBinja
-from .util import BNAction, add_actions, bind_actions, servertime_to_clienttime, try_debug
+from .util import BNAction, add_actions, bind_actions, get_function_at, servertime_to_clienttime, try_debug
 
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance
 
 log = _logging.getLogger(__name__)
 
+
 class PoiListItem(QListWidgetItem):
     def __init__(
-            self,
-            parent: QListWidget,
-            poiId: PoiId,
-            name: str,
-            desc: str,
-            func_name: str,
-            instr_addr: int,
-            created_on: datetime):
+        self,
+        parent: QListWidget,
+        poiId: PoiId,
+        name: str,
+        desc: str,
+        func_name: str,
+        instr_addr: int,
+        created_on: datetime,
+    ):
         """
         parent: the parent list widget
         """
-        QListWidgetItem.__init__(
-            self,
-            parent,  # type: ignore
-            type=QListWidgetItem.UserType)
+        QListWidgetItem.__init__(self, parent, type=QListWidgetItem.UserType)
 
         self.poiId = poiId
         self.name = name
@@ -53,7 +54,7 @@ class PoiListItem(QListWidgetItem):
         self.func_name = func_name
         self.instr_addr = instr_addr
         self.created_on = created_on
-        
+
         self.update_text()
 
     def update_text(self):
@@ -104,6 +105,7 @@ class PoiListWidget(QListWidget):
 
         ev_pos = event.pos()
         if (item := self.itemAt(ev_pos)):
+            item = cast(PoiListItem, item)
             self.clicked_item = item
             self.set_active_poi(item.poiId)
 
@@ -113,6 +115,7 @@ class PoiListWidget(QListWidget):
 
         ev_pos = event.pos()
         if (item := self.itemAt(ev_pos)):
+            item = cast(PoiListItem, item)
             self.clicked_item = item
             self.context_menu_manager.show(self.context_menu, self.action_handler)
 
@@ -146,8 +149,8 @@ class PoiListDockWidget(QWidget, DockContextHandler):
     Binary Ninja dock widget containing the POI list view.
     """
     def __init__(
-        self, name: str, view_frame: ViewFrame, parent: QWidget, 
-        blaze_instance: 'BlazeInstance'):
+            self, name: str, view_frame: ViewFrame, parent: QWidget,
+            blaze_instance: 'BlazeInstance'):
         QWidget.__init__(self, parent)
         DockContextHandler.__init__(self, self, name)
 
@@ -155,8 +158,8 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         self.blaze_instance: 'BlazeInstance' = blaze_instance
         self.poi_list_widget = PoiListWidget(self, blaze_instance)
 
-        layout = QVBoxLayout()  # type: ignore
-        layout.setContentsMargins(0, 0, 0, 0)  # type: ignore
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.poi_list_widget)
         self.setLayout(layout)
@@ -174,23 +177,25 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         self.poi_list_widget.clear()
 
         # The only message currently sent from the server is the list of POIs
-        for poi in poi_msg.get('pois'):
-            # TODO: Handle cases where function isn't found 
-            func = self.blaze_instance.bv.get_function_at(poi.get('funcAddr'))
+        for poi in poi_msg['pois']:
+            # TODO: Handle cases where function isn't found
+            func = get_function_at(self.blaze_instance.bv, poi['funcAddr'])
             if func:
-                created_time = datetime.fromisoformat(
-                    servertime_to_clienttime(poi.get('created')))
-                poi_item = PoiListItem(self.poi_list_widget,
-                                        poi.get('poiId'),
-                                        poi.get('name', ''),
-                                        poi.get('description', ''),
-                                        func.name,
-                                        poi.get('instrAddr'),
-                                        poi.get('created'))
+                created_time = datetime.fromisoformat(servertime_to_clienttime(poi['created']))
+                poi_item = PoiListItem(
+                    self.poi_list_widget,
+                    poi['poiId'],
+                    poi['name'] or '',
+                    poi['description'] or '',
+                    func.name,
+                    poi['instrAddr'],
+                    created_time,
+                )
                 self.poi_list_widget.addItem(poi_item)
             else:
-                log.info('No function found at address 0x%x for %s', 
-                            poi.get('funcAddr'), self.blaze_instance.bv)
+                log.info(
+                    'No function found at address 0x%x for %s', poi['funcAddr'],
+                    self.blaze_instance.bv)
 
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
         if view_frame is None:

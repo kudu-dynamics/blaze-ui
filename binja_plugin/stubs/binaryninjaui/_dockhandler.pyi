@@ -2,8 +2,8 @@ from typing import Callable, overload
 
 from binaryninja import BinaryView
 from binaryninja.binaryview import BinaryView
-from PySide2.QtCore import QObject, Qt
-from PySide2.QtWidgets import QDockWidget, QWidget
+from PySide6.QtCore import QObject, Qt
+from PySide6.QtWidgets import QDockWidget, QWidget
 
 from ._viewframe import View, ViewFrame, ViewLocation
 
@@ -29,7 +29,8 @@ class DockHandler(QObject):
         widget: QWidget,
         area: Qt.DockWidgetArea = Qt.DockWidgetArea.BottomDockWidgetArea,
         orientation: Qt.Orientation = Qt.Orientation.Horizontal,
-        defaultVisibility: bool = False
+        defaultVisibility: bool = False,
+        /
     ) -> bool: ...
     @overload
     def addDockWidget(
@@ -38,7 +39,8 @@ class DockHandler(QObject):
         createWidget: Callable[[str, ViewFrame, BinaryView], QWidget],
         area: Qt.DockWidgetArea = Qt.DockWidgetArea.BottomDockWidgetArea,
         orientation: Qt.Orientation = Qt.Orientation.Horizontal,
-        defaultVisibility: bool = False
+        defaultVisibility: bool = False,
+        /
     ) -> bool: ...
 
     def getDockWidget(self, name: str, /) -> QDockWidget: ...

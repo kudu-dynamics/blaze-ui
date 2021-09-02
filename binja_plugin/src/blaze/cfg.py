@@ -1,5 +1,4 @@
 import logging as _logging
-import random
 from copy import deepcopy
 from typing import TYPE_CHECKING, Container, Dict, List, Mapping, Optional, Tuple, cast
 
@@ -29,6 +28,7 @@ from binaryninjaui import (
     ContextMenuManager,
     DockContextHandler,
     FlowGraphWidget,
+    HighlightTokenState,
     Menu,
     UIActionContext,
     UIActionHandler,
@@ -37,12 +37,14 @@ from binaryninjaui import (
 
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
     from PySide6.QtCore import QEvent, QObject, Qt
-    from PySide6.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
-    from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget  # type: ignore
-else:
+    from PySide6.QtGui import QContextMenuEvent, QMouseEvent
+    from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+elif not TYPE_CHECKING:
     from PySide2.QtCore import QEvent, QObject, Qt  # type: ignore
     from PySide2.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
-    from PySide2.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget  # type: ignore
+    from PySide2.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget  # type: ignore
+else:
+    raise Exception('Cannot typecheck with Qt <6')
 
 from .types import (
     BINARYNINJAUI_CUSTOM_EVENT,
@@ -71,7 +73,7 @@ from .types import (
     Word64,
     tokens_from_server,
 )
-from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge, try_debug
+from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge, get_sections_at, try_debug
 
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance
@@ -81,21 +83,21 @@ VERBOSE = False
 log = _logging.getLogger(__name__)
 
 
-def muted_color(muteness: float, color: HighlightColor) -> HighlightColor:
+def muted_color(muteness: float, color: HighlightStandardColor) -> HighlightColor:
     "Mutes a color. 0.0 muteness is totally black. 1.0 is totally color"
     return HighlightColor(
         HighlightStandardColor.BlackHighlightColor,
         color,
-        mix=int(min(255, max(0, muteness * 255)))
-    )
+        mix=int(min(255, max(0, muteness * 255))))
 
 
 REGULAR_CALL_NODE_COLOR = muted_color(0.8, HighlightStandardColor.YellowHighlightColor)
-POI_PRESENT_TARGET_COLOR = HighlightStandardColor.WhiteHighlightColor
+POI_PRESENT_TARGET_COLOR = HighlightColor(HighlightStandardColor.WhiteHighlightColor)
 POI_NODE_NOT_FOUND_COLOR = muted_color(0.4, HighlightStandardColor.YellowHighlightColor)
-POI_UNREACHABLE_COLOR = HighlightStandardColor.BlackHighlightColor
-POI_REACHABLE_MEH_COLOR = HighlightStandardColor.YellowHighlightColor
-POI_REACHABLE_GOOD_COLOR = HighlightStandardColor.RedHighlightColor
+POI_UNREACHABLE_COLOR = HighlightColor(HighlightStandardColor.BlackHighlightColor)
+POI_REACHABLE_MEH_COLOR = HighlightColor(HighlightStandardColor.YellowHighlightColor)
+POI_REACHABLE_GOOD_COLOR = HighlightColor(HighlightStandardColor.RedHighlightColor)
+
 
 def cfg_from_server(cfg: ServerCfg) -> Cfg:
     nodes = {k['contents']['uuid']: v for k, v in cfg['nodes']}
@@ -141,7 +143,7 @@ def is_conditional_edge(edge: FlowGraphEdge) -> bool:
     # we need to translate it to the python API types. This bug might get fixed
     # in the near future, in which case this will hopefully be dead code
     if isinstance(edge.style.style, binaryninja.core.BNEdgeStyle):
-        color = ThemeColor(edge.style.style.color)
+        color: ThemeColor = ThemeColor(edge.style.style.color)
     elif isinstance(edge.style, EdgeStyle):
         color = edge.style.color
     else:
@@ -163,7 +165,7 @@ def is_plt_call_node(bv: BinaryView, call_node: CallNode) -> bool:
         func = cast(Function, call_node['callDest']['contents'])
         in_plt = any(
             sec.name in ('.plt', '.plt.got', '.plt.sec')
-            for sec in bv.get_sections_at(func['address']))
+            for sec in get_sections_at(bv, func['address']))
         return in_plt
     else:
         return False
@@ -174,7 +176,7 @@ def is_got_call_node(bv: BinaryView, call_node: CallNode) -> bool:
         func_ptr = cast(ConstFuncPtrOp, call_node['callDest']['contents'])
         in_got = any(
             sec.name in ('.got', '.got.plt', '.got.sec')
-            for sec in bv.get_sections_at(func_ptr['address']))
+            for sec in get_sections_at(bv, func_ptr['address']))
         return in_got
     else:
         return False
@@ -206,28 +208,29 @@ def node_contains_addr(node: CfNode, addr: Address) -> bool:
     if tag in ('EnterFunc', 'LeaveFunc'):
         return False
     elif tag == 'BasicBlock':
-        return (addr >= node['contents']['start'] and
-                addr <= node['contents']['end'])
+        basic_node = cast(BasicBlockNode, node['contents'])
+        return (addr >= basic_node['start'] and addr <= basic_node['end'])
     elif tag == 'Call':
-        return node['contents']['start'] == addr
+        call_node = cast(CallNode, node['contents'])
+        return call_node['start'] == addr
+    else:
+        assert False, f'Inexaustive match on CfNode? tag={node["tag"]}'
 
 
 def call_node_rating_color(rating: CallNodeRating) -> HighlightColor:
-    if rating.get('tag') == 'Unreachable':
+    if rating['tag'] == 'Unreachable':
         return POI_UNREACHABLE_COLOR
 
-    elif rating.get('tag') == 'Reachable':
-        score = rating.get('score')
+    elif rating['tag'] == 'Reachable':
+        score = cast(float, rating.get('score'))
         return HighlightColor(
             POI_REACHABLE_MEH_COLOR,
             POI_REACHABLE_GOOD_COLOR,
-            mix=int(min(255, max(0, score * 255)))
-        )
+            mix=int(min(255, max(0, score * 255))))
 
     else:
-        log.info(rating)
-        log.error('Unhandled CallNodeRating tag')
-    
+        assert False, f'Inexaustive match on CallNodeRating? tag={rating["tag"]}'
+
 
 def format_block_header(node: CfNode) -> DisassemblyTextLine:
     node_id = node['contents']['uuid']
@@ -393,7 +396,7 @@ class ICFGFlowGraph(FlowGraph):
         self.node_mapping: Dict[FlowGraphNode, CfNode] = {}
         self.poi_search_results = poi_search_results
         self.pending_changes: PendingChanges = pending_changes
-        
+
         nodes: Dict[UUID, FlowGraphNode] = {}
 
         # Root node MUST be added to the FlowGraph first, otherwise weird FlowGraphWidget
@@ -412,16 +415,16 @@ class ICFGFlowGraph(FlowGraph):
 
             if node['contents']['uuid'] in self.pending_changes.removed_nodes:
                 fg_node.highlight = HighlightStandardColor.RedHighlightColor
-            elif self.poi_search_results and (node['contents']['uuid'] in self.poi_search_results.get('presentTargetNodes')):
+            elif self.poi_search_results and (node['contents']['uuid']
+                                              in self.poi_search_results.get('presentTargetNodes')):
                 fg_node.highlight = POI_PRESENT_TARGET_COLOR
             elif node['tag'] == 'Call':
                 call_node = cast(CallNode, node['contents'])
                 if is_expandable_call_node(bv, call_node):
                     if self.poi_search_results:
-                        ratings = self.poi_search_results.get('callNodeRatings')
-                        score_obj = ratings.get(call_node['uuid'])
-                        if score_obj:
-                            rating = cast(CallNodeRating, score_obj)
+                        ratings = self.poi_search_results['callNodeRatings']
+                        rating = ratings.get(call_node['uuid'])
+                        if rating:
                             fg_node.highlight = call_node_rating_color(rating)
                         else:
                             fg_node.highlight = POI_NODE_NOT_FOUND_COLOR
@@ -529,8 +532,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 'Blaze', 'Add Constraint', MenuOrder.EARLY,
                 activate=self.context_menu_action_add_constraint,
                 isValid=lambda ctx: (self.clicked_node is not None and
-                                     self.get_cf_node(self.clicked_node).get('tag') == 'BasicBlock')
-                                    
+                                     (cf_node := self.get_cf_node(self.clicked_node)) is not None and
+                                     cf_node.get('tag') == 'BasicBlock')
             ),
         ]
         # yapf: enable
@@ -557,21 +560,19 @@ class ICFGWidget(FlowGraphWidget, QObject):
         cfg_id = self.blaze_instance.graph.pil_icfg_id
         poi_msg = PoiBinjaToServer(tag='DeactivatePoiSearch', activeCfg=cfg_id)
         self.blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
-    
+
     def add_constraint(self, node: CfNode, stmtIndex: Word64, expr: str) -> None:
         assert self.blaze_instance.graph
 
         node_uuid = node['contents']['uuid']
         self.recenter_node_id = node_uuid
         # Send constraint to server
-        constraint_msg = ConstraintBinjaToServer(tag='AddConstraint', 
-                                                 cfgId=self.blaze_instance.graph.pil_icfg_id,
-                                                 node=node_uuid,
-                                                 stmtIndex=stmtIndex,
-                                                 exprText=expr)
-        self.blaze_instance.send(BinjaToServer(tag='BSConstraint', 
-                                               constraintMsg=constraint_msg))
-
+        constraint_msg = ConstraintBinjaToServer(
+            cfgId=self.blaze_instance.graph.pil_icfg_id,
+            node=node_uuid,
+            stmtIndex=stmtIndex,
+            exprText=expr)
+        self.blaze_instance.send(BinjaToServer(tag='BSConstraint', constraintMsg=constraint_msg))
 
     def prune(self, from_node: CfNode, to_node: CfNode):
         '''
@@ -647,7 +648,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         if is_indirect_call(node):
             addr_field = AddressField('Function (start address or name)', self.blaze_instance.bv)
             if get_form_input([addr_field], 'Call Target'):
-                target_addr = addr_field.result
+                target_addr = cast(int, addr_field.result)
                 self.blaze_instance.send(
                     BinjaToServer(
                         tag='BSCfgExpandCall',
@@ -687,8 +688,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
             log.error('Not a conditional branch')
             return
 
-        source_node = self.get_cf_node(self.clicked_edge.source)
-        dest_node = self.get_cf_node(self.clicked_edge.target)
+        source_node = self.get_cf_node(cast(FlowGraphNode, self.clicked_edge.source))
+        dest_node = self.get_cf_node(cast(FlowGraphNode, self.clicked_edge.target))
         if source_node is None or dest_node is None:
             raise RuntimeError('Missing node in node_mapping!')
 
@@ -807,7 +808,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
     def context_menu_action_add_constraint(self, context: UIActionContext):
         log.debug('Add Constraint')
-        
+
         # Get constraint from user
         text_field = TextLineField('Constraint:')
         confirm: bool = get_form_input([text_field], 'Add Constraint')
@@ -826,7 +827,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
             return
 
         self.add_constraint(cf_node, 0, text)
-
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
@@ -883,7 +883,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 event.windowPos(),
                 event.globalPos(),
                 Qt.MouseButton.LeftButton,
-                Qt.MouseButtons(Qt.MouseButton.LeftButton),
+                Qt.MouseButtons(Qt.MouseButton.LeftButton),  # type: ignore
                 Qt.KeyboardModifiers(),
                 Qt.MouseEventSource.MouseEventSynthesizedByApplication,
                 event.device(),
@@ -895,7 +895,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 event.windowPos(),
                 event.globalPos(),
                 Qt.MouseButton.LeftButton,
-                Qt.MouseButtons(Qt.MouseButton.LeftButton),
+                Qt.MouseButtons(Qt.MouseButton.LeftButton),  # type: ignore
                 Qt.KeyboardModifiers(),
                 Qt.MouseEventSource.MouseEventSynthesizedByApplication,
                 event.device(),
@@ -957,8 +957,10 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
     def find_nodes_containing(self, addr: Address) -> List[CfNode]:
         assert self.blaze_instance.graph
-        return [node for node in self.blaze_instance.graph.nodes.values()
-                     if node_contains_addr(node, addr)]
+        return [
+            node for node in self.blaze_instance.graph.nodes.values()
+            if node_contains_addr(node, addr)
+        ]
 
     def has_icfg(self) -> bool:
         return self.blaze_instance.graph != None
@@ -986,21 +988,20 @@ class ICFGToolbarWidget(QWidget):
         self._view_frame: ViewFrame = view_frame
         self.blaze_instance: 'BlazeInstance' = blaze_instance
 
-        self.build()
-
-    def build(self):
         self.accept_button = QPushButton('Accept')
-        self.accept_button.clicked.connect(self.accept)
+        self.accept_button.clicked.connect(self.accept)  # type: ignore
         self.reject_button = QPushButton('Reject')
-        self.reject_button.clicked.connect(self.reject)
+        self.reject_button.clicked.connect(self.reject)  # type: ignore
 
         self.simplification_stats_label = QLabel()
-        self.update_stats(0, 0, None, None)
+        self.update_stats(0, 0, 0, 0)
 
         layout = QGridLayout()
         layout.addWidget(self.accept_button, 0, 0, 1, 1)
         layout.addWidget(self.reject_button, 0, 1, 1, 1)
-        layout.addWidget(self.simplification_stats_label, 0, 2, 1, 2, Qt.AlignmentFlag.AlignRight)
+        layout.addWidget(
+            self.simplification_stats_label, 0, 2, 1, 2,
+            Qt.Alignment(Qt.AlignmentFlag.AlignRight))  # type: ignore
         self.setLayout(layout)
 
     def accept(self) -> None:
@@ -1061,10 +1062,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         self._view_frame: ViewFrame = view_frame
         self.blaze_instance: 'BlazeInstance' = blaze_instance
 
-        # TODO why does pyright choke on these? Idea: they're both @typing.overload
-        # And the overload that we want is the first one, but pyright only seems to
-        # see the second one
-        layout = QVBoxLayout()  # type: ignore
+        layout = QVBoxLayout()
         self.icfg_widget: ICFGWidget = ICFGWidget(self, view_frame, self.blaze_instance)
         self.icfg_toolbar_widget: ICFGToolbarWidget = ICFGToolbarWidget(
             self,
@@ -1074,7 +1072,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         )
         self.icfg_toolbar_widget.accept_button.hide()
         self.icfg_toolbar_widget.reject_button.hide()
-        layout.setContentsMargins(0, 0, 0, 0)  # type: ignore
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.icfg_toolbar_widget)
         layout.addWidget(self.icfg_widget)

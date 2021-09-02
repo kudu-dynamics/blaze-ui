@@ -113,41 +113,41 @@ class BlazeSettings:
             self.client_id = f'{getpass.getuser()}_{uuid.uuid4()}'
 
     @property
-    def host(self):
+    def host(self) -> str:
         return self._s().get_string(self.Key.HOST)
 
     @host.setter
-    def host(self, val):
+    def host(self, val: str) -> bool:
         return self._s().set_string(self.Key.HOST, val)
 
     @property
-    def ws_port(self):
-        return self._s().get_string(self.Key.WS_PORT)
+    def ws_port(self) -> int:
+        return self._s().get_integer(self.Key.WS_PORT)
 
     @ws_port.setter
-    def ws_port(self, val):
-        return self._s().set_string(self.Key.WS_PORT, val)
+    def ws_port(self, val: int) -> bool:
+        return self._s().set_integer(self.Key.WS_PORT, val)
 
     @property
-    def http_port(self):
-        return self._s().get_string(self.Key.HTTP_PORT)
+    def http_port(self) -> int:
+        return self._s().get_integer(self.Key.HTTP_PORT)
 
     @http_port.setter
-    def http_port(self, val):
-        return self._s().set_string(self.Key.HTTP_PORT, val)
+    def http_port(self, val: int) -> bool:
+        return self._s().set_integer(self.Key.HTTP_PORT, val)
 
     @property
-    def client_id(self):
+    def client_id(self) -> str:
         return self._s().get_string(self.Key.CLIENT_ID)
 
     @client_id.setter
-    def client_id(self, val):
+    def client_id(self, val: str) -> bool:
         return self._s().set_string(self.Key.CLIENT_ID, val)
 
     @property
-    def upload_enabled(self):
-        return self._s().get_string(self.Key.UPLOAD_ENABLED)
+    def upload_enabled(self) -> bool:
+        return self._s().get_bool(self.Key.UPLOAD_ENABLED)
 
     @upload_enabled.setter
-    def upload_enabled(self, val):
-        return self._s().set_string(self.Key.UPLOAD_ENABLED, val)
+    def upload_enabled(self, val: bool) -> bool:
+        return self._s().set_bool(self.Key.UPLOAD_ENABLED, val)

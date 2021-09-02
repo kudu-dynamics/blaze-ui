@@ -10,8 +10,8 @@ from binaryninja.highlevelil import HighLevelILFunction
 from binaryninja.lowlevelil import LowLevelILFunction
 from binaryninja.mediumlevelil import MediumLevelILFunction
 from binaryninja.plugin import PluginCommandContext
-from PySide2.QtGui import QKeySequence
-from PySide2.QtWidgets import QMenu, QWidget
+from PySide6.QtGui import QKeySequence
+from PySide6.QtWidgets import QMenu, QWidget
 
 from ._linearview import LinearViewCursorPosition
 from ._uicontext import UIContext

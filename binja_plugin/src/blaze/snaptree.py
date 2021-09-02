@@ -16,13 +16,15 @@ from binaryninjaui import (
 
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
     from PySide6.QtCore import Qt
-    from PySide6.QtGui import QMouseEvent  # type: ignore
-    from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget  # type: ignore
-else:
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
+elif not TYPE_CHECKING:
     from PySide2.QtCore import Qt  # type: ignore
     from PySide2.QtGui import QMouseEvent  # type: ignore
     from PySide2.QtWidgets import (  # type: ignore
         QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)  # type: ignore
+else:
+    raise Exception('Cannot typecheck with Qt <6')
 
 from .types import (
     Address,
@@ -32,14 +34,11 @@ from .types import (
     BranchTree,
     BranchTreeListItem,
     CfgId,
-    HostBinaryPath,
     MenuOrder,
     ServerBranch,
-    ServerBranchesOfClient,
     ServerBranchTree,
     SnapshotBinjaToServer,
     SnapshotInfo,
-    SnapshotServerToBinja,
 )
 from .util import (
     BNAction,
@@ -64,17 +63,17 @@ def branch_tree_from_server(branch_tree: ServerBranchTree) -> BranchTree:
 
 
 def branch_from_server(branch: ServerBranch) -> Branch:
-    updated = {
+    updated = {  # type: ignore
         **branch, 'tree': branch_tree_from_server(branch['tree']),
         'snapshotInfo': dict(branch['snapshotInfo'])
     }
-    return Branch(**updated)
+    return Branch(**updated)  # type: ignore
 
 
 def branchtree_to_branchtreelistitem(
         bt: BranchTree, snapInfo: Dict[CfgId, SnapshotInfo], cfg_id: CfgId) -> BranchTreeListItem:
     def recursor(bt: BranchTree, cfg_id: CfgId, visited: Set[CfgId]) -> BranchTreeListItem:
-        children = []
+        children: List[BranchTreeListItem] = []
         snapshot_info = snapInfo[cfg_id]
 
         for child in (dest for src, dest in bt['edges'] if src == cfg_id and dest not in visited):
@@ -114,11 +113,7 @@ class SnapTreeItem(QTreeWidgetItem):
         predecessor: the tree item preceding this one
         '''
         # pyright doesn't seem to handle constructor overloading well?
-        QTreeWidgetItem.__init__(
-            self,
-            parent,  # type: ignore
-            predecessor,  # type: ignore
-            type=QTreeWidgetItem.UserType)
+        QTreeWidgetItem.__init__(self, parent, predecessor, type=QTreeWidgetItem.UserType)
         self.update_text()
         ''' From QTreeWidgetItem documentation, for reference:
         By default, items are enabled, selectable, checkable, and can be
@@ -147,12 +142,12 @@ class SnapTreeItem(QTreeWidgetItem):
         """
         Checks if this is the item for the given CFG ID, or any of this item's children
         """
-        if 'cfg_id' in self.__dict__ and self.cfg_id == cfg_id:
+        if isinstance(self, SnapTreeBranchItemBase) and self.cfg_id == cfg_id:
             return self
 
         # TODO are chlidren guaranteed to have an index in the range of childCount()?
         for idx in range(self.childCount()):
-            child = self.child(idx)
+            child = cast(SnapTreeItem, self.child(idx))
             if (item := child.get_item_for_cfg(cfg_id)):
                 return item
 
@@ -166,7 +161,12 @@ class SnapTreeItem(QTreeWidgetItem):
         return ""
 
 
-class SnapTreeBranchListItem(SnapTreeItem):
+class SnapTreeBranchItemBase(SnapTreeItem):
+    cfg_id: CfgId
+    snap_name: Optional[str]
+
+
+class SnapTreeBranchListItem(SnapTreeBranchItemBase):
     def __init__(
         self,
         parent: QTreeWidgetItem,
@@ -176,16 +176,16 @@ class SnapTreeBranchListItem(SnapTreeItem):
         SnapTreeItem.__init__(self, parent, None)
 
     def process_item(self, item: BranchTreeListItem):
-        self.item = item
-        self.cfg_id = item.get('cfgId')
-        self.snap_info = item.get('snapshotInfo')
+        self.item = item  # type: ignore
+        self.cfg_id = item['cfgId']
+        self.snap_info = item['snapshotInfo']  # type: ignore
 
-        self.snap_name = self.snap_info.get('name')
-        self.timestamp = datetime.fromisoformat(
-            servertime_to_clienttime(self.snap_info.get('modified')))
+        self.snap_name = self.snap_info['name']
+        self.timestamp = datetime.fromisoformat(  # type: ignore
+            servertime_to_clienttime(self.snap_info['modified']))
         self.update_text()
 
-        children = item.get('children')
+        children = item['children']
         for child in children:
             if child['cfgId'] in self.children:
                 child_item = self.children[child['cfgId']]
@@ -205,12 +205,12 @@ class SnapTreeBranchListItem(SnapTreeItem):
     def get_text_for_col(self, col: SnapTreeColumn) -> str:
         return {
             SnapTreeColumn.NAME: self.snap_name or f'Snapshot {self.cfg_id[-6:]}',
-            SnapTreeColumn.TYPE: self.snap_info.get('snapshotType'),
+            SnapTreeColumn.TYPE: self.snap_info['snapshotType'],
             SnapTreeColumn.TIME: self.timestamp.strftime(ITEM_DATE_FMT_OUT),
-        }.get(col) or ""
+        }.get(col, '')
 
 
-class SnapTreeBranchItem(SnapTreeItem):
+class SnapTreeBranchItem(SnapTreeBranchItemBase):
     def __init__(
         self,
         parent: QTreeWidgetItem,
@@ -228,18 +228,18 @@ class SnapTreeBranchItem(SnapTreeItem):
         SnapTreeItem.__init__(self, parent, predecessor)
 
     def process_branch_data(self, branch_data: Branch):
-        self.branch_data = branch_data
+        self.branch_data = branch_data  # type: ignore
 
         self.cfg_id = branch_data['rootNode']
         self.root_snap = branch_data['snapshotInfo'][self.cfg_id]
-        self.snap_name = self.root_snap.get('name')
+        self.snap_name = self.root_snap['name']
         self.timestamp = datetime.fromisoformat(
-            servertime_to_clienttime(self.root_snap.get('modified')))
+            servertime_to_clienttime(self.root_snap['modified']))
         self.update_text()
 
         list_item = branch_to_list_item(branch_data)
 
-        for child in list_item.get('children', []):
+        for child in list_item['children']:
             cfg_id = child['cfgId']
             if cfg_id in self.children:
                 item = self.children[cfg_id]
@@ -332,14 +332,14 @@ class SnapTreeWidget(QTreeWidget):
             BNAction(
                 'Blaze', 'Load Snapshot', MenuOrder.FIRST,
                 activate=self.ctx_menu_action_load,
-                isValid=lambda ctx: self.clicked_item is not None
-                                    and 'cfg_id' in self.clicked_item.__dict__
+                isValid=lambda ctx: self.clicked_item is not None and
+                                    isinstance(self.clicked_item, SnapTreeBranchItemBase)
             ),
             BNAction(
                 'Blaze', 'Rename Snapshot', MenuOrder.EARLY,
                 activate=self.ctx_menu_action_rename,
-                isValid=lambda ctx: self.clicked_item is not None
-                                    and 'snap_name' in self.clicked_item.__dict__
+                isValid=lambda ctx: self.clicked_item is not None and
+                                    isinstance(self.clicked_item, SnapTreeBranchItemBase)
             ),
             # BNAction(
             #     'Blaze', 'Delete Snapshot', MenuOrder.LAST,
@@ -364,8 +364,9 @@ class SnapTreeWidget(QTreeWidget):
 
         ev_pos = event.pos()
         if (item := self.itemAt(ev_pos)):
+            item = cast(SnapTreeItem, item)
             self.clicked_item = item
-            if 'cfg_id' in item.__dict__:
+            if isinstance(item, SnapTreeBranchItemBase):
                 self.load_icfg(item.cfg_id)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
@@ -374,6 +375,7 @@ class SnapTreeWidget(QTreeWidget):
 
         ev_pos = event.pos()
         if (item := self.itemAt(ev_pos)):
+            item = cast(SnapTreeItem, item)
             self.clicked_item = item
             self.context_menu_manager.show(self.context_menu, self.action_handler)
 
@@ -381,21 +383,21 @@ class SnapTreeWidget(QTreeWidget):
         if not self.clicked_item:
             return
 
-        if 'cfg_id' in self.clicked_item.__dict__:
+        if isinstance(self.clicked_item, SnapTreeBranchItemBase):
             self.load_icfg(self.clicked_item.cfg_id)
 
     def ctx_menu_action_rename(self, context: UIActionContext) -> None:
         if not self.clicked_item:
             return
 
-        if 'snap_name' in self.clicked_item.__dict__:
+        if isinstance(self.clicked_item, SnapTreeBranchItemBase):
             self.rename_snapshot(self.clicked_item)
 
     def ctx_menu_action_delete(self, context: UIActionContext) -> None:
         if not self.clicked_item:
             return
 
-        if 'cfg_id' in self.clicked_item.__dict__:
+        if isinstance(self.clicked_item, SnapTreeBranchItemBase):
             self.delete_snapshot(self.clicked_item.cfg_id)
 
     def update_branches_of_binary(self, branches: List[Tuple[BranchId, ServerBranch]]) -> None:
@@ -406,7 +408,7 @@ class SnapTreeWidget(QTreeWidget):
             if func_addr in self.tracked_funcs:
                 item = self.tracked_funcs.get(func_addr)
             else:
-                item = SnapTreeFuncItem(self, data['originFuncName'])
+                item = SnapTreeFuncItem(self, data['originFuncName'])  # type: ignore
                 self.tracked_funcs[func_addr] = item
                 self.addTopLevelItem(item)
                 self.expandItem(item)
@@ -453,10 +455,7 @@ class SnapTreeWidget(QTreeWidget):
                 return item
         return None
 
-    def rename_snapshot(self, item: SnapTreeItem) -> None:
-        if not item or 'snap_name' not in item.__dict__:
-            return
-
+    def rename_snapshot(self, item: SnapTreeBranchItemBase) -> None:
         text_in = TextLineField("Rename snapshot to:")
         confirm: bool = get_form_input([text_in], f'Renaming {item.snap_name or item.cfg_id}')
 
@@ -464,19 +463,11 @@ class SnapTreeWidget(QTreeWidget):
             return
 
         snap_msg = SnapshotBinjaToServer(
-            tag='RenameSnapshot', cfgId=item.cfg_id, name=text_in.result)
+            tag='RenameSnapshot', cfgId=item.cfg_id, name=cast(str, text_in.result))
         self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snap_msg))
 
-    def delete_snapshot(self, cfg_id) -> None:
+    def delete_snapshot(self, cfg_id: CfgId) -> None:
         log.error("Fool, there is no getting rid of a snapshot!")
-
-    def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', view_frame: ViewFrame):
-        self.blaze_instance = blaze_instance
-        self._view_frame = view_frame
-
-        # load snapshot tree on startup
-        snap_msg = SnapshotBinjaToServer(tag='GetAllBranchesOfBinary')
-        self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snap_msg))
 
     def notifyOffsetChanged(self, view_frame: ViewFrame, offset: int) -> None:
         pass
@@ -496,8 +487,8 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
         self.blaze_instance: 'BlazeInstance' = blaze_instance
         self.snaptree_widget = SnapTreeWidget(self, blaze_instance)  #, view_frame)
 
-        layout = QVBoxLayout()  # type: ignore
-        layout.setContentsMargins(0, 0, 0, 0)  # type: ignore
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.snaptree_widget)
         self.setLayout(layout)
@@ -508,15 +499,6 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
         try_debug(log, 'Deleting %r', self)
 
         # self.snaptree_widget._debug_()
-
-    def notifyViewChanged(self, view_frame: ViewFrame) -> None:
-        self._view_frame = view_frame
-        if view_frame is None:
-            log.error('view_frame is None')
-        else:
-            view = view_frame.getCurrentViewInterface()
-            self.blaze_instance = self.blaze_instance.blaze.ensure_instance(view.getData())
-            self.snaptree_widget.notifyInstanceChanged(self.blaze_instance, view_frame)
 
     def notifyOffsetChanged(self, offset: int) -> None:
         self.snaptree_widget.notifyOffsetChanged(self._view_frame, offset)

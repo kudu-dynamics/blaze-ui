@@ -46,6 +46,7 @@ node_modules
 
 binja_plugin/**/build/
 binja_plugin/**/dist/
+binja_plugin/**/.venv/
 
 ##########################
 # From server/.gitignore #
