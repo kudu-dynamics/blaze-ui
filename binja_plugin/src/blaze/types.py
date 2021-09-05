@@ -18,7 +18,6 @@ PoiId = UUID
 BinaryHash = str
 HostBinaryPath = str
 
-
 # What Aeson encodes the unit value `()` as
 Unit = Literal[[]]
 
@@ -223,13 +222,13 @@ class ServerPoiSearchResults(TypedDict, total=True):
     callNodeRatings: List[Tuple[UUID, CallNodeRating]]
     presentTargetNodes: List[UUID]
 
+
 class PoiSearchResults(TypedDict, total=True):
     callNodeRatings: Dict[UUID, CallNodeRating]
     presentTargetNodes: Set[UUID]
 
 
 BranchTreeList = List[BranchTreeListItem]
-
 
 ServerBranchesOfClient = List[Tuple[HostBinaryPath, List[Tuple[BranchId, ServerBranch]]]]
 
@@ -261,11 +260,12 @@ class SnapshotBinjaToServer(SnapshotBinjaToServerTotal, total=False):
 
 ### Poi Messages
 
+
 class Poi(TypedDict):
     poiId: PoiId
     clientId: ClientId
     hostBinaryPath: HostBinaryPath
-    created: Any  # TODO: utc time
+    created: str  # Parseable with util.servertime_to_clienttime
     funcAddr: Address
     instrAddr: Address
     name: Optional[str]
@@ -277,8 +277,8 @@ class PoiServerToBinja(TypedDict):
 
 
 class PoiBinjaToServerTotal(TypedDict, total=True):
-    tag: Literal['GetPoisOfBinary', 'AddPoi', 'DeletePoi',
-                 'RenamePoi', 'DescribePoi', 'ActivatePoiSearch', 'DeactivatePoiSearch']
+    tag: Literal['GetPoisOfBinary', 'AddPoi', 'DeletePoi', 'RenamePoi', 'DescribePoi',
+                 'ActivatePoiSearch', 'DeactivatePoiSearch']
 
 
 class PoiBinjaToServer(PoiBinjaToServerTotal, total=False):
@@ -287,6 +287,7 @@ class PoiBinjaToServer(PoiBinjaToServerTotal, total=False):
     name: Optional[str]
     description: Optional[str]
     poiId: PoiId
+    activeCfg: Optional[str]
 
 
 # Constraint messages
@@ -296,7 +297,7 @@ class ConstraintError(TypedDict):
 
 
 class ConstraintServerToBinjaTotal(TypedDict, total=True):
-    pass # tag: Literal['SBInvalidConstraint']
+    pass  # tag: Literal['SBInvalidConstraint']
 
 
 class ConstraintServerToBinja(ConstraintServerToBinjaTotal, total=False):
@@ -304,7 +305,7 @@ class ConstraintServerToBinja(ConstraintServerToBinjaTotal, total=False):
 
 
 class ConstraintBinjaToServerTotal(TypedDict, total=True):
-    pass # tag: Literal['AddConstraint']
+    pass  # tag: Literal['AddConstraint']
 
 
 class ConstraintBinjaToServer(ConstraintBinjaToServerTotal, total=False):
@@ -334,6 +335,7 @@ def pending_changes_from_server(p: ServerPendingChanges) -> PendingChanges:
         removed_nodes=set(p['removedNodes']),
         removed_edges=set(cast(Tuple[UUID, UUID], tuple(e)) for e in p['removedEdges']),
     )
+
 
 class ServerToBinjaTotal(TypedDict, total=True):
     tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshot', 'SBPoi']

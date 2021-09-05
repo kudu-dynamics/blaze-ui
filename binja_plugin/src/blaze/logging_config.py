@@ -3,8 +3,8 @@ import logging
 import logging.handlers
 import os
 import time
-from os import PathLike
 from pathlib import Path
+from typing import Any, Dict, cast
 
 import binaryninja
 from binaryninja.scriptingprovider import _PythonScriptingInstanceOutput
@@ -20,7 +20,7 @@ class BinaryNinjaUILoggingHandler(logging.Handler):
     '''
     A :py:class:`logging.Handler` which outputs records to the Binary Ninja log
     '''
-    def __init__(self, level) -> None:
+    def __init__(self, level: int) -> None:
         super().__init__(level)
 
     def emit(self, record: logging.LogRecord):
@@ -43,7 +43,7 @@ class ForgivingJSONEncoder(json.JSONEncoder):
     with ``None``.
 
     '''
-    def default(self, o):
+    def default(self, o: object):
         try:
             return super().default(o)
         except (TypeError, ValueError):
@@ -70,7 +70,7 @@ class JSONFormatter(logging.Formatter):
         Format ``record`` as a string-serialized JSONL object
         '''
 
-        out = {
+        out: Dict[str, Any] = {
             'timestamp': self.formatTime(record),
             'level': record.levelname,
             'message': record.getMessage(),
@@ -135,6 +135,6 @@ def setup_logging(log_path: Path = BLAZE_LOG_FILE) -> None:
         if isinstance(handler, logging.StreamHandler) and \
                 isinstance(handler.stream, _PythonScriptingInstanceOutput):
             print('removing %r' % handler)
-            root_debug_log.removeHandler(handler)
+            root_debug_log.removeHandler(cast(logging.Handler, handler))
 
     blaze_ui_log.debug('Blaze logging initialized')

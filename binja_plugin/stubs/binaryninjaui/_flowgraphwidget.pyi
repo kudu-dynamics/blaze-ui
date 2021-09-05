@@ -4,8 +4,8 @@ from binaryninja import AddressRange, BinaryDataNotification, BinaryView, FlowGr
 from binaryninja.binaryview import BinaryView
 from binaryninja.flowgraph import FlowGraphEdge, FlowGraphNode
 from binaryninja.function import AddressRange
-from PySide2.QtGui import QMouseEvent
-from PySide2.QtWidgets import QAbstractScrollArea, QWidget
+from PySide6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QAbstractScrollArea, QWidget
 
 from ._action import HighlightTokenState
 from ._preview import PreviewScrollHandler

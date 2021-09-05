@@ -7,21 +7,25 @@ import os.path
 import queue
 import threading
 from typing import (
+    TYPE_CHECKING,
     Callable,
     DefaultDict,
     Dict,
     Iterable,
+    List,
     Literal,
     Optional,
     Set,
+    Tuple,
     Union,
     cast,
 )
+import binaryninja
 
 import binaryninjaui
 import requests
 import websockets
-from binaryninja import BackgroundTaskThread, BinaryView, PluginCommand
+from binaryninja import BackgroundTaskThread, BinaryView
 from binaryninja.interaction import (
     MessageBoxButtonResult,
     MessageBoxButtonSet,
@@ -35,10 +39,12 @@ REQUEST_ACTIVITY_TIMEOUT = 5
 
 if getattr(binaryninjaui, 'qt_major_version', None) == 6:
     from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication, QWidget  # type: ignore
-else:
+    from PySide6.QtWidgets import QWidget
+elif not TYPE_CHECKING:
     from PySide2.QtCore import Qt  # type: ignore
-    from PySide2.QtWidgets import QApplication, QWidget  # type: ignore
+    from PySide2.QtWidgets import QWidget  # type: ignore
+else:
+    raise Exception('Cannot typecheck with Qt <6')
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
 from .poi import PoiListDockWidget
@@ -48,50 +54,24 @@ from .types import (
     BinaryHash,
     BinjaMessage,
     BinjaToServer,
+    BranchId,
     CfgId,
     PoiBinjaToServer,
     PoiSearchResults,
     PoiServerToBinja,
+    ServerBranch,
     ServerBranchesOfClient,
     ServerCfg,
     ServerPendingChanges,
-    ServerPoiSearchResults,
     ServerToBinja,
     SnapshotServerToBinja,
     pending_changes_from_server,
 )
-from .util import bv_key, try_debug
+from .util import bv_key, get_functions_containing, register_for_address, register_for_function, try_debug
 
 BLAZE_WS_SHUTDOWN = 'SHUTDOWN'
 
 log = _logging.getLogger(__name__)
-
-
-def register_for_function(action, description):
-    def wrapper(f):
-        log.debug('Registering handler %r for action %r description %r', f, action, description)
-        PluginCommand.register_for_function(action, description, f)
-        return f
-
-    return wrapper
-
-
-def register_for_address(action, description):
-    def wrapper(f):
-        log.debug('Registering handler %r for action %r description %r', f, action, description)
-        PluginCommand.register_for_address(action, description, f)
-        return f
-
-    return wrapper
-
-
-def register(action, description):
-    def wrapper(f):
-        log.debug('Registering handler %r for action %r description %r', f, action, description)
-        PluginCommand.register(action, description, f)
-        return f
-
-    return wrapper
 
 
 class BlazeInstance():
@@ -192,12 +172,7 @@ class BlazePlugin():
         self.websocket_thread: Optional[threading.Thread] = None
         self.settings: BlazeSettings = BlazeSettings()
 
-        self.dock_handler: DockHandler
-        if hasattr(DockHandler, 'getActiveDockHandler'):
-            self.dock_handler = DockHandler.getActiveDockHandler()
-        else:
-            main_window = QApplication.allWidgets()[0].window()
-            self.dock_handler = main_window.findChild(DockHandler, '__DockHandler')
+        self.dock_handler: DockHandler = DockHandler.getActiveDockHandler()
         assert self.dock_handler
 
         # -- Add ICFG View
@@ -212,11 +187,12 @@ class BlazePlugin():
             self.ensure_instance(bv).icfg_dock_widget = widget
             return widget
 
+        x: Qt.DockWidgetArea = cast(Qt.DockWidgetArea, Qt.DockWidgetArea.RightDockWidgetArea)
         self.dock_handler.addDockWidget(
             "Blaze ICFG",
             create_icfg_widget,
-            Qt.DockWidgetArea.RightDockWidgetArea,
-            Qt.Orientation.Vertical,
+            Qt.DockWidgetArea.RightDockWidgetArea,  # type: ignore
+            Qt.Orientation.Vertical,  # type: ignore
             True  # default visibility
         )
 
@@ -237,8 +213,8 @@ class BlazePlugin():
         self.dock_handler.addDockWidget(
             "Blaze Snapshot Tree",
             create_snaptree_widget,
-            Qt.DockWidgetArea.BottomDockWidgetArea,
-            Qt.Orientation.Vertical,
+            Qt.DockWidgetArea.BottomDockWidgetArea,  # type: ignore
+            Qt.Orientation.Vertical,  # type: ignore
             True  # default visibility
         )
 
@@ -259,8 +235,8 @@ class BlazePlugin():
         self.dock_handler.addDockWidget(
             "Blaze POI List",
             create_poi_widget,
-            Qt.DockWidgetArea.BottomDockWidgetArea,
-            Qt.Orientation.Vertical,
+            Qt.DockWidgetArea.BottomDockWidgetArea,  # type: ignore
+            Qt.Orientation.Vertical,  # type: ignore
             True  # default visibility
         )
 
@@ -304,7 +280,7 @@ class BlazePlugin():
         log.debug(
             f'{bv=!r}, {bv.file=!r}, {bv.file.raw=!r}, {bv.file.raw and bv.file.raw.handle = !r}')
         if (not bv.file.filename.endswith('.bndb')):
-            bndb_filename = bv.file.filename + '.bndb'
+            bndb_filename: str = bv.file.filename + '.bndb'
             if (os.path.isfile(bndb_filename)):
                 msg = f"This action will overwrite the existing analysis database {bndb_filename}. If you prefer to use your existing BNDB, please open it and try again.\n\nContinue with ICFG creation?"
             else:
@@ -322,7 +298,7 @@ class BlazePlugin():
                 bv.create_database(bndb_filename)
 
         # by now, bv is saved as bndb and bv.file.filename is bndb
-        og_filename = bv.file.filename
+        og_filename: str = bv.file.filename
 
         if bv.file.analysis_changed:
             bv.create_database(og_filename)
@@ -386,6 +362,7 @@ class BlazePlugin():
         log.info('connecting to websocket...')
         try:
             async with websockets.connect(uri, max_size=None) as websocket:  # type: ignore
+                websocket = cast(WebSocketClientProtocol, websocket)
                 log.info('connected to websocket')
                 consumer_task = asyncio.ensure_future(self.recv_loop(websocket))
                 producer_task = asyncio.ensure_future(self.send_loop(websocket))
@@ -431,7 +408,7 @@ class BlazePlugin():
                 log.exception("Couldn't handle message", extra={'websocket_message': msg})
                 continue
 
-    async def send_loop(self, websocket) -> None:
+    async def send_loop(self, websocket: WebSocketClientProtocol) -> None:
         while True:
             msg = await asyncio.get_running_loop().run_in_executor(None, self.out_queue.get)
             if msg == BLAZE_WS_SHUTDOWN:
@@ -482,7 +459,10 @@ class BlazePlugin():
             server_poi_search_results = msg.get('poiSearchResults')
 
             if server_poi_search_results:
-                poi_search_results = PoiSearchResults(callNodeRatings=dict(server_poi_search_results.get('callNodeRatings') or []), presentTargetNodes=set(server_poi_search_results.get('presentTargetNodes') or []))
+                poi_search_results = PoiSearchResults(
+                    callNodeRatings=dict(server_poi_search_results.get('callNodeRatings') or []),
+                    presentTargetNodes=set(
+                        server_poi_search_results.get('presentTargetNodes') or []))
             else:
                 poi_search_results = None
 
@@ -506,13 +486,13 @@ class BlazePlugin():
                                             snap_msg.get('branchesOfClient')):
                         if bpath == instance.bv_key:
                             instance.snaptree_dock_widget.snaptree_widget.update_branches_of_binary(
-                                cast(list, data))
+                                data)
                             break
 
                 if snap_msg['tag'] == 'BranchesOfBinary':
                     if snap_msg.get('hostBinaryPath') == instance.bv_key:
                         instance.snaptree_dock_widget.snaptree_widget.update_branches_of_binary(
-                            cast(list, snap_msg.get('branches')))
+                            cast(List[Tuple[BranchId, ServerBranch]], snap_msg.get('branches')))
 
         elif tag == 'SBPoi':
             poi_msg = cast(PoiServerToBinja, msg.get('poiMsg'))
@@ -536,7 +516,6 @@ class BlazeNotificationListener(UIContextNotification):
         self.blaze_plugin: BlazePlugin = blaze_plugin
 
     def OnAfterCloseFile(self, context: UIContext, file: FileContext, frame: ViewFrame) -> None:
-        key = bv_key(file.getFilename())
         bv = frame.getCurrentViewInterface().getData()
 
         log.debug(
@@ -566,9 +545,9 @@ class Action(str, enum.Enum):
 
 
 @register_for_function(Action.START_CFG, 'Create ICFG')
-def start_cfg(bv, func):
+def start_cfg(bv: BinaryView, func: binaryninja.Function):
     for instance in blaze.instances_by_key(bv_key(bv)):
-        instance._icfg_dock_widget.icfg_widget.recenter_node_id = None
+        instance.icfg_dock_widget.icfg_widget.recenter_node_id = None
 
     blaze_instance = blaze.ensure_instance(bv)
     blaze_instance.with_bndb_hash(
@@ -577,9 +556,8 @@ def start_cfg(bv, func):
 
 
 @register_for_address(Action.MARK_POI, 'Mark POI')
-def mark_poi(bv, addr):
-    poi_list = None
-    if funcs := bv.get_functions_containing(addr):
+def mark_poi(bv: BinaryView, addr: int):
+    if funcs := get_functions_containing(bv, addr):
         # TODO: Decide how to handle multiple functions containing addr
         func = funcs[0]
         poi_msg = PoiBinjaToServer(
@@ -588,18 +566,3 @@ def mark_poi(bv, addr):
         blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
     else:
         log.warn(r'No function containing address: 0x%x', addr)
-
-
-def listen_start(bv):
-    pass
-
-
-def listen_stop(bv):
-    pass
-
-
-# PluginCommand.register_for_medium_level_il_instruction(actionSendInstruction, "Send Instruction", send_instruction)
-
-# UIAction.registerAction(actionSayHello, "CTRL+1")
-# UIAction.registerAction(sendEndAction, "CTRL+2")
-# UIAction.registerAction(findPathAction, "CTRL+3")
