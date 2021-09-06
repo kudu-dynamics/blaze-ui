@@ -355,19 +355,22 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
 class BinjaToServerTotal(TypedDict, total=True):
     tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
                  'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop', 'BSCfgFocus',
-                 'BSCfgConfirmChanges', 'BSCfgRevertChanges', 'BSPoi', 'BSConstraint']
+                 'BSCfgConfirmChanges', 'BSCfgRevertChanges', 'BSPoi', 'BSConstraint', 'BSComment']
 
 
 class BinjaToServer(BinjaToServerTotal, total=False):
     message: str
     bndbHash: BinaryHash
     address: Word64
+    comment: str
     startFuncAddress: Word64
     cfgId: CfgId
     callNode: CallNode
     edge: Tuple[CfNode, CfNode]
     snapshotMsg: SnapshotBinjaToServer
     node: CfNode
+    nodeId: UUID
+    stmtIndex: Word64
     targetAddress: Word64
     poiMsg: PoiBinjaToServer
     constraintMsg: ConstraintBinjaToServer
