@@ -95,8 +95,8 @@ REGULAR_CALL_NODE_COLOR = muted_color(0.8, HighlightStandardColor.YellowHighligh
 POI_PRESENT_TARGET_COLOR = HighlightColor(HighlightStandardColor.WhiteHighlightColor)
 POI_NODE_NOT_FOUND_COLOR = muted_color(0.4, HighlightStandardColor.YellowHighlightColor)
 POI_UNREACHABLE_COLOR = HighlightColor(HighlightStandardColor.BlackHighlightColor)
-POI_REACHABLE_MEH_COLOR = HighlightColor(HighlightStandardColor.YellowHighlightColor)
-POI_REACHABLE_GOOD_COLOR = HighlightColor(HighlightStandardColor.RedHighlightColor)
+POI_REACHABLE_MEH_COLOR_BASE = HighlightStandardColor.YellowHighlightColor
+POI_REACHABLE_GOOD_COLOR_BASE = HighlightStandardColor.RedHighlightColor
 
 
 def cfg_from_server(cfg: ServerCfg) -> Cfg:
@@ -224,8 +224,8 @@ def call_node_rating_color(rating: CallNodeRating) -> HighlightColor:
     elif rating['tag'] == 'Reachable':
         score = cast(float, rating.get('score'))
         return HighlightColor(
-            POI_REACHABLE_MEH_COLOR,
-            POI_REACHABLE_GOOD_COLOR,
+            POI_REACHABLE_MEH_COLOR_BASE,
+            POI_REACHABLE_GOOD_COLOR_BASE,
             mix=int(min(255, max(0, score * 255))))
 
     else:
