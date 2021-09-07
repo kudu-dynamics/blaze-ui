@@ -10,6 +10,7 @@ import qualified Blaze.UI.Types.BinaryHash as BinaryHash
 import Blaze.UI.Types.BinaryManager
 import System.Directory (copyFile, removeFile, doesFileExist)
 import qualified Binja.Core as BN
+import qualified Binja.View as BNView
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.UI.Types.BinaryManager as Exports
 
@@ -41,7 +42,7 @@ loadVersionFromFile bm h = do
         Left err -> do
           return . Left . OpenBndbError $ err
         Right bv -> do
-          BN.updateAnalysisAndWait bv
+          BNView.updateAnalysisAndWait bv
           return . Right $ bv
 
 loadVersionFromCache :: MonadIO m => BinaryManager -> BinaryHash -> m (Maybe BNBinaryView)
