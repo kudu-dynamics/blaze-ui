@@ -98,7 +98,7 @@ class Token(TypedDict):
 def tokens_from_server(ts: List[Token]) -> DisassemblyTextLine:
     tokens = [
         InstructionTextToken(
-            token_type=getattr(InstructionTextTokenType, t['tokenType']),
+            type=getattr(InstructionTextTokenType, t['tokenType']),
             text=t['text'],
             value=t['value'],
             size=t['size'],
