@@ -116,7 +116,8 @@ def setup_logging(log_path: Path = BLAZE_LOG_FILE) -> None:
 
     # Rotate log files once they reach 500 kB
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    debug_handler = logging.handlers.RotatingFileHandler(log_path, maxBytes=500 * 1024)
+    debug_handler = logging.handlers.RotatingFileHandler(
+        log_path, maxBytes=5 * 1024 * 1024, backupCount=100)
     debug_formatter = JSONFormatter()
     debug_handler.setFormatter(debug_formatter)
     # Log all blaze messages, and any other messages that are >= INFO
