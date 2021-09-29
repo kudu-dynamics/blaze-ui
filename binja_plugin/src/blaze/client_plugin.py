@@ -374,14 +374,20 @@ class BlazePlugin():
 
     async def recv_loop(self, websocket: WebSocketClientProtocol) -> None:
         async for ws_msg in websocket:
-            log.debug('Received websocket message', extra={'websocket_message': ws_msg})
-
             try:
                 msg = json.loads(ws_msg)
             except json.JSONDecodeError:
                 log.exception(
                     'Backend returned malformed message', extra={'websocket_message': ws_msg})
                 continue
+
+            log.debug(
+                'Received websocket message',
+                extra={
+                    'hostBinaryPath': msg['hostBinaryPath'],
+                    'action.tag': msg['action']['tag'],
+                },
+            )
 
             relevant_instances: Set[BlazeInstance] = \
                 self.instances_by_key(bv_key(msg['hostBinaryPath']))
@@ -415,7 +421,12 @@ class BlazePlugin():
                 log.exception('Could not JSON encode message to send to backend: %r', msg)
                 continue
 
-            log.debug('Sending websocket message...', extra={'websocket_message': json_msg})
+            log.debug(
+                'Sending websocket message...',
+                extra={
+                    'hostBinaryPath': msg['hostBinaryPath'],
+                    'action.tag': msg['action']['tag'],
+                })
 
             try:
                 await websocket.send(json_msg)
