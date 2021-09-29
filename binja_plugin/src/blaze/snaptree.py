@@ -3,7 +3,6 @@ import logging as _logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union, cast
 
-import binaryninjaui
 from binaryninja.interaction import TextLineField, get_form_input
 from binaryninjaui import (
     ContextMenuManager,
@@ -14,17 +13,9 @@ from binaryninjaui import (
     ViewFrame,
 )
 
-if getattr(binaryninjaui, 'qt_major_version', None) == 6:
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QMouseEvent
-    from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
-elif not TYPE_CHECKING:
-    from PySide2.QtCore import Qt  # type: ignore
-    from PySide2.QtGui import QMouseEvent  # type: ignore
-    from PySide2.QtWidgets import (  # type: ignore
-        QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)  # type: ignore
-else:
-    raise Exception('Cannot typecheck with Qt <6')
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 
 from .types import (
     Address,

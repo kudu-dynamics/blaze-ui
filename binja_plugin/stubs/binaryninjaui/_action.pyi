@@ -1,5 +1,5 @@
 import enum
-from typing import Callable, List, Literal, Optional, Union, overload
+from typing import Any, Callable, Dict, List, Literal, Optional, Union, overload
 
 from binaryninja import BinaryView, Function
 from binaryninja.architecture import Architecture
@@ -32,10 +32,15 @@ class HighlightTokenState:
     tokenIndex: int
     characterIndex: int
 
-    def __init__(self) -> None: ...
+    def __init__(self) -> None:
+        ...
 
-    def serialize(self) -> dict: ...
-    def deserialize(self, value: dict, /) -> bool: ...
+    def serialize(self) -> Dict[str, Any]:
+        ...
+
+    def deserialize(self, value: Dict[str, Any], /) -> bool:
+        ...
+
 
 class UIActionContext:
     context: UIContext
@@ -54,27 +59,50 @@ class UIActionContext:
     cursorPosition: LinearViewCursorPosition
 
     @overload
-    def __init__(self) -> None: ...
+    def __init__(self) -> None:
+        ...
+
     @overload
-    def __init__(self, pluginContext: PluginCommandContext, /) -> None: ...
+    def __init__(self, pluginContext: PluginCommandContext, /) -> None:
+        ...
+
 
 class UIAction:
     activate: Callable[[UIActionContext], None]
     isValid: Callable[[UIActionContext], bool]
 
     @overload
-    def __init__(self): ...
+    def __init__(self) -> None:
+        ...
+
     @overload
-    def __init__(self, activate: Callable[[UIActionContext], None], /): ...
+    def __init__(self, activate: Callable[[UIActionContext], None], /) -> None:
+        ...
+
     @overload
-    def __init__(self, activate: Callable[[UIActionContext], None], isValid: Callable[[UIActionContext], bool], /): ...
+    def __init__(
+        self,
+        activate: Callable[[UIActionContext], None],
+        isValid: Callable[[UIActionContext], bool],
+        /,
+    ) -> None:
+        ...
+
     @overload
-    def __init__(self, other: UIAction, /): ...
+    def __init__(self, other: UIAction, /) -> None:
+        ...
 
     @staticmethod
-    def registerAction(name: str, defaultKeyBinding: Union[QKeySequence, List[QKeySequence]] = QKeySequence(), /): ...  # type: ignore
+    def registerAction(
+            name: str,
+            defaultKeyBinding: Union[QKeySequence, List[QKeySequence]] = QKeySequence(),
+            /,
+    ) -> None:
+        ...  # type: ignore
+
     @staticmethod
-    def unregisterAction(name: str, /): ...
+    def unregisterAction(name: str, /) -> None:
+        ...
 
     # static void registerTransformActions();
     # static void registerPluginCommandActions();
@@ -100,40 +128,60 @@ class UIAction:
     # static void readKeyBindingsFile();
     # static void writeKeyBindingsFile();
 
+
 class ActionPriority(enum.Enum):
     LowActionPriority = enum.auto()
     NormalActionPriority = enum.auto()
     HighActionPriority = enum.auto()
 
+
 class UIActionHandler:
-    def __init__(self, isGlobal: bool = False, /): ...
-    def setupActionHandler(self, obj: QWidget, inheritParentBindings: bool = True, /) -> None: ...
+    def __init__(self, isGlobal: bool = False, /) -> None:
+        ...
+
+    def setupActionHandler(self, obj: QWidget, inheritParentBindings: bool = True, /) -> None:
+        ...
 
     @staticmethod
-    def actionHandlerFromWidget(widget: QWidget, /) -> UIActionHandler: ...
+    def actionHandlerFromWidget(widget: QWidget, /) -> UIActionHandler:
+        ...
+
     @staticmethod
-    def globalActions() -> UIActionHandler: ...
+    def globalActions() -> UIActionHandler:
+        ...
 
     @overload
-    def bindAction(self, name: str, action: UIAction, /) -> None: ...
-    @overload
-    def bindAction(self, name: str, action: UIAction, priority: ActionPriority, /) -> None: ...
-
-    def unbindAction(self, name: str, /) -> None: ...
+    def bindAction(self, name: str, action: UIAction, /) -> None:
+        ...
 
     @overload
-    def executeAction(self, name: str, /) -> None: ...
-    @overload
-    def executeAction(self, name: str, context: UIActionContext, /) -> None: ...
+    def bindAction(self, name: str, action: UIAction, priority: ActionPriority, /) -> None:
+        ...
 
-    def isBoundAction(self, name: str, /) -> bool: ...
+    def unbindAction(self, name: str, /) -> None:
+        ...
 
     @overload
-    def isValidAction(self, name: str, /) -> bool: ...
-    @overload
-    def isValidAction(self, name: str, context: UIActionContext, /) -> bool: ...
+    def executeAction(self, name: str, /) -> None:
+        ...
 
-    def getPriority(self, name: str, /) -> ActionPriority: ...
+    @overload
+    def executeAction(self, name: str, context: UIActionContext, /) -> None:
+        ...
+
+    def isBoundAction(self, name: str, /) -> bool:
+        ...
+
+    @overload
+    def isValidAction(self, name: str, /) -> bool:
+        ...
+
+    @overload
+    def isValidAction(self, name: str, context: UIActionContext, /) -> bool:
+        ...
+
+    def getPriority(self, name: str, /) -> ActionPriority:
+        ...
 
     # void bindCopyAsActions(const UITransformAction& action);
     # void bindPasteFromActions(const UITransformAction& action);
@@ -171,11 +219,17 @@ class UIActionHandler:
     # std::set<QString> getAllValidActions();
     # std::set<QString> getAllValidActions(const UIActionContext& context);
 
-    def defaultActionContext(self) -> UIActionContext: ...
-    def actionContext(self) -> UIActionContext: ...
-    def setActionContext(self, contextFunc: Callable[[], UIActionContext], /) -> None: ...
+    def defaultActionContext(self) -> UIActionContext:
+        ...
 
-    def widget(self) -> QWidget: ...
+    def actionContext(self) -> UIActionContext:
+        ...
+
+    def setActionContext(self, contextFunc: Callable[[], UIActionContext], /) -> None:
+        ...
+
+    def widget(self) -> QWidget:
+        ...
 
     # static void updateActionBindings(const QString& name);
     # static bool isActionBoundToAnyHandler(const QString& name);
@@ -191,14 +245,24 @@ class MenuItemVisibility(enum.Enum):
     DefaultMenuItemVisibility = enum.auto()
     DefaultMenuItemVisibility = enum.auto()
 
+
 class Menu:
     @overload
-    def __init__(self): ...
-    @overload
-    def __init__(self, menu: 'Menu', /): ...
+    def __init__(self) -> None:
+        ...
 
     @overload
-    def addAction(self, action: str, group: str, order: Literal[0, 64, 128, 192, 255] = 128, /) -> None:
+    def __init__(self, menu: 'Menu', /) -> None:
+        ...
+
+    @overload
+    def addAction(
+        self,
+        action: str,
+        group: str,
+        order: Literal[0, 64, 128, 192, 255] = 128,
+        /,
+    ) -> None:
         '''
         :param: order
             0: MENU_ORDER_FIRST
@@ -209,7 +273,14 @@ class Menu:
         '''
 
     @overload
-    def addAction(self, submenu: str, action: str, group: str, order: Literal[0, 64, 128, 192, 255] = 128, /) -> None:
+    def addAction(
+        self,
+        submenu: str,
+        action: str,
+        group: str,
+        order: Literal[0, 64, 128, 192, 255] = 128,
+        /,
+    ) -> None:
         '''
         :param: order
             0: MENU_ORDER_FIRST
@@ -220,9 +291,12 @@ class Menu:
         '''
 
     @overload
-    def removeAction(self, action: str, /) -> None: ...
+    def removeAction(self, action: str, /) -> None:
+        ...
+
     @overload
-    def removeAction(self, submenu: str, action: str, /) -> None: ...
+    def removeAction(self, submenu: str, action: str, /) -> None:
+        ...
 
     def setOrdering(self, path: str, group: str, order: int = 128, /) -> None:
         '''
@@ -234,23 +308,58 @@ class Menu:
             255: MENU_ORDER_LAST
         '''
 
-    def setGroupOrdering(self, group: str, order: int, /) -> None: ...
-    def setVisibility(self, path: str, visibility: MenuItemVisibility, /) -> None: ...
+    def setGroupOrdering(self, group: str, order: int, /) -> None:
+        ...
+
+    def setVisibility(self, path: str, visibility: MenuItemVisibility, /) -> None:
+        ...
 
     @overload
-    def create(self, owner: QWidget, handler: UIActionHandler, showInactiveActions: bool = False, /) -> None: ...
+    def create(
+        self,
+        owner: QWidget,
+        handler: UIActionHandler,
+        showInactiveActions: bool = False,
+        /,
+    ) -> None:
+        ...
+
     @overload
-    def create(self, owner: QWidget, handler: UIActionHandler, context: UIActionContext, showInactiveActions: bool = False, /) -> None: ...
+    def create(
+        self,
+        owner: QWidget,
+        handler: UIActionHandler,
+        context: UIActionContext,
+        showInactiveActions: bool = False,
+        /,
+    ) -> None:
+        ...
+
 
 class MenuInstance:
-    def __init__(self, menu: Menu, instance: QMenu, /): ...
-    @overload
-    def update(self, handler: UIActionHandler, showInactiveActions: bool = False, /) -> None: ...
-    @overload
-    def update(self, handler: UIActionHandler, context: UIActionContext, showInactiveActions: bool = False, /) -> None: ...
+    def __init__(self, menu: Menu, instance: QMenu, /) -> None:
+        ...
 
-    def source(self) -> Menu: ...
-    def instance(self) -> QMenu: ...
+    @overload
+    def update(self, handler: UIActionHandler, showInactiveActions: bool = False, /) -> None:
+        ...
+
+    @overload
+    def update(
+        self,
+        handler: UIActionHandler,
+        context: UIActionContext,
+        showInactiveActions: bool = False,
+        /,
+    ) -> None:
+        ...
+
+    def source(self) -> Menu:
+        ...
+
+    def instance(self) -> QMenu:
+        ...
 
     @staticmethod
-    def updateActionBindings(name: str, /) -> None: ...
+    def updateActionBindings(name: str, /) -> None:
+        ...

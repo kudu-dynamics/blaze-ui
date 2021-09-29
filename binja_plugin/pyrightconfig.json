@@ -1,5 +1,18 @@
 {
     "stubPath": "./stubs",
+    "include": [
+        "src/",
+        "stubs/"
+    ],
+    "exclude": [
+        ".venv/",
+        "dist/",
+        "build/",
+        "**/*.egg-info",
+        "**/node_modules",
+        "**/__pycache__",
+        "**/.git"
+    ],
     "useLibraryCodeForTypes": true,
     "reportUnnecessaryComparison": "warning",
     "reportOptionalSubscript": "error",

@@ -3,7 +3,6 @@ from copy import deepcopy
 from typing import TYPE_CHECKING, Container, Dict, List, Mapping, Optional, Tuple, cast
 
 import binaryninja
-import binaryninjaui
 from binaryninja import BinaryView
 from binaryninja.enums import (
     BranchType,
@@ -35,16 +34,9 @@ from binaryninjaui import (
     ViewFrame,
 )
 
-if getattr(binaryninjaui, 'qt_major_version', None) == 6:
-    from PySide6.QtCore import QEvent, QObject, Qt
-    from PySide6.QtGui import QContextMenuEvent, QMouseEvent
-    from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget
-elif not TYPE_CHECKING:
-    from PySide2.QtCore import QEvent, QObject, Qt  # type: ignore
-    from PySide2.QtGui import QContextMenuEvent, QMouseEvent  # type: ignore
-    from PySide2.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget  # type: ignore
-else:
-    raise Exception('Cannot typecheck with Qt <6')
+from PySide6.QtCore import QEvent, QObject, Qt
+from PySide6.QtGui import QContextMenuEvent, QMouseEvent
+from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from .types import (
     BINARYNINJAUI_CUSTOM_EVENT,
