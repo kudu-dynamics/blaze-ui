@@ -2,8 +2,8 @@ stages:
   - check
   - build
   - test
-  - deploy
-  - cleanup
+  - push
+  - docs
 
 workflow:
   rules:
@@ -31,72 +31,75 @@ workflow:
     fi
   - echo -e "section_end:`date +%s`:bootstrap\r\e[0K"
 
-# Print runner environment info for debugging
-.script-before-info: &script-before-info
-  - echo -e "section_start:`date +%s`:pre-env[collapsed=true]\r\e[0KEnvironment info (before_script)"
-  - uname -a
-  - env
-  - ls -al
-  - find . -maxdepth 1 \( ! -name . \) -print0 | sort -z | xargs -0 -x du -bhsc
-  - df -h
-  - date -Iseconds
-  - |
-    if type jq >/dev/null; then
-      echo 'Docker Hub ratelimit:'
-      curl -s --head -H "Authorization: Bearer $(curl -s 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:ratelimitpreview/test:pull' | jq -r .token)" \
-        https://registry-1.docker.io/v2/ratelimitpreview/test/manifests/latest | grep ^ratelimit
-    fi
-  - |
-    if type git >/dev/null; then
-      pushd "$BLAZE_BINJA_API" >/dev/null && \
-        { git log --color --decorate HEAD^..HEAD | cat || true;
-          popd >/dev/null;
-        } || true
-    fi
-  - |
-    if type python3 >/dev/null; then
-      python3 -c 'import binaryninja; print(binaryninja.core_version())' || true
-    fi
-  - echo -e "section_end:`date +%s`:pre-env\r\e[0K"
-
-.dind:
-  image: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind
+.job:
   tags:
     - dind
   timeout: 1h
   variables:
     <<: *variables
+  before_script: &job-before-script
+    - echo -e "section_start:`date +%s`:pre-env[collapsed=true]\r\e[0KEnvironment info (before_script)"
+    - uname -a
+    - env
+    - ls -al
+    - find . -maxdepth 1 \( ! -name . \) -print0 | sort -z | xargs -0 -x du -bhsc
+    - df -h
+    - date -Iseconds
+    - |
+      if type jq >/dev/null; then
+        echo 'Docker Hub ratelimit:'
+        curl -s --head -H "Authorization: Bearer $(curl -s 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:ratelimitpreview/test:pull' | jq -r .token)" \
+          https://registry-1.docker.io/v2/ratelimitpreview/test/manifests/latest | grep ^ratelimit
+      fi
+    - |
+      if type git >/dev/null; then
+        pushd "$BLAZE_BINJA_API" >/dev/null && \
+          { git log --color --decorate HEAD^..HEAD | cat || true;
+            popd >/dev/null;
+          } || true
+      fi
+    - |
+      if type python3 >/dev/null; then
+        python3 -c 'import binaryninja; print(binaryninja.core_version())' || true
+      fi
+    - echo -e "section_end:`date +%s`:pre-env\r\e[0K"
+
+.docker-job:
+  extends: .job
+  image: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:dind
   before_script:
     - *script-bootstrap-dind
-    - *script-before-info
+    - *job-before-script
+    - docker login -u "${CI_REGISTRY_USER}" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
 
-.generic-job:
-  extends: .dind
-  image: scratch
-  # Skip .dind before_script, especially the environment info, since we don't
-  # care about most of it after the build stage
-  before_script:
-    - *script-before-info
+    # Set up AWS ECR credentials
+    - echo -e "section_start:`date +%s`:aws-config[collapsed=true]\r\e[0KConfigure AWS credentials"
+    - apk add aws-cli
+    - aws configure set default.region "${AWS_DEFAULT_REGION}"
+    - aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
+    - aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
+    - echo -e "section_end:`date +%s`:aws-config\r\e[0K"
+
 
 .haskell-job:
-  extends: .generic-job
-  image: ${REPO_DOCKER_REGISTRY}/blaze-service:commit-${CI_COMMIT_SHA}
+  extends: .job
+  image: ${REPO_DOCKER_REGISTRY}/blaze-service:pipeline-${CI_PIPELINE_IID}
 
 .python-job:
-  extends: .generic-job
+  extends: .job
   image: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/python:3.8-slim
-
-.python-setup: &python-setup
-  - echo -e "section_start:`date +%s`:setup-python[collapsed=true]\r\e[0KSet up python dependencies"
-  - pushd binja_plugin >/dev/null
-  - poetry install
-  - source "$(poetry env info --path)"/bin/activate
-  - popd >/dev/null
-  - echo -e "section_end:`date +%s`:setup-python\r\e[0K"
+  before_script:
+    - *job-before-script
+    - echo -e "section_start:`date +%s`:setup-python[collapsed=true]\r\e[0KSet up python dependencies"
+    - pushd binja_plugin >/dev/null
+    - poetry install
+    - source "$(poetry env info --path)"/bin/activate
+    - popd >/dev/null
+    - echo -e "section_end:`date +%s`:setup-python\r\e[0K"
 
 lint:server:
   stage: check
-  extends: .dind
+  extends: .job
   image: ${BLAZE_IMAGE}
   needs: []
   script:
@@ -105,42 +108,27 @@ lint:server:
 
 typecheck:plugin:warnings:
   stage: check
-  extends: .dind
+  extends: .python-job
   image: ${CI_REGISTRY}/${CI_PROJECT_NAMESPACE}/devops/binaryninja-python-base:latest
   needs: []
   script:
-    - *python-setup
     - cd binja_plugin
-    - FORCE_COLOR=2 pyright src/blaze
+    - FORCE_COLOR=2 pyright
   allow_failure: true
 
 typecheck:plugin:errors:
   stage: check
-  extends: .dind
+  extends: .python-job
   image: ${CI_REGISTRY}/${CI_PROJECT_NAMESPACE}/devops/binaryninja-python-base:latest
   needs: []
   script:
-    - *python-setup
     - cd binja_plugin
     - sed -Ei 's/"warning"/"none"/g' pyrightconfig.json
-    - FORCE_COLOR=2 pyright src/blaze
+    - FORCE_COLOR=2 pyright
 
-# We need 2 build jobs: one for branch pipelines and one for MR pipelines
-# - build:branch pushes to
-#   - ${image}:commit-${CI_COMMIT_SHA}
-#   - ${image}:branch-${CI_COMMIT_REF_SLUG}
-#   For instance, ${project}:branch-feature-foo and ${project}:commit-1a2b3c4...
-# - build:detached pushes to
-#   - ${image}:merge-${CI_MERGE_REQUEST_IID}
-#   For instance, ${project}:merge-71
-# In either case, we should first try pulling the latest image for this branch or MR,
-# and if that fails, pull :latest. This ensures we have cached layers downloaded
-
-build:branch:
+build:
   stage: build
-  extends: .dind
-  rules:
-    - if: $CI_MERGE_REQUEST_IID == null
+  extends: .docker-job
   needs: []
   script:
     - blaze_image=${REPO_DOCKER_REGISTRY}/blaze-service
@@ -149,87 +137,32 @@ build:branch:
 
     # Pull images for layer caching
     - echo -e "section_start:`date +%s`:docker-pull[collapsed=true]\r\e[0KPull docker images for caching"
-    - docker login -u "${CI_REGISTRY_USER}" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
-    - docker pull "${blaze_image}:branch-${CI_COMMIT_REF_SLUG}" ||
-      docker pull "${blaze_image}:latest" ||
-      true
-    - docker pull "${wheel_server_image}:branch-${CI_COMMIT_REF_SLUG}" ||
-      docker pull "${wheel_server_image}:latest" ||
-      true
+    - docker pull "${blaze_image}:latest" || true
+    - docker pull "${wheel_server_image}:latest" || true
     - echo -e "section_end:`date +%s`:docker-pull\r\e[0K"
 
     # Build images
     - echo -e "section_start:`date +%s`:docker-build\r\e[0KBuild docker images"
     - docker build --pull . -f Dockerfile --target main
-      -t "${blaze_image}:commit-${CI_COMMIT_SHA}"
-      -t "${blaze_image}:branch-${CI_COMMIT_REF_SLUG}"
+      -t "${blaze_image}:pipeline-${CI_PIPELINE_IID}"
     - docker build --squash --pull . -f Dockerfile --target minimal
-      -t "${squashed_blaze_image}:commit-${CI_COMMIT_SHA}"
-      -t "${squashed_blaze_image}:branch-${CI_COMMIT_REF_SLUG}"
+      -t "${squashed_blaze_image}:pipeline-${CI_PIPELINE_IID}"
     - docker build --pull . -f Dockerfile --target wheel-server
-      -t "${wheel_server_image}:commit-${CI_COMMIT_SHA}"
-      -t "${wheel_server_image}:branch-${CI_COMMIT_REF_SLUG}"
+      -t "${wheel_server_image}:pipeline-${CI_PIPELINE_IID}"
     - echo -e "section_end:`date +%s`:docker-build\r\e[0K"
 
     # Push images
     - echo -e "section_start:`date +%s`:docker-push[collapsed=true]\r\e[0KPush new docker images"
-    - docker push "${blaze_image}:commit-${CI_COMMIT_SHA}"
-    - docker push "${blaze_image}:branch-${CI_COMMIT_REF_SLUG}"
-    - docker push "${squashed_blaze_image}:commit-${CI_COMMIT_SHA}"
-    - docker push "${squashed_blaze_image}:branch-${CI_COMMIT_REF_SLUG}"
-    - docker push "${wheel_server_image}:commit-${CI_COMMIT_SHA}"
-    - docker push "${wheel_server_image}:branch-${CI_COMMIT_REF_SLUG}"
+    - docker push "${blaze_image}:pipeline-${CI_PIPELINE_IID}"
+    - docker push "${squashed_blaze_image}:pipeline-${CI_PIPELINE_IID}"
+    - docker push "${wheel_server_image}:pipeline-${CI_PIPELINE_IID}"
     - echo -e "section_end:`date +%s`:docker-push\r\e[0K"
 
-build:detached:
-  stage: build
-  extends: .dind
-  rules:
-    - if: $CI_MERGE_REQUEST_IID
-  needs: []
-  script:
-    - blaze_image=${REPO_DOCKER_REGISTRY}/blaze-service
-    - squashed_blaze_image=${REPO_DOCKER_REGISTRY}/blaze-service/squashed
-    - wheel_server_image=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
-
-    # Pull images for layer caching
-    - echo -e "section_start:`date +%s`:docker-pull[collapsed=true]\r\e[0KPull docker images for caching"
-    - docker login -u "${CI_REGISTRY_USER}" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
-    - docker pull "${blaze_image}:merge-${CI_MERGE_REQUEST_IID}" ||
-      docker pull "${blaze_image}:latest" ||
-      true
-    - docker pull "${wheel_server_image}:merge-${CI_MERGE_REQUEST_IID}" ||
-      docker pull "${wheel_server_image}:latest" ||
-      true
-    - echo -e "section_end:`date +%s`:docker-pull\r\e[0K"
-
-    # Build images
-    - echo -e "section_start:`date +%s`:docker-build\r\e[0KBuild docker images"
-    - docker build --pull . -f Dockerfile --target main
-      -t "${blaze_image}:merge-${CI_MERGE_REQUEST_IID}"
-    - docker build --squash --pull . -f Dockerfile --target minimal
-      -t "${squashed_blaze_image}:merge-${CI_MERGE_REQUEST_IID}"
-    - docker build --squash --pull . -f Dockerfile --target wheel-server
-      -t "${wheel_server_image}:merge-${CI_MERGE_REQUEST_IID}"
-    - echo -e "section_end:`date +%s`:docker-build\r\e[0K"
-
-    # Push images
-    - echo -e "section_start:`date +%s`:docker-push[collapsed=true]\r\e[0KPush new docker images"
-    - docker push "${blaze_image}:merge-${CI_MERGE_REQUEST_IID}"
-    - docker push "${squashed_blaze_image}:merge-${CI_MERGE_REQUEST_IID}"
-    - docker push "${wheel_server_image}:merge-${CI_MERGE_REQUEST_IID}"
-    - echo -e "section_end:`date +%s`:docker-push\r\e[0K"
-
-# Likewise, we need 2 test jobs. The test:branch job uses the ${image}:commit-... image,
-# and the test:detached uses the ${image}:merge-... image
-
-test:branch:
+test:
   stage: test
   extends: .haskell-job
-  rules:
-    - if: $CI_MERGE_REQUEST_IID == null
   needs:
-    - build:branch
+    - build
   variables:
     <<: *variables
     GIT_STRATEGY: none
@@ -237,33 +170,17 @@ test:branch:
   script:
     - cd /blaze/build/blaze-ui/server
     - STACK_TEST_TIMEOUT=1800 ../.ci/scripts/run_stack_test.py
-
-test:detached:
-  stage: test
-  extends: .haskell-job
-  image: ${REPO_DOCKER_REGISTRY}/blaze-service:merge-${CI_MERGE_REQUEST_IID}
-  rules:
-    - if: $CI_MERGE_REQUEST_IID
-  needs:
-    - build:detached
-  variables:
-    <<: *variables
-    GIT_STRATEGY: none
-    GIT_CLEAN_FLAGS: none
-  script:
-    - cd /blaze/build/blaze-ui/server
-    - STACK_TEST_TIMEOUT=1800 ../.ci/scripts/run_stack_test.py
-
-# If we just pushed to the default branch, tag the images as :latest and push
 
 push:latest:
-  stage: deploy
-  extends: .dind
+  stage: push
+  extends: .docker-job
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: on_success
     - when: manual
       allow_failure: true
+  needs:
+    - test
   variables:
     <<: *variables
     GIT_STRATEGY: none
@@ -274,47 +191,80 @@ push:latest:
     - gitlab_wheel_server=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
     - aws_wheel_server=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-wheel-server
 
-    # Set up AWS ECR credentials
-    - echo -e "section_start:`date +%s`:aws-config[collapsed=true]\r\e[0KConfigure AWS credentials"
-    - apk add aws-cli
-    - aws configure set default.region "${AWS_DEFAULT_REGION}"
-    - aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
-    - aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
-    - echo -e "section_end:`date +%s`:aws-config\r\e[0K"
-
     # Pull this pipeline's images
     - echo -e "section_start:`date +%s`:docker-pull\r\e[0KPull latest docker images"
-    - docker login -u "${CI_REGISTRY_USER}" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
-    - docker pull "${gitlab_blaze}:commit-${CI_COMMIT_SHA}"
-    - docker pull "${gitlab_wheel_server}:commit-${CI_COMMIT_SHA}"
+    - docker pull "${gitlab_blaze}:pipeline-${CI_PIPELINE_IID}"
+    - docker pull "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}"
     - echo -e "section_end:`date +%s`:docker-pull\r\e[0K"
 
     # Push :latest images to internal gitlab registry
     - echo -e "section_start:`date +%s`:docker-push-gitlab\r\e[0KPush latest docker images to gitlab"
-    - docker tag "${gitlab_blaze}:commit-${CI_COMMIT_SHA}" "${gitlab_blaze}:latest"
+    - docker tag "${gitlab_blaze}:pipeline-${CI_PIPELINE_IID}" "${gitlab_blaze}:latest"
     - docker push "${gitlab_blaze}:latest"
-    - docker tag "${gitlab_wheel_server}:commit-${CI_COMMIT_SHA}" "${gitlab_wheel_server}:latest"
+    - docker tag "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}" "${gitlab_wheel_server}:latest"
     - docker push "${gitlab_wheel_server}:latest"
     - echo -e "section_end:`date +%s`:docker-push-gitlab\r\e[0K"
 
     # Push :latest images to AWS ECR integration registry
     - echo -e "section_start:`date +%s`:docker-push-aws\r\e[0KPush latest docker images to blaze AWS ECR registry"
     - aws ecr get-login-password | docker login --username AWS --password-stdin "${AWS_ECR_REGISTRY}"
-    - docker tag "${gitlab_blaze}:commit-${CI_COMMIT_SHA}" "${aws_blaze}:latest"
+    - docker tag "${gitlab_blaze}:pipeline-${CI_PIPELINE_IID}" "${aws_blaze}:latest"
     - docker push "${aws_blaze}:latest"
-    - docker tag "${gitlab_wheel_server}:commit-${CI_COMMIT_SHA}" "${aws_wheel_server}:latest"
+    - docker tag "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}" "${aws_wheel_server}:latest"
     - docker push "${aws_wheel_server}:latest"
+    - echo -e "section_end:`date +%s`:docker-push-aws\r\e[0K"
+
+push:tag:
+  stage: push
+  extends: .docker-job
+  rules:
+    - if: $CI_COMMIT_TAG
+  needs:
+    - test
+  variables:
+    <<: *variables
+    GIT_STRATEGY: none
+    GIT_CLEAN_FLAGS: none
+  script:
+    - gitlab_blaze=${REPO_DOCKER_REGISTRY}/blaze-service/squashed
+    - aws_blaze=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-service
+    - gitlab_wheel_server=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
+    - aws_wheel_server=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-wheel-server
+
+    # Pull this pipeline's images
+    - echo -e "section_start:`date +%s`:docker-pull\r\e[0KPull latest docker images"
+    - docker pull "${gitlab_blaze}:pipeline-${CI_PIPELINE_IID}"
+    - docker pull "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}"
+    - echo -e "section_end:`date +%s`:docker-pull\r\e[0K"
+
+    # Push :tag-FOO images to internal gitlab registry
+    - echo -e "section_start:`date +%s`:docker-push-gitlab\r\e[0KPush latest docker images to gitlab"
+    - docker tag "${gitlab_blaze}:pipeline-${CI_PIPELINE_IID}" "${gitlab_blaze}:tag-${CI_COMMIT_TAG}"
+    - docker push "${gitlab_blaze}:tag-${CI_COMMIT_TAG}"
+    - docker tag "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}" "${gitlab_wheel_server}:tag-${CI_COMMIT_TAG}"
+    - docker push "${gitlab_wheel_server}:tag-${CI_COMMIT_TAG}"
+    - echo -e "section_end:`date +%s`:docker-push-gitlab\r\e[0K"
+
+    # Push :tag-FOO images to AWS ECR integration registry
+    - echo -e "section_start:`date +%s`:docker-push-aws\r\e[0KPush latest docker images to blaze AWS ECR registry"
+    - aws ecr get-login-password | docker login --username AWS --password-stdin "${AWS_ECR_REGISTRY}"
+    - docker tag "${gitlab_blaze}:pipeline-${CI_PIPELINE_IID}" "${aws_blaze}:tag-${CI_COMMIT_TAG}"
+    - docker push "${aws_blaze}:tag-${CI_COMMIT_TAG}"
+    - docker tag "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}" "${aws_wheel_server}:tag-${CI_COMMIT_TAG}"
+    - docker push "${aws_wheel_server}:tag-${CI_COMMIT_TAG}"
     - echo -e "section_end:`date +%s`:docker-push-aws\r\e[0K"
 
 pages:
   extends: .haskell-job
-  stage: deploy
+  stage: docs
   rules:
-    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH && $CI_MERGE_REQUEST_ID == null
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_MERGE_REQUEST_ID == null
       when: on_success
     - if: $CI_MERGE_REQUEST_ID == null
       when: manual
       allow_failure: true
+  needs:
+    - test
   variables:
     <<: *variables
     GIT_STRATEGY: none
@@ -346,9 +296,9 @@ pages:
     expire_in: 12 hours
 
 cleanup:
-  stage: cleanup
+  stage: .post
   when: always
-  extends: .dind
+  extends: .docker-job
   variables:
     GIT_STRATEGY: none
   script:
@@ -364,9 +314,7 @@ cleanup:
         tags=()
         for image in "${images[@]}"; do
           tags+=(
-            "${image}:commit-${CI_COMMIT_SHA}"
-            "${image}:branch-${CI_COMMIT_REF_SLUG}"
-            "${CI_MERGE_REQUEST_IID:+${image}:merge-${CI_MERGE_REQUEST_IID}}"
+            "${image}:pipeline-${CI_PIPELINE_IID}"
             "${CI_COMMIT_TAG:+${image}:tag-${CI_COMMIT_TAG}}"
             )
         done
