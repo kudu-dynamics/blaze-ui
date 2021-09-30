@@ -144,11 +144,11 @@ def servertime_to_clienttime(timestamp: str) -> str:
 
 
 def get_sections_at(bv: BinaryView, addr: int) -> List[Section]:
-    return cast(List[Section], bv.get_sections_at(addr))
+    return bv.get_sections_at(addr)
 
 
 def get_functions_containing(bv: BinaryView, addr: int) -> List[binaryninja.Function]:
-    return cast(List[binaryninja.Function], bv.get_functions_containing(addr))
+    return bv.get_functions_containing(addr)
 
 
 def get_function_at(bv: BinaryView, addr: int) -> Optional[binaryninja.Function]:

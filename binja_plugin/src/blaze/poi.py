@@ -2,7 +2,6 @@ import logging as _logging
 from datetime import datetime
 from typing import List, Optional, TYPE_CHECKING, cast
 
-import binaryninjaui
 from binaryninjaui import (
     ContextMenuManager,
     DockContextHandler,
@@ -12,16 +11,9 @@ from binaryninjaui import (
     ViewFrame,
 )
 
-if getattr(binaryninjaui, 'qt_major_version', None) == 6:
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QMouseEvent
-    from PySide6.QtWidgets import QWidget, QListWidget, QListWidgetItem, QVBoxLayout
-elif not TYPE_CHECKING:
-    from PySide2.QtCore import Qt  # type: ignore
-    from PySide2.QtGui import QMouseEvent  # type: ignore
-    from PySide2.QtWidgets import QWidget, QListWidget, QListWidgetItem, QVBoxLayout  # type: ignore
-else:
-    raise Exception('Cannot typecheck with Qt <6')
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QWidget, QListWidget, QListWidgetItem, QVBoxLayout
 
 from .types import BinjaToServer, MenuOrder, PoiBinjaToServer, PoiId, PoiServerToBinja
 from .util import BNAction, add_actions, bind_actions, get_function_at, servertime_to_clienttime, try_debug

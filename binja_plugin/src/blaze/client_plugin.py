@@ -7,7 +7,6 @@ import os.path
 import queue
 import threading
 from typing import (
-    TYPE_CHECKING,
     Callable,
     DefaultDict,
     Dict,
@@ -22,7 +21,6 @@ from typing import (
 )
 import binaryninja
 
-import binaryninjaui
 import requests
 import websockets
 from binaryninja import BackgroundTaskThread, BinaryView
@@ -37,14 +35,8 @@ from websockets.client import WebSocketClientProtocol
 
 REQUEST_ACTIVITY_TIMEOUT = 5
 
-if getattr(binaryninjaui, 'qt_major_version', None) == 6:
-    from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QWidget
-elif not TYPE_CHECKING:
-    from PySide2.QtCore import Qt  # type: ignore
-    from PySide2.QtWidgets import QWidget  # type: ignore
-else:
-    raise Exception('Cannot typecheck with Qt <6')
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QWidget
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
 from .poi import PoiListDockWidget
@@ -414,6 +406,8 @@ class BlazePlugin():
             if msg == BLAZE_WS_SHUTDOWN:
                 self.out_queue.task_done()
                 return
+            elif isinstance(msg, str):
+                assert False
 
             try:
                 json_msg = json.dumps(msg)
