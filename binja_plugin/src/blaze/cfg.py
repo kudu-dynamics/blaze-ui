@@ -489,43 +489,48 @@ class ICFGWidget(FlowGraphWidget, QObject):
         # yapf: disable
         actions: List[BNAction] = [
             BNAction(
-                'Blaze', 'Prune', MenuOrder.FIRST,
+                'Blaze\\ICFG', 'Prune', MenuOrder.FIRST,
                 activate=self.context_menu_action_prune,
                 isValid=
                     lambda ctx: self.clicked_edge is not None
                         and is_conditional_edge(self.clicked_edge),
             ),
             BNAction(
-                'Blaze', 'Focus', MenuOrder.EARLY,
+                'Blaze\\ICFG', 'Focus', MenuOrder.EARLY,
                 activate=self.context_menu_action_focus,
                 isValid=lambda ctx: self.clicked_node is not None
             ),
             BNAction(
-                'Blaze', 'Expand Call Node', MenuOrder.EARLY,
+                'Blaze\\ICFG', 'Expand Call Node', MenuOrder.EARLY,
                 activate=self.context_menu_action_expand_call,
                 isValid=self._clicked_node_is_expandable_call_node,
             ),
             BNAction(
-                'Blaze', 'Save ICFG Snapshot', MenuOrder.EARLY,
+                'Blaze\\Snapshot', 'Save ICFG Snapshot', MenuOrder.EARLY,
                 activate = self.context_menu_action_save_icfg_snapshot,
                 isValid=lambda ctx: self.has_icfg(),
             ),
             BNAction(
-                'Blaze', 'Deactivate POI', MenuOrder.EARLY,
+                'Blaze\\POI', 'Deactivate POI', MenuOrder.EARLY,
                 activate=self.context_menu_action_deactivate_poi,
                 isValid=lambda ctx: self.has_active_poi(),
             ),
             BNAction(
-                'Blaze', 'Go to Address', MenuOrder.EARLY,
+                'Blaze\\ICFG', 'Go to Address', MenuOrder.EARLY,
                 activate = self.context_menu_action_go_to_address,
                 isValid=lambda ctx: self.has_icfg(),
             ),
             BNAction(
-                'Blaze', 'Add Constraint', MenuOrder.EARLY,
+                'Blaze\\ICFG', 'Add Constraint', MenuOrder.EARLY,
                 activate=self.context_menu_action_add_constraint,
                 isValid=lambda ctx: (self.clicked_node is not None and
                                      (cf_node := self.get_cf_node(self.clicked_node)) is not None and
-                                     cf_node.get('tag') == 'BasicBlock')
+                                     cf_node.get('tag') == 'BasicBlock'),
+            ),
+            BNAction(
+                'Blaze\\ICFG', 'Add Comment', MenuOrder.NORMAL,
+                activate=self.context_menu_action_add_comment,
+                isValid=lambda ctx: self.clicked_node is not None,
             ),
         ]
         # yapf: enable
@@ -565,6 +570,21 @@ class ICFGWidget(FlowGraphWidget, QObject):
             stmtIndex=stmtIndex,
             exprText=expr)
         self.blaze_instance.send(BinjaToServer(tag='BSConstraint', constraintMsg=constraint_msg))
+
+    def add_comment(self, node: CfNode, stmtIndex: Word64, comment: str) -> None:
+        assert self.blaze_instance.graph
+
+        node_uuid = node['contents']['uuid']
+        self.recenter_node_id = node_uuid
+        # Send constraint to server
+        self.blaze_instance.send(
+            BinjaToServer(
+                tag='BSComment',
+                cfgId=self.blaze_instance.graph.pil_icfg_id,
+                nodeId=node_uuid,
+                stmtIndex=stmtIndex,
+                comment=comment,
+            ))
 
     def prune(self, from_node: CfNode, to_node: CfNode):
         '''
@@ -819,6 +839,28 @@ class ICFGWidget(FlowGraphWidget, QObject):
             return
 
         self.add_constraint(cf_node, 0, text)
+
+    def context_menu_action_add_comment(self, context: UIActionContext):
+        log.debug('Add Comment')
+
+        text_field = TextLineField('Comment:')
+        confirm: bool = get_form_input([text_field], 'Add or Edit Comment')
+        if not confirm:
+            return
+
+        comment: str = text_field.result or ''
+
+        if not self.clicked_node:
+            log.error(f'Did not right-click on a CFG node')
+            return
+
+        cf_node = self.get_cf_node(self.clicked_node)
+
+        if not cf_node:
+            log.error(f"Could not find matching CFG node")
+            return
+
+        self.add_comment(cf_node, 0, comment)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''

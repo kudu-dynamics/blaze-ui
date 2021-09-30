@@ -108,6 +108,13 @@ data BinjaToServer = BSConnect
 
                    | BSConstraint { constraintMsg :: C.BinjaToServer }
 
+                   | BSComment
+                     { cfgId :: CfgId
+                     , nodeId :: UUID
+                     , stmtIndex :: Word64
+                     , comment :: Text
+                     }
+
                    | BSNoop
 
                    deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
