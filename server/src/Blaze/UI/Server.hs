@@ -237,13 +237,13 @@ sendCfgAndSnapshots bhash pcfg cid newCid = do
   sendLatestClientSnapshots
 
 sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
-sendDiffCfg bhash cid old new
-  | isEmptyChanges changes = do
-      setCfg cid new
-      sendCfgWithCallRatings bhash new cid
-  | otherwise = do
-      CfgUI.addCfg cid new
-      sendToBinja $ SBCfg cid bhash Nothing (Just changes) $ convertPilCfg old
+sendDiffCfg bhash cid old new = do
+  CfgUI.addCfg cid new
+  if isEmptyChanges changes then
+    autosaveCfg cid new >>= sendCfgAndSnapshots bhash new cid
+  else
+    sendToBinja $ SBCfg cid bhash Nothing (Just changes) $ convertPilCfg old
+
   where
     isEmptyChanges (PendingChanges [] []) = True
     isEmptyChanges _ = False
