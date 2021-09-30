@@ -47,6 +47,7 @@ import Blaze.Types.Cfg.Analysis (Target(Target))
 import qualified Blaze.UI.Types.CachedCalc as CC
 import qualified Blaze.Pil.Parse as Parse
 import qualified Blaze.Types.Pil as Pil
+import qualified Blaze.Cfg.Solver.General as GSolver
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -309,6 +310,17 @@ sendLatestPois = do
     . Poi.PoisOfBinary
     $ pois
 
+simplify :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
+simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
+  Left err -> do
+    liftIO $ do
+      putText "------------Solver Error:"
+      pprint err
+      putText "------------------------"
+    let (InterCfg cfg') = CfgA.simplify . InterCfg $ cfg
+    return cfg'
+  Right cfg' -> return cfg'
+
 ------------------------------------------
 --- main event handler
 
@@ -451,7 +463,8 @@ handleBinjaEvent = \case
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
             ctx <- ask
-            let (InterCfg cfg) = CfgA.simplify . InterCfg $ r ^. #result
+            cfg <- simplify $ r ^. #result
+            -- let (InterCfg cfg) = CfgA.simplify . InterCfg $ r ^. #result
             (_bid, cid, _snapBranch) <- Db.saveNewCfgAndBranch
               (ctx ^. #clientId)
               (ctx ^. #hostBinaryPath)
@@ -484,7 +497,9 @@ handleBinjaEvent = \case
             -- TODO: more specific error
             sendToBinja . SBLogError . show $ err
           Right (InterCfg cfg') -> do
-            let (InterCfg simplifiedCfg) = CfgA.simplify $ InterCfg cfg'
+            simplifiedCfg <- simplify cfg'
+            -- let (InterCfg simplifiedCfg) = CfgA.simplify $ InterCfg cfg'
+
             -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
             printSimplifyStats cfg' simplifiedCfg
             autosaveCfg cid simplifiedCfg
@@ -516,7 +531,8 @@ handleBinjaEvent = \case
         then sendToBinja $ SBLogError "Cannot remove root node"
         else do
           let cfg' = G.removeNode fullNode cfg
-              InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
+              -- InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
+          simplifiedCfg <- simplify cfg'
           printSimplifyStats cfg' simplifiedCfg
           sendDiffCfg bhash cid cfg simplifiedCfg
 
@@ -670,7 +686,8 @@ handleBinjaEvent = \case
                   (stmtsA, stmtsB) = splitAt (fromIntegral stmtIndex) stmts
                   stmts' = stmtsA <> [stmt] <> stmtsB
                   cfg' = Cfg.setNodeData stmts' node' cfg
-                  InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
+                  -- InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
+              simplifiedCfg <- simplify cfg'
               bhash <- getCfgBinaryHash cid
               sendDiffCfg bhash cid cfg' simplifiedCfg
 
@@ -704,6 +721,6 @@ getFunctionTypeReport bv addr = liftIO $ do
     Just func -> do
       cgFunc <- CG.convertFunction bv func
       indexedStmts <- Pil.getFuncStatementsIndexed bv cgFunc
-      let er = Ch.checkFunction indexedStmts
+      let er = Ch.checkIndexedStmts indexedStmts
       return $ either (Left . show) (Right . (func,)) er
 
