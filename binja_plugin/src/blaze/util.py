@@ -36,6 +36,7 @@ class BNAction:
 
 def bind_actions(action_handler: UIActionHandler, actions: List[BNAction]) -> None:
     for action in actions:
+        UIAction.registerAction(action.name)
         ui_action = UIAction(action.activate, action.isValid or (lambda _: True))
         if action.priority is not None:
             action_handler.bindAction(action.name, ui_action, action.priority)

@@ -11,18 +11,18 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Char8 as BSC
 import Binja.Core (BNBinaryView)
 import qualified Binja.Function as BNFunc
-import Blaze.UI.Types hiding ( cfg, callNode )
+import Blaze.UI.Types hiding ( cfg, callNode, stmtIndex )
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
 import qualified Blaze.Import.Source.BinaryNinja.Cfg as BnCfg
 import qualified Blaze.Types.Cfg as Cfg
-import Blaze.Types.Cfg (Cfg, PilCfg)
+import Blaze.Types.Cfg (Cfg, PilCfg, CfNode)
 import qualified Blaze.Cfg.Analysis as CfgA
 import qualified Blaze.UI.Cfg as CfgUI
 import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
-import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
+import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg, unInterCfg))
 import qualified Blaze.Cfg.Interprocedural as ICfg
 import Blaze.Pretty (prettyIndexedStmts, showHex)
 import qualified Blaze.Types.Pil.Checker as Ch
@@ -238,13 +238,13 @@ sendCfgAndSnapshots bhash pcfg cid newCid = do
   sendLatestClientSnapshots
 
 sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
-sendDiffCfg bhash cid old new
-  | isEmptyChanges changes = do
-      setCfg cid new
-      sendCfgWithCallRatings bhash new cid
-  | otherwise = do
-      CfgUI.addCfg cid new
-      sendToBinja $ SBCfg cid bhash Nothing (Just changes) $ convertPilCfg old
+sendDiffCfg bhash cid old new = do
+  CfgUI.addCfg cid new
+  if isEmptyChanges changes then
+    autosaveCfg cid new >>= sendCfgAndSnapshots bhash new cid
+  else
+    sendToBinja $ SBCfg cid bhash Nothing (Just changes) $ convertPilCfg old
+
   where
     isEmptyChanges (PendingChanges [] []) = True
     isEmptyChanges _ = False
@@ -297,7 +297,6 @@ sendLatestBinarySnapshots = do
     $ branches
 
 -- | Called whenever snapshots change.
--- TODO: change to `sendLatestBinarySnapshots` when frontend is ready to handle it
 sendLatestSnapshots :: EventLoop ()
 sendLatestSnapshots = sendLatestBinarySnapshots
 
@@ -313,10 +312,15 @@ sendLatestPois = do
 simplify :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
 simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
   Left err -> do
-    liftIO $ do
-      putText "------------Solver Error:"
-      pprint err
-      putText "------------------------"
+    case err of
+      GSolver.SolverError tr err -> liftIO $ do
+        putText "\n------------------------Type Checking Cfg-------------------------"
+        putText ""
+        pprint ("errors" :: Text, tr ^. #errors)
+        putText ""
+        prettyIndexedStmts $ tr ^. #symTypeStmts
+        putText "-----------------------------------------------------------------------"
+      _ -> putText . show $ err
     let (InterCfg cfg') = CfgA.simplify . InterCfg $ cfg
     return cfg'
   Right cfg' -> return cfg'
@@ -653,43 +657,79 @@ handleBinjaEvent = \case
   BSConstraint constraintMsg' -> case constraintMsg' of
     C.AddConstraint cid nid stmtIndex exprText -> do
       cfg <- getCfg cid
-      let matchingNode = filter ((== nid) . Cfg.getNodeUUID)
-                         . HashSet.toList
-                         . Cfg.nodes
-                         $ cfg
-      case matchingNode of
-        [] -> logError $ "AddConstraint: could not find matching node "
-              <> show nid
-              <> " for Cfg "
-              <> show cid
-        (node':others) -> do
-          unless (null others) $ do
-            logWarn $ "AddConstraint: found multiple nodes with UUID "
-              <> show nid
-              <> " in Cfg "
-              <> show cid
-              <> ". Using first match."
-          let stmts = Cfg.getNodeData node'
-          when (fromIntegral stmtIndex > length stmts) $ do
-            logWarn $ "AddConstraint: requested constraint stmt index "
-              <> show stmtIndex
-              <> " exceeds length of node's statements (" <> show (length stmts) <> "). "
-              <> "Adding to end."
-          case Parse.run Parse.parseExpr exprText of
-            Left err -> do
-              putText $ "Error parsing user constraint: " <> err
-              sendToBinja . SBConstraint . C.SBInvalidConstraint . C.ParseError $ err
-              -- TODO: handle above message directly in binja, maybe remove below
-              logWarn $ "Parse Error:\n" <> err
-            Right expr -> do
-              let stmt = Pil.Constraint . Pil.ConstraintOp $ expr
-                  (stmtsA, stmtsB) = splitAt (fromIntegral stmtIndex) stmts
-                  stmts' = stmtsA <> [stmt] <> stmtsB
-                  cfg' = Cfg.setNodeData stmts' node' cfg
-                  -- InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
-              simplifiedCfg <- simplify cfg'
-              bhash <- getCfgBinaryHash cid
-              sendDiffCfg bhash cid cfg' simplifiedCfg
+      case Parse.run Parse.parseExpr exprText of
+        Left err -> do
+          putText $ "Error parsing user constraint: " <> err
+          sendToBinja . SBConstraint . C.SBInvalidConstraint . C.ParseError $ err
+          -- TODO: handle above message directly in binja, maybe remove below
+          logWarn $ "Parse Error:\n" <> err
+        Right expr -> do
+          cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Constraint . Pil.ConstraintOp $ expr)
+          simplifiedCfg <- simplify cfg'
+          -- let simplifiedCfg = unInterCfg . CfgA.simplify . InterCfg $ cfg'
+          bhash <- getCfgBinaryHash cid
+          sendDiffCfg bhash cid cfg' simplifiedCfg
+
+  BSComment cid nid stmtIndex comment' -> do
+    cfg <- getCfg cid
+    cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Annotation comment')
+    bhash <- getCfgBinaryHash cid
+    sendDiffCfg bhash cid cfg' cfg'
+
+insertStmt ::
+  (Eq a, Hashable a) =>
+  Cfg [a] ->
+  CfgId ->
+  UUID ->
+  Word64 ->
+  a ->
+  EventLoop (Cfg [a])
+insertStmt cfg cid nid stmtIndex stmt = do
+  node' <- getNode cfg cid nid
+  (stmtsA, stmtsB) <- getStmtsAround node' stmtIndex
+  let stmts' = stmtsA <> [stmt] <> stmtsB
+  pure $ Cfg.setNodeData stmts' node' cfg
+
+getNode ::
+  (Eq a, Hashable a) =>
+  Cfg a ->
+  CfgId ->
+  UUID ->
+  EventLoop (CfNode a)
+getNode cfg cid nid = do
+  let matchingNode = filter ((== nid) . Cfg.getNodeUUID)
+                      . HashSet.toList
+                      . Cfg.nodes
+                      $ cfg
+  case matchingNode of
+    [] ->
+      logError $
+        "getNode: could not find matching node "
+        <> show nid
+        <> " for Cfg "
+        <> show cid
+    (node':others) -> do
+      unless (null others) $ do
+        logWarn $
+          "getNode: found multiple nodes with UUID "
+          <> show nid
+          <> " in Cfg "
+          <> show cid
+          <> ". Using first match."
+      pure node'
+
+getStmtsAround ::
+  CfNode [a] ->
+  Word64 ->
+  EventLoop ([a], [a])
+getStmtsAround node' stmtIndex = do
+  let stmts = Cfg.getNodeData node'
+  when (fromIntegral stmtIndex >= length stmts) $ do
+    logWarn $
+      "getStmtsAround: requested statement index (" <> show stmtIndex <> ")"
+      <> " exceeds node's maximum statemtent index (" <> show (length stmts - 1) <> "). "
+      <> "Adding to end."
+  pure $ splitAt (fromIntegral stmtIndex) stmts
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do
