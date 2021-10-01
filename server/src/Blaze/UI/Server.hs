@@ -19,6 +19,7 @@ import qualified Blaze.Import.Source.BinaryNinja.Cfg as BnCfg
 import qualified Blaze.Types.Cfg as Cfg
 import Blaze.Types.Cfg (Cfg, PilCfg, CfNode)
 import qualified Blaze.Cfg.Analysis as CfgA
+import qualified Blaze.Pil.Analysis as PilA
 import qualified Blaze.UI.Cfg as CfgUI
 import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
@@ -761,6 +762,7 @@ getFunctionTypeReport bv addr = liftIO $ do
     Just func -> do
       cgFunc <- CG.convertFunction bv func
       indexedStmts <- Pil.getFuncStatementsIndexed bv cgFunc
-      let er = Ch.checkIndexedStmts indexedStmts
+      let indexedStmts' = zip (fst <$> indexedStmts) (PilA.substAddrs $ snd <$> indexedStmts)
+      let er = Ch.checkIndexedStmts indexedStmts'
       return $ either (Left . show) (Right . (func,)) er
 
