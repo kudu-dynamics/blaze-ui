@@ -1,6 +1,6 @@
 import logging as _logging
 from datetime import datetime
-from typing import List, Optional, TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, List, Optional, cast
 
 from binaryninjaui import (
     ContextMenuManager,
@@ -10,13 +10,19 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QWidget, QListWidget, QListWidgetItem, QVBoxLayout
+from PySide6.QtWidgets import QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 
 from .types import BinjaToServer, PoiBinjaToServer, PoiId, PoiServerToBinja
-from .util import BNAction, add_actions, bind_actions, get_function_at, servertime_to_clienttime, try_debug
+from .util import (
+    BNAction,
+    add_actions,
+    bind_actions,
+    get_function_at,
+    servertime_to_clienttime,
+    try_debug,
+)
 
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance

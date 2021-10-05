@@ -12,7 +12,6 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
@@ -31,8 +30,8 @@ from .types import (
     SnapshotInfo,
 )
 from .util import (
-    BNAction,
     ITEM_DATE_FMT_OUT,
+    BNAction,
     add_actions,
     bind_actions,
     servertime_to_clienttime,

@@ -12,8 +12,8 @@ from binaryninja.enums import (
     ThemeColor,
 )
 from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphEdge, FlowGraphNode
-from binaryninja.highlight import HighlightColor
 from binaryninja.function import DisassemblyTextLine, InstructionTextToken
+from binaryninja.highlight import HighlightColor
 from binaryninja.interaction import (
     AddressField,
     MessageBoxButtonResult,
@@ -33,7 +33,6 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-
 from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtGui import QContextMenuEvent, QMouseEvent
 from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget
@@ -64,7 +63,14 @@ from .types import (
     Word64,
     tokens_from_server,
 )
-from .util import BNAction, add_actions, bind_actions, fix_flowgraph_edge, get_sections_at, try_debug
+from .util import (
+    BNAction,
+    add_actions,
+    bind_actions,
+    fix_flowgraph_edge,
+    get_sections_at,
+    try_debug,
+)
 
 if TYPE_CHECKING:
     from .client_plugin import BlazeInstance
