@@ -25,7 +25,6 @@ from .types import (
     BranchTree,
     BranchTreeListItem,
     CfgId,
-    MenuOrder,
     ServerBranch,
     ServerBranchTree,
     SnapshotBinjaToServer,
@@ -318,28 +317,22 @@ class SnapTreeWidget(QTreeWidget):
         self.clicked_item: Optional[SnapTreeItem] = None
 
         # Bind actions to their callbacks
-        # yapf: disable
         actions: List[BNAction] = [
             BNAction(
-                'Blaze', 'Load Snapshot', MenuOrder.FIRST,
+                'Blaze',
+                'Load Snapshot',
                 activate=self.ctx_menu_action_load,
-                isValid=lambda ctx: self.clicked_item is not None and
-                                    isinstance(self.clicked_item, SnapTreeBranchItemBase)
+                is_valid=lambda ctx: self.clicked_item is not None and isinstance(
+                    self.clicked_item, SnapTreeBranchItemBase),
             ),
             BNAction(
-                'Blaze', 'Rename Snapshot', MenuOrder.EARLY,
+                'Blaze',
+                'Rename Snapshot',
                 activate=self.ctx_menu_action_rename,
-                isValid=lambda ctx: self.clicked_item is not None and
-                                    isinstance(self.clicked_item, SnapTreeBranchItemBase)
+                is_valid=lambda ctx: self.clicked_item is not None and isinstance(
+                    self.clicked_item, SnapTreeBranchItemBase),
             ),
-            # BNAction(
-            #     'Blaze', 'Delete Snapshot', MenuOrder.LAST,
-            #     activate=self.ctx_menu_action_delete,
-            #     isValid=lambda ctx: self.clicked_item is not None
-            #                         and 'cfg_id' in self.clicked_item.__dict__
-            # ),
         ]
-        # yapf: enable
 
         bind_actions(self.action_handler, actions)
         add_actions(self.context_menu, actions)

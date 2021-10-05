@@ -15,7 +15,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QWidget, QListWidget, QListWidgetItem, QVBoxLayout
 
-from .types import BinjaToServer, MenuOrder, PoiBinjaToServer, PoiId, PoiServerToBinja
+from .types import BinjaToServer, PoiBinjaToServer, PoiId, PoiServerToBinja
 from .util import BNAction, add_actions, bind_actions, get_function_at, servertime_to_clienttime, try_debug
 
 if TYPE_CHECKING:
@@ -73,15 +73,14 @@ class PoiListWidget(QListWidget):
 
         self.clicked_item: Optional[PoiListItem] = None
 
-        # yapf: disable
         actions: List[BNAction] = [
             BNAction(
-                'Blaze', 'Set Active POI', MenuOrder.FIRST,
+                'Blaze',
+                'Set Active POI',
                 activate=self.ctx_menu_action_set_active_poi,
-                isValid=lambda ctx: self.clicked_item is not None
+                is_valid=lambda ctx: self.clicked_item is not None,
             ),
         ]
-        #yapf: enable
 
         bind_actions(self.action_handler, actions)
         add_actions(self.context_menu, actions)

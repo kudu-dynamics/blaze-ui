@@ -27,9 +27,9 @@ _ViewAction = Callable[[BinaryView], None]
 class BNAction:
     group: str
     name: str
-    menu_order: MenuOrder
     activate: Callable[[UIActionContext], None]
-    isValid: Optional[Callable[[UIActionContext], bool]] = None
+    is_valid: Optional[Callable[[UIActionContext], bool]] = None
+    menu_order: MenuOrder = MenuOrder.NORMAL
     submenu: Optional[str] = None
     priority: Optional[ActionPriority] = None
 
@@ -37,7 +37,7 @@ class BNAction:
 def bind_actions(action_handler: UIActionHandler, actions: List[BNAction]) -> None:
     for action in actions:
         UIAction.registerAction(action.name)
-        ui_action = UIAction(action.activate, action.isValid or (lambda _: True))
+        ui_action = UIAction(action.activate, action.is_valid or (lambda _: True))
         if action.priority is not None:
             action_handler.bindAction(action.name, ui_action, action.priority)
         else:

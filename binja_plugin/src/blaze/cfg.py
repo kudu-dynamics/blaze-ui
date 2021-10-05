@@ -56,7 +56,6 @@ from .types import (
     EnterFuncNode,
     Function,
     LeaveFuncNode,
-    MenuOrder,
     PendingChanges,
     PoiBinjaToServer,
     PoiSearchResults,
@@ -486,54 +485,60 @@ class ICFGWidget(FlowGraphWidget, QObject):
         self.recenter_node_id: Optional[UUID] = None
 
         # Bind actions to their callbacks
-        # yapf: disable
         actions: List[BNAction] = [
             BNAction(
-                'Blaze\\ICFG', 'Prune', MenuOrder.FIRST,
+                'Blaze\\ICFG\\Edit',
+                'Prune',
                 activate=self.context_menu_action_prune,
-                isValid=
-                    lambda ctx: self.clicked_edge is not None
-                        and is_conditional_edge(self.clicked_edge),
+                is_valid=lambda ctx: self.clicked_edge is not None and is_conditional_edge(
+                    self.clicked_edge),
             ),
             BNAction(
-                'Blaze\\ICFG', 'Focus', MenuOrder.EARLY,
+                'Blaze\\ICFG\\Edit',
+                'Focus',
                 activate=self.context_menu_action_focus,
-                isValid=lambda ctx: self.clicked_node is not None
+                is_valid=lambda ctx: self.clicked_node is not None,
             ),
             BNAction(
-                'Blaze\\ICFG', 'Expand Call Node', MenuOrder.EARLY,
+                'Blaze\\ICFG\\Edit',
+                'Expand Call Node',
                 activate=self.context_menu_action_expand_call,
-                isValid=self._clicked_node_is_expandable_call_node,
+                is_valid=self._clicked_node_is_expandable_call_node,
             ),
             BNAction(
-                'Blaze\\Snapshot', 'Save ICFG Snapshot', MenuOrder.EARLY,
-                activate = self.context_menu_action_save_icfg_snapshot,
-                isValid=lambda ctx: self.has_icfg(),
-            ),
-            BNAction(
-                'Blaze\\POI', 'Deactivate POI', MenuOrder.EARLY,
-                activate=self.context_menu_action_deactivate_poi,
-                isValid=lambda ctx: self.has_active_poi(),
-            ),
-            BNAction(
-                'Blaze\\ICFG', 'Go to Address', MenuOrder.EARLY,
-                activate = self.context_menu_action_go_to_address,
-                isValid=lambda ctx: self.has_icfg(),
-            ),
-            BNAction(
-                'Blaze\\ICFG', 'Add Constraint', MenuOrder.EARLY,
+                'Blaze\\ICFG\\Edit',
+                'Add Constraint',
                 activate=self.context_menu_action_add_constraint,
-                isValid=lambda ctx: (self.clicked_node is not None and
-                                     (cf_node := self.get_cf_node(self.clicked_node)) is not None and
-                                     cf_node.get('tag') == 'BasicBlock'),
+                is_valid=lambda ctx: (
+                    self.clicked_node is not None and
+                    (cf_node := self.get_cf_node(self.clicked_node)) is not None and cf_node.get(
+                        'tag') == 'BasicBlock'),
             ),
             BNAction(
-                'Blaze\\ICFG', 'Add Comment', MenuOrder.NORMAL,
+                'Blaze\\ICFG\\Edit',
+                'Add Comment',
                 activate=self.context_menu_action_add_comment,
-                isValid=lambda ctx: self.clicked_node is not None,
+                is_valid=lambda ctx: self.clicked_node is not None,
+            ),
+            BNAction(
+                'Blaze\\ICFG\\Misc',
+                'Go to Address',
+                activate=self.context_menu_action_go_to_address,
+                is_valid=lambda ctx: self.has_icfg(),
+            ),
+            BNAction(
+                'Blaze\\POI',
+                'Deactivate POI',
+                activate=self.context_menu_action_deactivate_poi,
+                is_valid=lambda ctx: self.has_active_poi(),
+            ),
+            BNAction(
+                'Blaze\\Snapshot',
+                'Save ICFG Snapshot',
+                activate=self.context_menu_action_save_icfg_snapshot,
+                is_valid=lambda ctx: self.has_icfg(),
             ),
         ]
-        # yapf: enable
 
         bind_actions(self.action_handler, actions)
         add_actions(self.context_menu, actions)
