@@ -185,12 +185,11 @@ class BlazePlugin():
             self.ensure_instance(bv).icfg_dock_widget = widget
             return widget
 
-        x: Qt.DockWidgetArea = cast(Qt.DockWidgetArea, Qt.DockWidgetArea.RightDockWidgetArea)
         self.dock_handler.addDockWidget(
             "Blaze ICFG",
             create_icfg_widget,
-            Qt.DockWidgetArea.RightDockWidgetArea,  # type: ignore
-            Qt.Orientation.Vertical,  # type: ignore
+            Qt.DockWidgetArea.RightDockWidgetArea,
+            Qt.Orientation.Vertical,
             True  # default visibility
         )
 
@@ -211,8 +210,8 @@ class BlazePlugin():
         self.dock_handler.addDockWidget(
             "Blaze Snapshot Tree",
             create_snaptree_widget,
-            Qt.DockWidgetArea.BottomDockWidgetArea,  # type: ignore
-            Qt.Orientation.Vertical,  # type: ignore
+            Qt.DockWidgetArea.BottomDockWidgetArea,
+            Qt.Orientation.Vertical,
             True  # default visibility
         )
 
@@ -233,8 +232,8 @@ class BlazePlugin():
         self.dock_handler.addDockWidget(
             "Blaze POI List",
             create_poi_widget,
-            Qt.DockWidgetArea.BottomDockWidgetArea,  # type: ignore
-            Qt.Orientation.Vertical,  # type: ignore
+            Qt.DockWidgetArea.BottomDockWidgetArea,
+            Qt.Orientation.Vertical,
             True  # default visibility
         )
 
