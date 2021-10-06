@@ -1,7 +1,8 @@
-from binaryninja import BinaryView
+#!/usr/bin/env python3
+
+from binaryninja import BinaryView, FileMetadata
 from binaryninja.filemetadata import FileMetadata
 
-from binaryninja import FileMetadata
 from ._viewframe import ViewFrame
 
 
