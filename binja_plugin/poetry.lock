@@ -8,7 +8,7 @@ python-versions = "*"
 
 [[package]]
 name = "charset-normalizer"
-version = "2.0.4"
+version = "2.0.6"
 description = "The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet."
 category = "main"
 optional = false
@@ -24,17 +24,6 @@ description = "Internationalized Domain Names in Applications (IDNA)"
 category = "main"
 optional = false
 python-versions = ">=3.5"
-
-[[package]]
-name = "pyside6"
-version = "6.1.2"
-description = "Python bindings for the Qt cross-platform application and UI framework"
-category = "main"
-optional = false
-python-versions = ">=3.6, <3.10"
-
-[package.dependencies]
-shiboken6 = "6.1.2"
 
 [[package]]
 name = "requests"
@@ -55,14 +44,6 @@ socks = ["PySocks (>=1.5.6,!=1.5.7)", "win-inet-pton"]
 use_chardet_on_py3 = ["chardet (>=3.0.2,<5)"]
 
 [[package]]
-name = "shiboken6"
-version = "6.1.2"
-description = "Python / C++ bindings helper module"
-category = "main"
-optional = false
-python-versions = ">=3.6, <3.10"
-
-[[package]]
 name = "typing-extensions"
 version = "3.10.0.2"
 description = "Backported and Experimental Type Hints for Python 3.5+"
@@ -72,7 +53,7 @@ python-versions = "*"
 
 [[package]]
 name = "urllib3"
-version = "1.26.6"
+version = "1.26.7"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
 category = "main"
 optional = false
@@ -94,7 +75,7 @@ python-versions = ">=3.6.1"
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.6.1,<3.10"
-content-hash = "47e54049eb597db6289036510299b62dfd4efcd9ba54fe1c6c9171e3f1d8c31f"
+content-hash = "6cb5d085cb21d45250e0435c5e827a3d203f6f337607327c024d31838e2fa453"
 
 [metadata.files]
 certifi = [
@@ -102,26 +83,16 @@ certifi = [
     {file = "certifi-2021.5.30.tar.gz", hash = "sha256:2bbf76fd432960138b3ef6dda3dde0544f27cbf8546c458e60baf371917ba9ee"},
 ]
 charset-normalizer = [
-    {file = "charset-normalizer-2.0.4.tar.gz", hash = "sha256:f23667ebe1084be45f6ae0538e4a5a865206544097e4e8bbcacf42cd02a348f3"},
-    {file = "charset_normalizer-2.0.4-py3-none-any.whl", hash = "sha256:0c8911edd15d19223366a194a513099a302055a962bca2cec0f54b8b63175d8b"},
+    {file = "charset-normalizer-2.0.6.tar.gz", hash = "sha256:5ec46d183433dcbd0ab716f2d7f29d8dee50505b3fdb40c6b985c7c4f5a3591f"},
+    {file = "charset_normalizer-2.0.6-py3-none-any.whl", hash = "sha256:5d209c0a931f215cee683b6445e2d77677e7e75e159f78def0db09d68fafcaa6"},
 ]
 idna = [
     {file = "idna-3.2-py3-none-any.whl", hash = "sha256:14475042e284991034cb48e06f6851428fb14c4dc953acd9be9a5e95c7b6dd7a"},
     {file = "idna-3.2.tar.gz", hash = "sha256:467fbad99067910785144ce333826c71fb0e63a425657295239737f7ecd125f3"},
 ]
-pyside6 = [
-    {file = "PySide6-6.1.2-6.1.2-cp36.cp37.cp38.cp39-abi3-macosx_10_14_x86_64.whl", hash = "sha256:d95286a6d59f29f5cad18c4346166f94bfedff9a61056d9b30d641e7a6ee0b28"},
-    {file = "PySide6-6.1.2-6.1.2-cp36.cp37.cp38.cp39-abi3-manylinux1_x86_64.whl", hash = "sha256:dab04edbde131d09a885fc2c945d9ea3f8e90e6d73546e66de5c2265c4731cf9"},
-    {file = "PySide6-6.1.2-6.1.2-cp36.cp37.cp38.cp39-none-win_amd64.whl", hash = "sha256:2dda3467d56ec76031b36ce2571e931cf5f3b6682497edc8a004e0360436da5d"},
-]
 requests = [
     {file = "requests-2.26.0-py2.py3-none-any.whl", hash = "sha256:6c1246513ecd5ecd4528a0906f910e8f0f9c6b8ec72030dc9fd154dc1a6efd24"},
     {file = "requests-2.26.0.tar.gz", hash = "sha256:b8aa58f8cf793ffd8782d3d8cb19e66ef36f7aba4353eec859e74678b01b07a7"},
-]
-shiboken6 = [
-    {file = "shiboken6-6.1.2-6.1.2-cp36.cp37.cp38.cp39-abi3-macosx_10_14_x86_64.whl", hash = "sha256:acdbf0f085d8d07125ca5acc2ee6b1c56c97c91bd924ebfbcee7ac7d166e7bbe"},
-    {file = "shiboken6-6.1.2-6.1.2-cp36.cp37.cp38.cp39-abi3-manylinux1_x86_64.whl", hash = "sha256:745428c03831f5d60c3ad08b2cbcf25342aef5abfba9d7e79b3a25b38d4bff31"},
-    {file = "shiboken6-6.1.2-6.1.2-cp36.cp37.cp38.cp39-none-win_amd64.whl", hash = "sha256:6b60c5f7ca1a272526c49a9e5f4cc9a4f5657e89c2c36eaa81f24b4c027847d9"},
 ]
 typing-extensions = [
     {file = "typing_extensions-3.10.0.2-py2-none-any.whl", hash = "sha256:d8226d10bc02a29bcc81df19a26e56a9647f8b0a6d4a83924139f4a8b01f17b7"},
@@ -129,8 +100,8 @@ typing-extensions = [
     {file = "typing_extensions-3.10.0.2.tar.gz", hash = "sha256:49f75d16ff11f1cd258e1b988ccff82a3ca5570217d7ad8c5f48205dd99a677e"},
 ]
 urllib3 = [
-    {file = "urllib3-1.26.6-py2.py3-none-any.whl", hash = "sha256:39fb8672126159acb139a7718dd10806104dec1e2f0f6c88aab05d17df10c8d4"},
-    {file = "urllib3-1.26.6.tar.gz", hash = "sha256:f57b4c16c62fa2760b7e3d97c35b255512fb6b59a259730f36ba32ce9f8e342f"},
+    {file = "urllib3-1.26.7-py2.py3-none-any.whl", hash = "sha256:c4fdf4019605b6e5423637e01bc9fe4daef873709a7973e195ceba0a62bbc844"},
+    {file = "urllib3-1.26.7.tar.gz", hash = "sha256:4987c65554f7a2dbf30c18fd48778ef124af6fab771a377103da0585e2336ece"},
 ]
 websockets = [
     {file = "websockets-9.1-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:d144b350045c53c8ff09aa1cfa955012dd32f00c7e0862c199edcabb1a8b32da"},

@@ -9,7 +9,6 @@ python = ">=3.6.1,<3.10"
 websockets = "^9.1"
 requests = "^2.26.0"
 typing-extensions = "^3.10.0"
-PySide6 = "^6.1.2"
 
 [tool.poetry.dev-dependencies]
 
