@@ -1,8 +1,10 @@
+#!/usr/bin/env python3
+
 from typing import Optional, Tuple, overload
 
 from binaryninja import AddressRange, BinaryDataNotification, BinaryView, FlowGraph, Function
-from binaryninja.binaryview import BinaryView
 from binaryninja._binaryninjacore import BNTagReference
+from binaryninja.binaryview import BinaryView
 from binaryninja.flowgraph import FlowGraphEdge, FlowGraphNode
 from binaryninja.function import AddressRange
 from PySide6.QtGui import QMouseEvent

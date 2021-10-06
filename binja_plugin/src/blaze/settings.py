@@ -1,8 +1,8 @@
 import enum
 import getpass
 import json
-from typing import Any, Callable, List, Literal, OrderedDict, Sequence, Tuple, TypedDict, Union
 import uuid
+from typing import Any, Callable, List, Literal, OrderedDict, Sequence, Tuple, TypedDict, Union
 
 from binaryninja.settings import Settings
 

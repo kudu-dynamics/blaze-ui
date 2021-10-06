@@ -11,6 +11,6 @@ log = logging.getLogger(__name__)
 
 __all__ = ['cfg', 'client_plugin', 'snaptree', 'poi']
 
-from . import cfg, client_plugin, snaptree, poi
+from . import cfg, client_plugin, poi, snaptree
 
 log.debug('Blaze initialized')

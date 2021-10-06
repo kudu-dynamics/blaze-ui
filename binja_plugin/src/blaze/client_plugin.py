@@ -19,8 +19,8 @@ from typing import (
     Union,
     cast,
 )
-import binaryninja
 
+import binaryninja
 import requests
 import websockets
 from binaryninja import BackgroundTaskThread, BinaryView
@@ -59,7 +59,13 @@ from .types import (
     SnapshotServerToBinja,
     pending_changes_from_server,
 )
-from .util import bv_key, get_functions_containing, register_for_address, register_for_function, try_debug
+from .util import (
+    bv_key,
+    get_functions_containing,
+    register_for_address,
+    register_for_function,
+    try_debug,
+)
 
 BLAZE_WS_SHUTDOWN = 'SHUTDOWN'
 

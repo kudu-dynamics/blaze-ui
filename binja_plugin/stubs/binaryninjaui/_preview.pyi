@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from PySide6.QtGui import QWheelEvent
 
 

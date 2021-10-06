@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import enum
 from typing import Any, Callable, Dict, List, Literal, Optional, Union, overload
 

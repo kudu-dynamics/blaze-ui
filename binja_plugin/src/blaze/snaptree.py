@@ -12,7 +12,6 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
@@ -25,15 +24,14 @@ from .types import (
     BranchTree,
     BranchTreeListItem,
     CfgId,
-    MenuOrder,
     ServerBranch,
     ServerBranchTree,
     SnapshotBinjaToServer,
     SnapshotInfo,
 )
 from .util import (
-    BNAction,
     ITEM_DATE_FMT_OUT,
+    BNAction,
     add_actions,
     bind_actions,
     servertime_to_clienttime,
@@ -318,28 +316,22 @@ class SnapTreeWidget(QTreeWidget):
         self.clicked_item: Optional[SnapTreeItem] = None
 
         # Bind actions to their callbacks
-        # yapf: disable
         actions: List[BNAction] = [
             BNAction(
-                'Blaze', 'Load Snapshot', MenuOrder.FIRST,
+                'Blaze',
+                'Load Snapshot',
                 activate=self.ctx_menu_action_load,
-                isValid=lambda ctx: self.clicked_item is not None and
-                                    isinstance(self.clicked_item, SnapTreeBranchItemBase)
+                is_valid=lambda ctx: self.clicked_item is not None and isinstance(
+                    self.clicked_item, SnapTreeBranchItemBase),
             ),
             BNAction(
-                'Blaze', 'Rename Snapshot', MenuOrder.EARLY,
+                'Blaze',
+                'Rename Snapshot',
                 activate=self.ctx_menu_action_rename,
-                isValid=lambda ctx: self.clicked_item is not None and
-                                    isinstance(self.clicked_item, SnapTreeBranchItemBase)
+                is_valid=lambda ctx: self.clicked_item is not None and isinstance(
+                    self.clicked_item, SnapTreeBranchItemBase),
             ),
-            # BNAction(
-            #     'Blaze', 'Delete Snapshot', MenuOrder.LAST,
-            #     activate=self.ctx_menu_action_delete,
-            #     isValid=lambda ctx: self.clicked_item is not None
-            #                         and 'cfg_id' in self.clicked_item.__dict__
-            # ),
         ]
-        # yapf: enable
 
         bind_actions(self.action_handler, actions)
         add_actions(self.context_menu, actions)
