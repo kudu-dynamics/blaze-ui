@@ -52,6 +52,7 @@ def branch_tree_from_server(branch_tree: ServerBranchTree) -> BranchTree:
 
 
 def branch_from_server(branch: ServerBranch) -> Branch:
+    # TODO This can be a dictionary update in python 3.9: Branch(**(branch | {'tree': ...}))
     updated = {  # type: ignore
         **branch, 'tree': branch_tree_from_server(branch['tree']),
         'snapshotInfo': dict(branch['snapshotInfo'])
@@ -94,9 +95,10 @@ class SnapTreeColumn(enum.Enum):
 
 class SnapTreeItem(QTreeWidgetItem):
     def __init__(
-            self,
-            parent: Union[QTreeWidget, QTreeWidgetItem],
-            predecessor: Optional[QTreeWidgetItem] = None):
+        self,
+        parent: Union[QTreeWidget, QTreeWidgetItem],
+        predecessor: Optional[QTreeWidgetItem] = None,
+    ):
         '''
         parent: the Q parent widget (either a treeview for a top level item, or a tree item)
         predecessor: the tree item preceding this one
@@ -158,11 +160,12 @@ class SnapTreeBranchItemBase(SnapTreeItem):
 class SnapTreeBranchListItem(SnapTreeBranchItemBase):
     def __init__(
         self,
-        parent: QTreeWidgetItem,
+        parent: Union[QTreeWidget, QTreeWidgetItem],
+        predecessor: Optional[QTreeWidgetItem] = None,
     ):
         self.children: Dict[CfgId, SnapTreeBranchListItem] = {}
 
-        SnapTreeItem.__init__(self, parent, None)
+        SnapTreeItem.__init__(self, parent, predecessor)
 
     def process_item(self, item: BranchTreeListItem):
         self.item = item  # type: ignore
@@ -202,7 +205,7 @@ class SnapTreeBranchListItem(SnapTreeBranchItemBase):
 class SnapTreeBranchItem(SnapTreeBranchItemBase):
     def __init__(
         self,
-        parent: QTreeWidgetItem,
+        parent: Union[QTreeWidget, QTreeWidgetItem],
         branch_id: BranchId,
         predecessor: Optional[QTreeWidgetItem] = None,
     ):
@@ -259,7 +262,7 @@ class SnapTreeBranchItem(SnapTreeBranchItemBase):
 class SnapTreeFuncItem(SnapTreeItem):
     def __init__(
         self,
-        parent: QTreeWidgetItem,
+        parent: Union[QTreeWidget, QTreeWidgetItem],
         func_name: str,
         predecessor: Optional[QTreeWidgetItem] = None,
     ):
@@ -391,7 +394,7 @@ class SnapTreeWidget(QTreeWidget):
             if func_addr in self.tracked_funcs:
                 item = self.tracked_funcs.get(func_addr)
             else:
-                item = SnapTreeFuncItem(self, data['originFuncName'])  # type: ignore
+                item = SnapTreeFuncItem(self, data['originFuncName'])
                 self.tracked_funcs[func_addr] = item
                 self.addTopLevelItem(item)
                 self.expandItem(item)
