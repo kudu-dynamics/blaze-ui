@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import enum
 from typing import Any, Callable, Dict, List, Literal, Optional, Union, overload
 
 from binaryninja import BinaryView, Function
@@ -14,6 +13,7 @@ from binaryninja.mediumlevelil import MediumLevelILFunction
 from binaryninja.plugin import PluginCommandContext
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import QMenu, QWidget
+from shiboken6.Shiboken import Enum  # type: ignore
 
 from ._linearview import LinearViewCursorPosition
 from ._uicontext import UIContext
@@ -131,10 +131,10 @@ class UIAction:
     # static void writeKeyBindingsFile();
 
 
-class ActionPriority(enum.Enum):
-    LowActionPriority = enum.auto()
-    NormalActionPriority = enum.auto()
-    HighActionPriority = enum.auto()
+class ActionPriority(Enum):
+    LowActionPriority: ActionPriority = ...
+    NormalActionPriority: ActionPriority = ...
+    HighActionPriority: ActionPriority = ...
 
 
 class UIActionHandler:
@@ -241,11 +241,11 @@ class UIActionHandler:
     # static void reparentWidget(QWidget* widget);
 
 
-class MenuItemVisibility(enum.Enum):
-    DefaultMenuItemVisibility = enum.auto()
-    DefaultMenuItemVisibility = enum.auto()
-    DefaultMenuItemVisibility = enum.auto()
-    DefaultMenuItemVisibility = enum.auto()
+class MenuItemVisibility(Enum):
+    DefaultMenuItemVisibility: MenuItemVisibility = ...
+    ShowMenuItemOnlyWhenActive: MenuItemVisibility = ...
+    AlwaysShowMenuItem: MenuItemVisibility = ...
+    NeverShowMenuItem: MenuItemVisibility = ...
 
 
 class Menu:
