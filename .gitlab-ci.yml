@@ -113,6 +113,7 @@ typecheck:plugin:warnings:
   needs: []
   script:
     - cd binja_plugin
+    - sed -Ei 's/"warning"/"error"/g' pyrightconfig.json
     - FORCE_COLOR=2 pyright
   allow_failure: true
 
