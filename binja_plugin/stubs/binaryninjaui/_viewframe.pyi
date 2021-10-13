@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from typing import List, overload
 
 from binaryninja import AddressRange, BinaryView, DisassemblyTextLine, Function, FunctionGraphType

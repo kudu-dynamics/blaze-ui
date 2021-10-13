@@ -19,8 +19,8 @@ from typing import (
     Union,
     cast,
 )
-import binaryninja
 
+import binaryninja
 import requests
 import websockets
 from binaryninja import BackgroundTaskThread, BinaryView
@@ -59,7 +59,13 @@ from .types import (
     SnapshotServerToBinja,
     pending_changes_from_server,
 )
-from .util import bv_key, get_functions_containing, register_for_address, register_for_function, try_debug
+from .util import (
+    bv_key,
+    get_functions_containing,
+    register_for_address,
+    register_for_function,
+    try_debug,
+)
 
 BLAZE_WS_SHUTDOWN = 'SHUTDOWN'
 
@@ -179,12 +185,11 @@ class BlazePlugin():
             self.ensure_instance(bv).icfg_dock_widget = widget
             return widget
 
-        x: Qt.DockWidgetArea = cast(Qt.DockWidgetArea, Qt.DockWidgetArea.RightDockWidgetArea)
         self.dock_handler.addDockWidget(
             "Blaze ICFG",
             create_icfg_widget,
-            Qt.DockWidgetArea.RightDockWidgetArea,  # type: ignore
-            Qt.Orientation.Vertical,  # type: ignore
+            Qt.DockWidgetArea.RightDockWidgetArea,
+            Qt.Orientation.Vertical,
             True  # default visibility
         )
 
@@ -205,8 +210,8 @@ class BlazePlugin():
         self.dock_handler.addDockWidget(
             "Blaze Snapshot Tree",
             create_snaptree_widget,
-            Qt.DockWidgetArea.BottomDockWidgetArea,  # type: ignore
-            Qt.Orientation.Vertical,  # type: ignore
+            Qt.DockWidgetArea.BottomDockWidgetArea,
+            Qt.Orientation.Vertical,
             True  # default visibility
         )
 
@@ -227,8 +232,8 @@ class BlazePlugin():
         self.dock_handler.addDockWidget(
             "Blaze POI List",
             create_poi_widget,
-            Qt.DockWidgetArea.BottomDockWidgetArea,  # type: ignore
-            Qt.Orientation.Vertical,  # type: ignore
+            Qt.DockWidgetArea.BottomDockWidgetArea,
+            Qt.Orientation.Vertical,
             True  # default visibility
         )
 
@@ -374,14 +379,20 @@ class BlazePlugin():
 
     async def recv_loop(self, websocket: WebSocketClientProtocol) -> None:
         async for ws_msg in websocket:
-            log.debug('Received websocket message', extra={'websocket_message': ws_msg})
-
             try:
                 msg = json.loads(ws_msg)
             except json.JSONDecodeError:
                 log.exception(
                     'Backend returned malformed message', extra={'websocket_message': ws_msg})
                 continue
+
+            log.debug(
+                'Received websocket message',
+                extra={
+                    'hostBinaryPath': msg['hostBinaryPath'],
+                    'action.tag': msg['action']['tag'],
+                },
+            )
 
             relevant_instances: Set[BlazeInstance] = \
                 self.instances_by_key(bv_key(msg['hostBinaryPath']))
@@ -415,7 +426,12 @@ class BlazePlugin():
                 log.exception('Could not JSON encode message to send to backend: %r', msg)
                 continue
 
-            log.debug('Sending websocket message...', extra={'websocket_message': json_msg})
+            log.debug(
+                'Sending websocket message...',
+                extra={
+                    'hostBinaryPath': msg['hostBinaryPath'],
+                    'action.tag': msg['action']['tag'],
+                })
 
             try:
                 await websocket.send(json_msg)

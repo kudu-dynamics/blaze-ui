@@ -12,7 +12,6 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
@@ -25,15 +24,14 @@ from .types import (
     BranchTree,
     BranchTreeListItem,
     CfgId,
-    MenuOrder,
     ServerBranch,
     ServerBranchTree,
     SnapshotBinjaToServer,
     SnapshotInfo,
 )
 from .util import (
-    BNAction,
     ITEM_DATE_FMT_OUT,
+    BNAction,
     add_actions,
     bind_actions,
     servertime_to_clienttime,
@@ -54,6 +52,7 @@ def branch_tree_from_server(branch_tree: ServerBranchTree) -> BranchTree:
 
 
 def branch_from_server(branch: ServerBranch) -> Branch:
+    # TODO This can be a dictionary update in python 3.9: Branch(**(branch | {'tree': ...}))
     updated = {  # type: ignore
         **branch, 'tree': branch_tree_from_server(branch['tree']),
         'snapshotInfo': dict(branch['snapshotInfo'])
@@ -96,9 +95,10 @@ class SnapTreeColumn(enum.Enum):
 
 class SnapTreeItem(QTreeWidgetItem):
     def __init__(
-            self,
-            parent: Union[QTreeWidget, QTreeWidgetItem],
-            predecessor: Optional[QTreeWidgetItem] = None):
+        self,
+        parent: Union[QTreeWidget, QTreeWidgetItem],
+        predecessor: Optional[QTreeWidgetItem] = None,
+    ):
         '''
         parent: the Q parent widget (either a treeview for a top level item, or a tree item)
         predecessor: the tree item preceding this one
@@ -160,11 +160,12 @@ class SnapTreeBranchItemBase(SnapTreeItem):
 class SnapTreeBranchListItem(SnapTreeBranchItemBase):
     def __init__(
         self,
-        parent: QTreeWidgetItem,
+        parent: Union[QTreeWidget, QTreeWidgetItem],
+        predecessor: Optional[QTreeWidgetItem] = None,
     ):
         self.children: Dict[CfgId, SnapTreeBranchListItem] = {}
 
-        SnapTreeItem.__init__(self, parent, None)
+        SnapTreeItem.__init__(self, parent, predecessor)
 
     def process_item(self, item: BranchTreeListItem):
         self.item = item  # type: ignore
@@ -204,7 +205,7 @@ class SnapTreeBranchListItem(SnapTreeBranchItemBase):
 class SnapTreeBranchItem(SnapTreeBranchItemBase):
     def __init__(
         self,
-        parent: QTreeWidgetItem,
+        parent: Union[QTreeWidget, QTreeWidgetItem],
         branch_id: BranchId,
         predecessor: Optional[QTreeWidgetItem] = None,
     ):
@@ -261,7 +262,7 @@ class SnapTreeBranchItem(SnapTreeBranchItemBase):
 class SnapTreeFuncItem(SnapTreeItem):
     def __init__(
         self,
-        parent: QTreeWidgetItem,
+        parent: Union[QTreeWidget, QTreeWidgetItem],
         func_name: str,
         predecessor: Optional[QTreeWidgetItem] = None,
     ):
@@ -318,28 +319,22 @@ class SnapTreeWidget(QTreeWidget):
         self.clicked_item: Optional[SnapTreeItem] = None
 
         # Bind actions to their callbacks
-        # yapf: disable
         actions: List[BNAction] = [
             BNAction(
-                'Blaze', 'Load Snapshot', MenuOrder.FIRST,
+                'Blaze',
+                'Load Snapshot',
                 activate=self.ctx_menu_action_load,
-                isValid=lambda ctx: self.clicked_item is not None and
-                                    isinstance(self.clicked_item, SnapTreeBranchItemBase)
+                is_valid=lambda ctx: self.clicked_item is not None and isinstance(
+                    self.clicked_item, SnapTreeBranchItemBase),
             ),
             BNAction(
-                'Blaze', 'Rename Snapshot', MenuOrder.EARLY,
+                'Blaze',
+                'Rename Snapshot',
                 activate=self.ctx_menu_action_rename,
-                isValid=lambda ctx: self.clicked_item is not None and
-                                    isinstance(self.clicked_item, SnapTreeBranchItemBase)
+                is_valid=lambda ctx: self.clicked_item is not None and isinstance(
+                    self.clicked_item, SnapTreeBranchItemBase),
             ),
-            # BNAction(
-            #     'Blaze', 'Delete Snapshot', MenuOrder.LAST,
-            #     activate=self.ctx_menu_action_delete,
-            #     isValid=lambda ctx: self.clicked_item is not None
-            #                         and 'cfg_id' in self.clicked_item.__dict__
-            # ),
         ]
-        # yapf: enable
 
         bind_actions(self.action_handler, actions)
         add_actions(self.context_menu, actions)
@@ -399,7 +394,7 @@ class SnapTreeWidget(QTreeWidget):
             if func_addr in self.tracked_funcs:
                 item = self.tracked_funcs.get(func_addr)
             else:
-                item = SnapTreeFuncItem(self, data['originFuncName'])  # type: ignore
+                item = SnapTreeFuncItem(self, data['originFuncName'])
                 self.tracked_funcs[func_addr] = item
                 self.addTopLevelItem(item)
                 self.expandItem(item)
