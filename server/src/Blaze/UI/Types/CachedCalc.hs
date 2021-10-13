@@ -34,9 +34,9 @@ setCalc k (CachedCalc cc) action = do
 -- | Retrieves the cached calc. Returns Nothing if the key cannot be found.
 -- Otherwise, it waits until v is available.
 getCalc :: (Hashable k, Eq k) => k -> CachedCalc k v -> IO (Maybe v)
-getCalc k (CachedCalc cc) = (HashMap.lookup k <$> readTVarIO cc) >>= \case
-  Nothing -> return Nothing
-  Just tmvar -> fmap Just . atomically . readTMVar $ tmvar
+getCalc k (CachedCalc cc) = readTVarIO cc >>=
+  maybe (return Nothing) (fmap Just . atomically . readTMVar)
+  . HashMap.lookup k
 
 -- | Retrieves the cached calc or computes it and caches it.
 -- Blocks thread until return.
