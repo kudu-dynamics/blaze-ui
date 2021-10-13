@@ -115,9 +115,6 @@ library:
   - Blaze.UI.Types.Session
   - Blaze.UI.Web.Server
 
-  
-  
-
 include-dirs:
   - "src"
   - "../../binaryninja-haskell/res"

@@ -23,9 +23,9 @@ import qualified Blaze.Pil.Analysis as PilA
 import qualified Blaze.UI.Cfg as CfgUI
 import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
-import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg, unInterCfg))
+import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
 import qualified Blaze.Cfg.Interprocedural as ICfg
-import Blaze.Pretty (prettyIndexedStmts, showHex)
+import Blaze.Pretty (prettyIndexedStmts, showHex, prettyPrint, pretty)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.UI.Types.Constraint as C
@@ -48,6 +48,7 @@ import Blaze.Types.Cfg.Analysis (Target(Target))
 import qualified Blaze.UI.Types.CachedCalc as CC
 import qualified Blaze.Pil.Parse as Parse
 import qualified Blaze.Types.Pil as Pil
+import Blaze.Types.Pil (Stmt)
 import qualified Blaze.Cfg.Solver.General as GSolver
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
@@ -314,7 +315,7 @@ simplify :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
 simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
   Left err -> do
     case err of
-      GSolver.SolverError tr err -> liftIO $ do
+      GSolver.SolverError tr _ -> liftIO $ do
         putText "\n------------------------Type Checking Cfg-------------------------"
         putText ""
         pprint ("errors" :: Text, tr ^. #errors)
@@ -747,9 +748,20 @@ printTypeReportToConsole fn tr = liftIO $ do
   pprint fn
   putText ""
   pprint ("errors" :: Text, tr ^. #errors)
+  prettyPrint $ tr ^. #errorConstraints
   putText ""
   prettyIndexedStmts $ tr ^. #symTypeStmts
   putText "-----------------------------------------------------------------------"
+
+-- | Use on indexed statements after you've run analysis that might delete some stmts,
+-- but that will leave the non-deleted stmts unchanged.
+-- Turns the removed statements into comments of their pretty print.
+realignIndexedStmts :: [(Int, Stmt)] -> [Stmt] -> [(Int, Stmt)]
+realignIndexedStmts [] _ = []
+realignIndexedStmts xs [] = xs
+realignIndexedStmts ((n, x):xs) (y:ys)
+  | x == y = (n, x) : realignIndexedStmts xs ys
+  | otherwise = (n, Pil.Annotation $ pretty x) : realignIndexedStmts xs (y:ys)
 
 getFunctionTypeReport :: MonadIO m
                       => BNBinaryView
@@ -762,7 +774,11 @@ getFunctionTypeReport bv addr = liftIO $ do
     Just func -> do
       cgFunc <- CG.convertFunction bv func
       indexedStmts <- Pil.getFuncStatementsIndexed bv cgFunc
-      let indexedStmts' = zip (fst <$> indexedStmts) (PilA.substAddrs $ snd <$> indexedStmts)
-      let er = Ch.checkIndexedStmts indexedStmts'
+      let indexedStmts' = realignIndexedStmts indexedStmts . PilA.fixedRemoveUnusedPhi $ snd <$> indexedStmts
+      -- TODO: this call to `fixedRemoveUnusedPhi` messes up the indexes
+          indexedStmts'' = zip (fst <$> indexedStmts')
+                           (PilA.substAddrs $ snd <$> indexedStmts')
+      prettyIndexedStmts indexedStmts''
+      let er = Ch.checkIndexedStmts indexedStmts''
       return $ either (Left . show) (Right . (func,)) er
 
