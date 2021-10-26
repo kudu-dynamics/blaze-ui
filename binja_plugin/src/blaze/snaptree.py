@@ -342,7 +342,7 @@ class SnapTreeWidget(QTreeWidget):
         # load snapshot tree on startup
         snap_msg = SnapshotBinjaToServer(tag='GetAllBranchesOfBinary')
         self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snap_msg))
-        
+
         log.debug('Initialized object: %r', self)
 
     def __del__(self):

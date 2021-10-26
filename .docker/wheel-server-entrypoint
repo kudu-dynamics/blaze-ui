@@ -1,6 +1,9 @@
 #!/bin/bash
 
 set -euo pipefail
+shopt -s nullglob
+
+PACKAGE_NAME=${PACKAGE_NAME:-blaze}
 
 if [[ -z $BLAZE_WHEEL_SERVER_URL ]]; then
     echo "USAGE: BLAZE_WHEEL_SERVER_URL=<SERVER_URL> $0" >&2
@@ -8,9 +11,12 @@ if [[ -z $BLAZE_WHEEL_SERVER_URL ]]; then
 fi
 
 base_url=$BLAZE_WHEEL_SERVER_URL
-wheels=(*.whl)
-if [[ ${#wheels[@]} -ne 1 ]]; then
-    echo "No wheels found, or too many wheels: ${wheels[*]}" >&2
+wheels=("${PACKAGE_NAME}"-[0-9]*.whl)
+if [[ ${#wheels[@]} -eq 0 ]]; then
+    echo "No matching wheels found" >&2
+    exit 1
+elif [[ ${#wheels[@]} -ne 1 ]]; then
+    echo "Too many matching wheels: ${wheels[*]}" >&2
     exit 1
 fi
 wheel=${wheels[0]}
