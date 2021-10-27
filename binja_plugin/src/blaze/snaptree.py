@@ -339,10 +339,10 @@ class SnapTreeWidget(QTreeWidget):
         bind_actions(self.action_handler, actions)
         add_actions(self.context_menu, actions)
 
-        log.debug('%r initialized', self)
+        log.debug('Initialized object: %r', self)
 
     def __del__(self):
-        try_debug(log, 'Deleting %r', self)
+        try_debug(log, 'Deleting object: %r', self)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         if event.button() != Qt.LeftButton:
@@ -479,10 +479,10 @@ class SnapTreeDockWidget(QWidget, DockContextHandler):
         layout.addWidget(self.snaptree_widget)
         self.setLayout(layout)
 
-        log.debug('%r initialized', self)
+        log.debug('Initialized object: %r', self)
 
     def __del__(self):
-        try_debug(log, 'Deleting %r', self)
+        try_debug(log, 'Deleting object: %r', self)
 
         # self.snaptree_widget._debug_()
 

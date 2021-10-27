@@ -446,10 +446,10 @@ class ICFGFlowGraph(FlowGraph):
                 edge_style,
             )
 
-        log.debug('%r initialized', self)
+        log.debug('Initialized object: %r', self)
 
     def __del__(self):
-        try_debug(log, 'Deleting %r', self)
+        try_debug(log, 'Deleting object: %r', self)
 
     @property
     def nodes(self) -> Dict[UUID, CfNode]:
@@ -549,10 +549,10 @@ class ICFGWidget(FlowGraphWidget, QObject):
         bind_actions(self.action_handler, actions)
         add_actions(self.context_menu, actions)
 
-        log.debug('%r initialized', self)
+        log.debug('Initialized object: %r', self)
 
     def __del__(self):
-        try_debug(log, 'Deleting %r', self)
+        try_debug(log, 'Deleting object: %r', self)
 
     def save_icfg(self):
         assert self.blaze_instance.graph
@@ -666,7 +666,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         log.debug(
             'Requesting backend expand call-site at %s',
             call_node['start'],
-            extra={'node': call_node})
+            extra={'node_uuid': call_node['uuid']})
 
         if is_indirect_call(node):
             addr_field = AddressField('Function (start address or name)', self.blaze_instance.bv)
@@ -1123,10 +1123,10 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         layout.addWidget(self.icfg_widget)
         self.setLayout(layout)
 
-        log.debug('%r initialized', self)
+        log.debug('Initialized object: %r', self)
 
     def __del__(self):
-        try_debug(log, 'Deleting %r', self)
+        try_debug(log, 'Deleting object: %r', self)
 
     def set_graph(self, graph: ICFGFlowGraph):
         self.icfg_toolbar_widget.accept_button.setVisible(graph.pending_changes.has_changes)

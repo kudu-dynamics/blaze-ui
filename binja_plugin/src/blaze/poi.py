@@ -91,10 +91,10 @@ class PoiListWidget(QListWidget):
         bind_actions(self.action_handler, actions)
         add_actions(self.context_menu, actions)
 
-        log.debug('%r initialized', self)
+        log.debug('Initialized object: %r', self)
 
     def __del__(self):
-        try_debug(log, 'Deleting %r', self)
+        try_debug(log, 'Deleting object: %r', self)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         if event.button() != Qt.LeftButton:
@@ -161,10 +161,10 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         layout.addWidget(self.poi_list_widget)
         self.setLayout(layout)
 
-        log.debug('%r initialized', self)
+        log.debug('Initialized object: %r', self)
 
     def __del__(self):
-        try_debug(log, 'Deleting %r', self)
+        try_debug(log, 'Deleting object: %r', self)
 
     def handle_server_msg(self, poi_msg: PoiServerToBinja):
         """
