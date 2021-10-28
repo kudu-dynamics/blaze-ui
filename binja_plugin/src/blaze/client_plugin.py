@@ -579,9 +579,6 @@ def mark_poi(bv: BinaryView, addr: int):
 
 @register_for_function(Action.TYPE_CHECK_FUNCTION, 'Type Check Function')
 def type_check_function(bv: BinaryView, func: binaryninja.Function):
-    for instance in blaze.instances_by_key(bv_key(bv)):
-        instance.icfg_dock_widget.icfg_widget.recenter_node_id = None
-
     blaze_instance = blaze.ensure_instance(bv)
     blaze_instance.with_bndb_hash(
         lambda h: blaze_instance.send(
