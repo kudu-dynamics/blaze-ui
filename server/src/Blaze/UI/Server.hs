@@ -470,7 +470,6 @@ handleBinjaEvent = \case
           Just r -> do
             ctx <- ask
             cfg <- simplify $ r ^. #result
-            -- let (InterCfg cfg) = CfgA.simplify . InterCfg $ r ^. #result
             (_bid, cid, _snapBranch) <- Db.saveNewCfgAndBranch
               (ctx ^. #clientId)
               (ctx ^. #hostBinaryPath)
@@ -504,9 +503,6 @@ handleBinjaEvent = \case
             sendToBinja . SBLogError . show $ err
           Right (InterCfg cfg') -> do
             simplifiedCfg <- simplify cfg'
-            -- let (InterCfg simplifiedCfg) = CfgA.simplify $ InterCfg cfg'
-
-            -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
             printSimplifyStats cfg' simplifiedCfg
             autosaveCfg cid simplifiedCfg
               >>= sendCfgAndSnapshots bhash simplifiedCfg cid
@@ -538,7 +534,6 @@ handleBinjaEvent = \case
         then sendToBinja $ SBLogError "Cannot remove root node"
         else do
           let cfg' = G.removeNode fullNode cfg
-              -- InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
           simplifiedCfg <- simplify cfg'
           printSimplifyStats cfg' simplifiedCfg
           sendDiffCfg bhash cid cfg simplifiedCfg
@@ -669,7 +664,6 @@ handleBinjaEvent = \case
         Right expr -> do
           cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Constraint . Pil.ConstraintOp $ expr)
           simplifiedCfg <- simplify cfg'
-          -- let simplifiedCfg = unInterCfg . CfgA.simplify . InterCfg $ cfg'
           bhash <- getCfgBinaryHash cid
           sendDiffCfg bhash cid cfg' simplifiedCfg
 
