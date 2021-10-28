@@ -523,8 +523,9 @@ handleBinjaEvent = \case
         . SBLogError $ "Node or nodes don't exist in CFG"
       Just (fullNode1, fullNode2) -> do
         let InterCfg cfg' = CfgA.prune (G.Edge fullNode1 fullNode2) $ InterCfg cfg
-        printSimplifyStats cfg cfg'
-        sendDiffCfg bhash cid cfg cfg'
+        simplifiedCfg <- simplify cfg'
+        printSimplifyStats cfg simplifiedCfg
+        sendDiffCfg bhash cid cfg simplifiedCfg
 
   BSCfgRemoveNode cid node' -> do
     debug "Binja remove node"
