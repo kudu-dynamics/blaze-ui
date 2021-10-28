@@ -84,13 +84,13 @@ class BlazeInstance():
         self._snaptree_dock_widget: Optional[SnapTreeDockWidget] = None
         self._poi_list_dock_widget: Optional[PoiListDockWidget] = None
 
-        log.debug('%r initialized', self)
+        log.debug('Initialized object: %r', self)
 
     def __repr__(self):
         return f'<BlazeInstance({self.bv!r}, {self.blaze!r}) at {hex(id(self))}>'
 
     def __del__(self):
-        try_debug(log, 'Deleting %r', self)
+        try_debug(log, 'Deleting object: %r', self)
 
     def send(self, msg: BinjaToServer):
         self.blaze.send(self.bv, msg)
@@ -239,12 +239,12 @@ class BlazePlugin():
             True  # default visibility
         )
 
-        log.debug('Create POI list widget')
+        log.debug('Created POI list widget')
 
-        log.debug('%r initialized', self)
+        log.debug('Initialized object: %r', self)
 
     def __del__(self):
-        try_debug(log, 'Deleting %r', self)
+        try_debug(log, 'Deleting object: %r', self)
 
     def instance_by_bv(self, bv: BinaryView) -> Optional[BlazeInstance]:
         return self._instance_by_bv.get(bv)
