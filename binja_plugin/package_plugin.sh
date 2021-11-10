@@ -1,75 +1,47 @@
 #!/bin/bash
 
-# something to consolidate plugin packaging and distribution process
-# collects all necessary artifacts into ./dist including:
-# - <plugin>.whl
-# - <plugin>.tar.gz
-# - plugins.json
-# - plugin.json
-# 
-# TODO:
-# - more robust arg parsing (incl user-defined dist dir)
-# - reduce duplication between JSONs and setup.cfg
-# - containerize for portability? CI/CD?
-# 
-# if you're reading this and want to test the result, a quick and dirty way is to:
-# 1. run this as: `./package_plugin.sh http://localhost:8000` (or whatever)
-# 2. in ./dist, run: `python3 -m http.server`
-# 3. in binja options, set `http://localhost:8000/` as the Unofficial 3rd Party Plugin Repo URL
-# 4. Blaze should appear in the Plugin Manager
+set -exuo pipefail
+shopt -s nullglob
 
+PACKAGE_NAME=${PACKAGE_NAME:-blaze}
+OUTPUT_WHEEL_NAME=${OUTPUT_WHEEL_NAME:-blaze-0.1.0-py3-none-any.whl}
+BLAZE_WHEEL_SERVER_BASE_URL=${BLAZE_WHEEL_SERVER_BASE_URL:-http://localhost:8000}
 
 DIST_DIR=./dist
-PLUGIN_JSON=plugin.json
-PLUGINS_JSON=plugins.json
+PLUGIN_JSON_TEMPLATE=plugin.json.jq
 
-package_url=http://localhost:8000 # just a default
-if [[ -z $1 ]]; then
-  echo "no package url used... using default"
-else
-  package_url=$1
-  echo "using supplied package url..."
-fi
+# Update version in pyproject.toml
+base_version=$(toml get --toml-path pyproject.toml tool.poetry.version)
+version=${base_version}.${CI_PIPELINE_ID}
+toml set --toml-path pyproject.toml tool.poetry.version "$version"
 
-echo "package_url=$package_url"
-
-# 0. Cleanup Dist
-# ===============
-
-echo "clearing $DIST_DIR ..."
-echo "rm -rf $DIST_DIR/*"
+# Build the wheel
 rm -rf "${DIST_DIR:?}"/*
+python3 -m build -o "$DIST_DIR"
 
+# find the wheel that poetry created
+wheels=("${DIST_DIR}/${PACKAGE_NAME}"-*.whl)
+if [[ ${#wheels[@]} -eq 0 ]]; then
+    echo "No matching wheels found" >&2
+    exit 1
+elif [[ ${#wheels[@]} -ne 1 ]]; then
+    echo "Too many matching wheels: ${wheels[*]}" >&2
+    exit 1
+fi
+wheel=${wheels[0]}
 
-# 1. Build wheel
-# ==============
+packageurl=${BLAZE_WHEEL_SERVER_BASE_URL}/${OUTPUT_WHEEL_NAME}
+dependencies=$(pkginfo "$wheel" -f requires_dist --single --sequence-delim=$'\n')
 
-# make sure build packages are present
-python3 -m pip install --upgrade build pkginfo
-# actually build the wheel
-python3 -m build -o $DIST_DIR
+mv "${wheel}" "${DIST_DIR}/${OUTPUT_WHEEL_NAME}"
 
-# 1.1 Get wheel name
-wheel_name="$(ls -1t $DIST_DIR | grep whl | head -n 1)"
-# 1.2 Get wheel dependencies
-dependencies="$(pkginfo $DIST_DIR/$wheel_name -f requires_dist --single --sequence-delim="\\\\n")"
+jq -n -f "${PLUGIN_JSON_TEMPLATE}" \
+  --arg timestamp "$(date +%s)" \
+  --arg version "${version}" \
+  --arg packageurl "${packageurl}" \
+  --arg dependencies "${dependencies}" \
+  > "${DIST_DIR}/plugin.json"
 
-
-# 2. Copy JSONs into dist
-# ====================
-
-echo "cp $PLUGIN_JSON $DIST_DIR/$PLUGIN_JSON ..."
-cp $PLUGIN_JSON $DIST_DIR/$PLUGIN_JSON
-# we're not copying plugins.json here, just piping sed output
-
-
-# 3. Search and replace
-# =====================
-
-# I'm assuming ` is a fine delimiter that won't show up in these variables...
-# please don't use ` in your package url <3
-sed \
-  -e "s\`%PACKAGEURL%\`$package_url/$wheel_name\`" \
-  -e"s\`%DEPENDENCIES%\`$dependencies\`" \
-  $PLUGINS_JSON.template > $DIST_DIR/$PLUGINS_JSON
-
+jq '[.plugin]' \
+  < "${DIST_DIR}/plugin.json" \
+  > "${DIST_DIR}/plugins.json"

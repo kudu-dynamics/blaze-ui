@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "blaze"
-version = "0.1.0"
+version = "0.1.0"  # actual plugin version set with package_plugin.sh
 description = "Blaze"
 authors = ["Kudu Dynamics"]
 

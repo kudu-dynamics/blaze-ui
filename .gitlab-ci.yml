@@ -149,6 +149,7 @@ build:
     - docker build --squash --pull . -f Dockerfile --target minimal
       -t "${squashed_blaze_image}:pipeline-${CI_PIPELINE_IID}"
     - docker build --pull . -f Dockerfile --target wheel-server
+      --build-arg CI_PIPELINE_ID="${CI_PIPELINE_ID}"
       -t "${wheel_server_image}:pipeline-${CI_PIPELINE_IID}"
     - echo -e "section_end:`date +%s`:docker-build\r\e[0K"
 
@@ -191,6 +192,7 @@ push:latest:
     - aws_blaze=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-service
     - gitlab_wheel_server=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
     - aws_wheel_server=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-wheel-server
+    - date_tag=$(date %Y.%m.%d)
 
     # Pull this pipeline's images
     - echo -e "section_start:`date +%s`:docker-pull\r\e[0KPull latest docker images"
@@ -198,7 +200,7 @@ push:latest:
     - docker pull "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}"
     - echo -e "section_end:`date +%s`:docker-pull\r\e[0K"
 
-    # Push :latest images to internal gitlab registry
+    # Push :latest tags to internal gitlab registry
     - echo -e "section_start:`date +%s`:docker-push-gitlab\r\e[0KPush latest docker images to gitlab"
     - docker tag "${gitlab_blaze}:pipeline-${CI_PIPELINE_IID}" "${gitlab_blaze}:latest"
     - docker push "${gitlab_blaze}:latest"
@@ -206,13 +208,17 @@ push:latest:
     - docker push "${gitlab_wheel_server}:latest"
     - echo -e "section_end:`date +%s`:docker-push-gitlab\r\e[0K"
 
-    # Push :latest images to AWS ECR integration registry
+    # Push :latest and date tags to AWS ECR integration registry
     - echo -e "section_start:`date +%s`:docker-push-aws\r\e[0KPush latest docker images to blaze AWS ECR registry"
     - aws ecr get-login-password | docker login --username AWS --password-stdin "${AWS_ECR_REGISTRY}"
     - docker tag "${gitlab_blaze}:pipeline-${CI_PIPELINE_IID}" "${aws_blaze}:latest"
+    - docker tag "${gitlab_blaze}:pipeline-${CI_PIPELINE_IID}" "${aws_blaze}:${date_tag}"
     - docker push "${aws_blaze}:latest"
+    - docker push "${aws_blaze}:${date_tag}"
     - docker tag "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}" "${aws_wheel_server}:latest"
+    - docker tag "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}" "${aws_wheel_server}:${date_tag}"
     - docker push "${aws_wheel_server}:latest"
+    - docker push "${aws_wheel_server}:${date_tag}"
     - echo -e "section_end:`date +%s`:docker-push-aws\r\e[0K"
 
 push:tag:

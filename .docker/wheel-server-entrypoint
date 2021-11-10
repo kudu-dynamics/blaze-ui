@@ -5,12 +5,12 @@ shopt -s nullglob
 
 PACKAGE_NAME=${PACKAGE_NAME:-blaze}
 
-if [[ -z $BLAZE_WHEEL_SERVER_URL ]]; then
-    echo "USAGE: BLAZE_WHEEL_SERVER_URL=<SERVER_URL> $0" >&2
+if [[ -z $BLAZE_WHEEL_SERVER_BASE_URL ]]; then
+    echo "USAGE: BLAZE_WHEEL_SERVER_BASE_URL=<SERVER_BASE_URL> $0" >&2
     exit 1
 fi
 
-base_url=$BLAZE_WHEEL_SERVER_URL
+base_url=$BLAZE_WHEEL_SERVER_BASE_URL
 wheels=("${PACKAGE_NAME}"-[0-9]*.whl)
 if [[ ${#wheels[@]} -eq 0 ]]; then
     echo "No matching wheels found" >&2
