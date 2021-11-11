@@ -28,6 +28,8 @@ from binaryninja.interaction import (
     MessageBoxButtonResult,
     MessageBoxButtonSet,
     MessageBoxIcon,
+    TextLineField,
+    get_form_input,
     show_message_box,
 )
 from binaryninjaui import DockHandler, FileContext, UIContext, UIContextNotification, ViewFrame
@@ -82,13 +84,13 @@ class BlazeInstance():
         self._snaptree_dock_widget: Optional[SnapTreeDockWidget] = None
         self._poi_list_dock_widget: Optional[PoiListDockWidget] = None
 
-        log.debug('%r initialized', self)
+        log.debug('Initialized object: %r', self)
 
     def __repr__(self):
         return f'<BlazeInstance({self.bv!r}, {self.blaze!r}) at {hex(id(self))}>'
 
     def __del__(self):
-        try_debug(log, 'Deleting %r', self)
+        try_debug(log, 'Deleting object: %r', self)
 
     def send(self, msg: BinjaToServer):
         self.blaze.send(self.bv, msg)
@@ -237,12 +239,12 @@ class BlazePlugin():
             True  # default visibility
         )
 
-        log.debug('Create POI list widget')
+        log.debug('Created POI list widget')
 
-        log.debug('%r initialized', self)
+        log.debug('Initialized object: %r', self)
 
     def __del__(self):
-        try_debug(log, 'Deleting %r', self)
+        try_debug(log, 'Deleting object: %r', self)
 
     def instance_by_bv(self, bv: BinaryView) -> Optional[BlazeInstance]:
         return self._instance_by_bv.get(bv)
@@ -570,8 +572,23 @@ def mark_poi(bv: BinaryView, addr: int):
     if funcs := get_functions_containing(bv, addr):
         # TODO: Decide how to handle multiple functions containing addr
         func = funcs[0]
+
+        # Get constraint from user
+        name_text_field = TextLineField('Name:')
+        description_text_field = TextLineField('Description:')
+        confirm: bool = get_form_input([name_text_field, description_text_field], 'Add POI')
+        if not confirm:
+            return
+        poi_name: Optional[str] = name_text_field.result
+        poi_description: Optional[str] = description_text_field.result
+
         poi_msg = PoiBinjaToServer(
-            tag='AddPoi', funcAddr=func.start, instrAddr=addr, name=None, description=None)
+            tag='AddPoi',
+            funcAddr=func.start,
+            instrAddr=addr,
+            name=poi_name,
+            description=poi_description,
+        )
         blaze_instance = blaze.ensure_instance(bv)
         blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
     else:
