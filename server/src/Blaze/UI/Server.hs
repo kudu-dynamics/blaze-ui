@@ -11,7 +11,7 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Char8 as BSC
 import Binja.Core (BNBinaryView)
 import qualified Binja.Function as BNFunc
-import Blaze.UI.Types hiding ( cfg, callNode )
+import Blaze.UI.Types hiding ( cfg, callNode, stmtIndex )
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
@@ -19,12 +19,13 @@ import qualified Blaze.Import.Source.BinaryNinja.Cfg as BnCfg
 import qualified Blaze.Types.Cfg as Cfg
 import Blaze.Types.Cfg (Cfg, PilCfg, CfNode)
 import qualified Blaze.Cfg.Analysis as CfgA
+import qualified Blaze.Pil.Analysis as PilA
 import qualified Blaze.UI.Cfg as CfgUI
 import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
-import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg, unInterCfg))
+import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
 import qualified Blaze.Cfg.Interprocedural as ICfg
-import Blaze.Pretty (prettyIndexedStmts, showHex)
+import Blaze.Pretty (prettyIndexedStmts, showHex, prettyPrint, pretty)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.UI.Types.Constraint as C
@@ -47,6 +48,8 @@ import Blaze.Types.Cfg.Analysis (Target(Target))
 import qualified Blaze.UI.Types.CachedCalc as CC
 import qualified Blaze.Pil.Parse as Parse
 import qualified Blaze.Types.Pil as Pil
+import Blaze.Types.Pil (Stmt)
+import qualified Blaze.Cfg.Solver.General as GSolver
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -308,6 +311,22 @@ sendLatestPois = do
     . Poi.PoisOfBinary
     $ pois
 
+simplify :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
+simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
+  Left err -> do
+    case err of
+      GSolver.SolverError tr _ -> liftIO $ do
+        putText "\n------------------------Type Checking Cfg-------------------------"
+        putText ""
+        pprint ("errors" :: Text, tr ^. #errors)
+        putText ""
+        prettyIndexedStmts $ tr ^. #symTypeStmts
+        putText "-----------------------------------------------------------------------"
+      _ -> putText . show $ err
+    let (InterCfg cfg') = CfgA.simplify . InterCfg $ cfg
+    return cfg'
+  Right cfg' -> return cfg'
+
 ------------------------------------------
 --- main event handler
 
@@ -450,7 +469,7 @@ handleBinjaEvent = \case
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
             ctx <- ask
-            let (InterCfg cfg) = CfgA.simplify . InterCfg $ r ^. #result
+            cfg <- simplify $ r ^. #result
             (_bid, cid, _snapBranch) <- Db.saveNewCfgAndBranch
               (ctx ^. #clientId)
               (ctx ^. #hostBinaryPath)
@@ -483,8 +502,7 @@ handleBinjaEvent = \case
             -- TODO: more specific error
             sendToBinja . SBLogError . show $ err
           Right (InterCfg cfg') -> do
-            let (InterCfg simplifiedCfg) = CfgA.simplify $ InterCfg cfg'
-            -- pprint . Aeson.encode . convertPilCfg $ prunedCfg
+            simplifiedCfg <- simplify cfg'
             printSimplifyStats cfg' simplifiedCfg
             autosaveCfg cid simplifiedCfg
               >>= sendCfgAndSnapshots bhash simplifiedCfg cid
@@ -501,8 +519,9 @@ handleBinjaEvent = \case
         . SBLogError $ "Node or nodes don't exist in CFG"
       Just (fullNode1, fullNode2) -> do
         let InterCfg cfg' = CfgA.prune (G.Edge fullNode1 fullNode2) $ InterCfg cfg
-        printSimplifyStats cfg cfg'
-        sendDiffCfg bhash cid cfg cfg'
+        simplifiedCfg <- simplify cfg'
+        printSimplifyStats cfg simplifiedCfg
+        sendDiffCfg bhash cid cfg simplifiedCfg
 
   BSCfgRemoveNode cid node' -> do
     debug "Binja remove node"
@@ -515,7 +534,7 @@ handleBinjaEvent = \case
         then sendToBinja $ SBLogError "Cannot remove root node"
         else do
           let cfg' = G.removeNode fullNode cfg
-              InterCfg simplifiedCfg = CfgA.simplify $ InterCfg cfg'
+          simplifiedCfg <- simplify cfg'
           printSimplifyStats cfg' simplifiedCfg
           sendDiffCfg bhash cid cfg simplifiedCfg
 
@@ -644,16 +663,15 @@ handleBinjaEvent = \case
           logWarn $ "Parse Error:\n" <> err
         Right expr -> do
           cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Constraint . Pil.ConstraintOp $ expr)
-          let simplifiedCfg = unInterCfg . CfgA.simplify . InterCfg $ cfg'
+          simplifiedCfg <- simplify cfg'
           bhash <- getCfgBinaryHash cid
           sendDiffCfg bhash cid cfg' simplifiedCfg
 
-  BSComment cid nid stmtIndex comment -> do
+  BSComment cid nid stmtIndex comment' -> do
     cfg <- getCfg cid
-    cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Annotation comment)
+    cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Annotation comment')
     bhash <- getCfgBinaryHash cid
     sendDiffCfg bhash cid cfg' cfg'
-
 
 insertStmt ::
   (Eq a, Hashable a) =>
@@ -725,9 +743,20 @@ printTypeReportToConsole fn tr = liftIO $ do
   pprint fn
   putText ""
   pprint ("errors" :: Text, tr ^. #errors)
+  prettyPrint $ tr ^. #errorConstraints
   putText ""
   prettyIndexedStmts $ tr ^. #symTypeStmts
   putText "-----------------------------------------------------------------------"
+
+-- | Use on indexed statements after you've run analysis that might delete some stmts,
+-- but that will leave the non-deleted stmts unchanged.
+-- Turns the removed statements into comments of their pretty print.
+realignIndexedStmts :: [(Int, Stmt)] -> [Stmt] -> [(Int, Stmt)]
+realignIndexedStmts [] _ = []
+realignIndexedStmts xs [] = xs
+realignIndexedStmts ((n, x):xs) (y:ys)
+  | x == y = (n, x) : realignIndexedStmts xs ys
+  | otherwise = (n, Pil.Annotation $ pretty x) : realignIndexedStmts xs (y:ys)
 
 getFunctionTypeReport :: MonadIO m
                       => BNBinaryView
@@ -740,6 +769,11 @@ getFunctionTypeReport bv addr = liftIO $ do
     Just func -> do
       cgFunc <- CG.convertFunction bv func
       indexedStmts <- Pil.getFuncStatementsIndexed bv cgFunc
-      let er = Ch.checkFunction indexedStmts
+      let indexedStmts' = realignIndexedStmts indexedStmts . PilA.fixedRemoveUnusedPhi $ snd <$> indexedStmts
+      -- TODO: this call to `fixedRemoveUnusedPhi` messes up the indexes
+          indexedStmts'' = zip (fst <$> indexedStmts')
+                           (PilA.substAddrs $ snd <$> indexedStmts')
+      prettyIndexedStmts indexedStmts''
+      let er = Ch.checkIndexedStmts indexedStmts''
       return $ either (Left . show) (Right . (func,)) er
 

@@ -593,3 +593,10 @@ def mark_poi(bv: BinaryView, addr: int):
         blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
     else:
         log.warn(r'No function containing address: 0x%x', addr)
+
+@register_for_function(Action.TYPE_CHECK_FUNCTION, 'Type Check Function')
+def type_check_function(bv: BinaryView, func: binaryninja.Function):
+    blaze_instance = blaze.ensure_instance(bv)
+    blaze_instance.with_bndb_hash(
+        lambda h: blaze_instance.send(
+            BinjaToServer(tag='BSTypeCheckFunction', address=func.start, bndbHash=h)))
