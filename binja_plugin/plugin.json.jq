@@ -4,7 +4,7 @@
         "name": "Blaze",
         "author": "Kudu Dynamics",
         "version": $version,
-        "minimumbinaryninjaversion": 2660,
+        "minimumbinaryninjaversion": 2985,
         "type": ["helper", "ui"],
         "api": ["python3"],
         "description": "Interact with interprocedural CFGs and simplified program models",
