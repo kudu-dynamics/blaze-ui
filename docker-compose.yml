@@ -2,7 +2,7 @@ version: "3.4"
 
 services:
   blaze-server:
-    image: ${CI_REGISTRY}/${CI_PROJECT_NAMESPACE}/blaze-ui/blaze-service/squashed
+    image: ${CI_REGISTRY}/blaze/blaze-ui/blaze-service/squashed
     # image: 077943246560.dkr.ecr.us-east-2.amazonaws.com/integrated_blaze_system/kudu/blaze-service
     build:
       context: .
@@ -20,7 +20,7 @@ services:
       - BLAZE_UI_BNDB_STORAGE_DIR=/blaze/persistent/bndbs
 
   blaze-plugin-repository:
-    image: ${CI_REGISTRY}/${CI_PROJECT_NAMESPACE}/blaze-ui/blaze-wheel-server
+    image: ${CI_REGISTRY}/blaze/blaze-ui/blaze-wheel-server
     # image: 077943246560.dkr.ecr.us-east-2.amazonaws.com/integrated_blaze_system/kudu/blaze-wheel-server
     build:
       context: .

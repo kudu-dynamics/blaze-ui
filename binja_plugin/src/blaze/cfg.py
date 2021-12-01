@@ -931,7 +931,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 Qt.MouseButtons(Qt.MouseButton.LeftButton),  # type: ignore
                 Qt.KeyboardModifiers(),
                 Qt.MouseEventSource.MouseEventSynthesizedByApplication,
-                event.device(),
+                event.pointingDevice(),
             ))
         super().mouseReleaseEvent(
             QMouseEvent(
@@ -943,7 +943,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 Qt.MouseButtons(Qt.MouseButton.LeftButton),  # type: ignore
                 Qt.KeyboardModifiers(),
                 Qt.MouseEventSource.MouseEventSynthesizedByApplication,
-                event.device(),
+                event.pointingDevice(),
             ))
 
         if self.blaze_instance.graph is None:
