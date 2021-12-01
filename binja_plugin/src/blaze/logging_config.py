@@ -130,7 +130,7 @@ def setup_logging(log_path: Path = BLAZE_LOG_FILE) -> None:
     root_debug_log.addHandler(debug_handler)
 
     # HACK to remove the bad default handler in Qt 6 version of Binary Ninja
-    # see https:///blaze/blaze-ui/-/issues/83#note_23631
+    # see https://gitlab/blaze/blaze-ui/-/issues/83#note_23631
     for handler in root_debug_log.handlers[:]:
         print(handler)
         if isinstance(handler, logging.StreamHandler) and \

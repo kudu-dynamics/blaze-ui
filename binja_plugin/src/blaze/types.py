@@ -19,7 +19,10 @@ BinaryHash = str
 HostBinaryPath = str
 
 # What Aeson encodes the unit value `()` as
-Unit = Literal[[]]
+# TODO: This used to be a Literal[[]] type, but that is actually an invalid Literal.
+#       Is there a way to change how Aeson (on the server) encodes unit? And is there an alternative
+#       representation that won't introduce ambiguities?
+Unit = List[Any]
 
 BINARYNINJAUI_CUSTOM_EVENT = 0xfff6
 

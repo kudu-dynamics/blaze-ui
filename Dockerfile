@@ -1,4 +1,4 @@
-ARG BLAZE_IMAGE=${CI_REGISTRY}/${CI_PROJECT_NAMESPACE}/blaze/blaze:latest
+ARG BLAZE_IMAGE=${CI_REGISTRY}/blaze/blaze/blaze:latest
 
 FROM ${BLAZE_IMAGE} as main
 RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
