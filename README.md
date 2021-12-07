@@ -10,7 +10,7 @@ It consists of three components:
 
 ## Requirements
 
-* Binary Ninja `>=2.3.2753-dev`
+* Binary Ninja `>=2.4.2985-dev`
 * Python `^3.8`
   * It is recommended you use a virtualenv. [See here for more instructions][wiki-virtualenv]
 * Either

@@ -9,15 +9,15 @@ RUN --mount=type=cache,id=blaze-apt,target=/var/cache/apt,sharing=locked \
         zlib1g-dev
 
 COPY server/ /blaze/build/blaze-ui/server/
-COPY .ci/ /blaze/build/blaze-ui/.ci/
-COPY ./ /blaze/src/blaze-ui/
 WORKDIR /blaze/build/blaze-ui/server
-
 RUN stack build --test --no-run-tests --ghc-options -fdiagnostics-color=always
 
 ENV BLAZE_UI_HOST=localhost
 ENV BLAZE_UI_WS_PORT=5765
 ENV BLAZE_UI_HTTP_PORT=5766
+
+COPY .ci/ /blaze/build/blaze-ui/.ci/
+COPY ./ /blaze/src/blaze-ui/
 
 CMD ["stack", "exec", "blaze-server"]
 
@@ -59,9 +59,12 @@ CMD ["blaze-server"]
 
 
 FROM python:3.8 as wheel-builder
+RUN apt update && apt install -y --no-install-recommends jq
+RUN pip install toml-cli build pkginfo
 COPY binja_plugin/ /binja_plugin/
 WORKDIR /binja_plugin
-RUN ./package_plugin.sh
+ARG CI_PIPELINE_ID=0
+RUN CI_PIPELINE_ID=${CI_PIPELINE_ID} ./package_plugin.sh
 
 
 FROM abhin4v/hastatic:latest as hastatic
