@@ -192,7 +192,7 @@ push:latest:
     - aws_blaze=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-service
     - gitlab_wheel_server=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
     - aws_wheel_server=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-wheel-server
-    - date_tag=$(date %Y.%m.%d)
+    - date_tag=$(date +%Y.%m.%d)
 
     # Pull this pipeline's images
     - echo -e "section_start:`date +%s`:docker-pull\r\e[0KPull latest docker images"
