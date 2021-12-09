@@ -340,7 +340,6 @@ class BlazePlugin():
         if (instance := self._instance_by_bv.get(bv)) is not None:
             return instance
 
-        log.info("\n\n\nCreating key for bv: %s\n\n\n", bv_key(bv))
         log.info('Creating new blaze instance for BV: %r', bv)
         instance = BlazeInstance(bv, self)
         self._instance_by_bv[bv] = instance
@@ -546,7 +545,6 @@ class BlazeNotificationListener(UIContextNotification):
 
 
     def OnBeforeSaveFile(self, context: UIContext, file: FileContext, frame: ViewFrame) -> bool:
-        
         bv = frame.getCurrentViewInterface().getData()
         
         log.debug(
@@ -579,8 +577,6 @@ class BlazeNotificationListener(UIContextNotification):
             self.blaze_plugin._instances_by_key[new_filename] = new_s
         return True
             
-
-        
 
 blaze = BlazePlugin()
 BlazeNotificationListener.instance = BlazeNotificationListener(blaze)
