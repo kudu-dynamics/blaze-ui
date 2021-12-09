@@ -77,6 +77,7 @@ log = _logging.getLogger(__name__)
 class BlazeInstance():
     def __init__(self, bv: BinaryView, blaze: 'BlazePlugin'):
         self.bv: BinaryView = bv
+        self.filename: str = bv_key(bv)
         self.blaze: 'BlazePlugin' = blaze
         self.graph: Optional[ICFGFlowGraph] = None
         self.bndbHash: Optional[BinaryHash] = None
@@ -339,6 +340,7 @@ class BlazePlugin():
         if (instance := self._instance_by_bv.get(bv)) is not None:
             return instance
 
+        log.info("\n\n\nCreating key for bv: %s\n\n\n", bv_key(bv))
         log.info('Creating new blaze instance for BV: %r', bv)
         instance = BlazeInstance(bv, self)
         self._instance_by_bv[bv] = instance
@@ -542,6 +544,43 @@ class BlazeNotificationListener(UIContextNotification):
         del self.blaze_plugin._instance_by_bv[bv]
         self.blaze_plugin._instances_by_key[bv_key(bv)].discard(instance)
 
+
+    def OnBeforeSaveFile(self, context: UIContext, file: FileContext, frame: ViewFrame) -> bool:
+        
+        bv = frame.getCurrentViewInterface().getData()
+        
+        log.debug(
+            'BinaryView for %r saved',
+            file.getFilename(),
+            extra={
+                'bv': bv,
+                'bv_filename': file.getFilename()
+            })
+
+        instance = self.blaze_plugin._instance_by_bv[bv]
+
+        new_filename = bv_key(bv)
+        if instance.filename == new_filename:
+            return True
+        else:
+            s = self.blaze_plugin._instances_by_key[instance.filename]
+            s.remove(instance)
+            if not s:
+                del self.blaze_plugin._instances_by_key[instance.filename]
+
+            new_s = self.blaze_plugin._instances_by_key.get(new_filename)
+
+            if new_s is None:
+                new_s = set()
+
+            instance.filename = new_filename
+            new_s.add(instance)
+            
+            self.blaze_plugin._instances_by_key[new_filename] = new_s
+        return True
+            
+
+        
 
 blaze = BlazePlugin()
 BlazeNotificationListener.instance = BlazeNotificationListener(blaze)
