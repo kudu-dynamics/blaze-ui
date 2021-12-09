@@ -566,15 +566,9 @@ class BlazeNotificationListener(UIContextNotification):
             if not s:
                 del self.blaze_plugin._instances_by_key[instance.filename]
 
-            new_s = self.blaze_plugin._instances_by_key.get(new_filename)
+            self.blaze_plugin._instances_by_key[new_filename].add(instance)
 
-            if new_s is None:
-                new_s = set()
-
-            instance.filename = new_filename
-            new_s.add(instance)
-            
-            self.blaze_plugin._instances_by_key[new_filename] = new_s
+            instance.filename = new_filename            
         return True
             
 
