@@ -561,10 +561,10 @@ class BlazeNotificationListener(UIContextNotification):
         instance = self.blaze_plugin._instance_by_bv[bv]
 
         if old_key != new_key:
-            s = self.blaze_plugin._instances_by_key[bv_key(old_key)]
+            s = self.blaze_plugin._instances_by_key[old_key]
             s.remove(instance)
             if not s:
-                del self.blaze_plugin._instances_by_key[bv_key(old_key)]
+                del self.blaze_plugin._instances_by_key[old_key]
 
             self.blaze_plugin._instances_by_key[new_key].add(instance)
 
