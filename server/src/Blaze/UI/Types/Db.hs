@@ -16,7 +16,7 @@ import Database.Selda.SqlType ( Lit(LBlob, LCustom)
                               )
 import Blaze.UI.Types.Graph (GraphTransport)
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, SnapshotType)
-import Blaze.UI.Types.BinaryHash (BinaryHash)
+import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import Database.Selda.Backend (SeldaConnection, runSeldaT)
@@ -54,7 +54,7 @@ data SnapshotBranch = SnapshotBranch
   { branchId :: BranchId
   , clientId :: ClientId
   , hostBinaryPath :: HostBinaryPath
-  , bndbHash :: BinaryHash
+  , bndbHash :: BndbHash
   , originFuncAddr :: Address
   , originFuncName :: Text
   , branchName :: Maybe Text

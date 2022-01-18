@@ -21,7 +21,7 @@ import Blaze.UI.Types.Cfg.Snapshot ( BranchId
                                    )
 import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Graph as Graph
-import Blaze.UI.Types.BinaryHash (BinaryHash)
+import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.Graph (graphFromTransport, graphToTransport)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
@@ -46,7 +46,7 @@ close (Conn conn) = seldaClose conn
 saveNewCfgAndBranch :: MonadDb m
                     => ClientId
                     -> HostBinaryPath
-                    -> BinaryHash
+                    -> BndbHash
                     -> Address
                     -> Text
                     -> PilCfg
@@ -116,8 +116,8 @@ getCfgType cid = withDb $ do
     restrict (cfg ! #cfgId .== literal cid)
     return $ cfg ! #snapshotType
 
-getCfgBinaryHash :: MonadDb m => CfgId -> m (Maybe BinaryHash)
-getCfgBinaryHash cid = withDb $ do
+getCfgBndbHash :: MonadDb m => CfgId -> m (Maybe BndbHash)
+getCfgBndbHash cid = withDb $ do
   fmap onlyOne . query $ do
     cfg <- select cfgTable
     restrict (cfg ! #cfgId .== literal cid)
@@ -137,7 +137,7 @@ saveNewBranch_ :: MonadDb m
   => BranchId
   -> ClientId
   -> HostBinaryPath
-  -> BinaryHash
+  -> BndbHash
   -> Snapshot.Branch BranchTree
   -> m ()
 saveNewBranch_ bid cid hpath h b = withDb $

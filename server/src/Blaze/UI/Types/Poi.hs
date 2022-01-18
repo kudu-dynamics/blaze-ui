@@ -14,7 +14,8 @@ import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import Blaze.UI.Types.Db.Address ()
 import Blaze.UI.Types.Cfg (CfgId)
-
+import Blaze.UI.Types.BndbHash (BndbHash)
+import Blaze.UI.Types.BinaryHash (BinaryHash)
 
 newtype PoiId = PoiId UUID
   deriving (Eq, Ord, Show, Generic)
@@ -33,7 +34,7 @@ newtype ServerToBinja
   deriving anyclass (ToJSON, FromJSON)
 
 data BinjaToServer
-  = GetPoisOfBinary
+  = GetPoisOfBinary { originalBinaryHash :: BinaryHash }
   
   | AddPoi { funcAddr :: Address
            , instrAddr :: Address
@@ -73,3 +74,14 @@ data Poi = Poi
 
 poiTable :: Table Poi
 poiTable = table "poi" [#poiId :- primary]
+
+
+data GlobalPoi = GlobalPoi
+  { poiId :: PoiId
+  , binaryHash :: BinaryHash
+  , created :: UTCTime
+  , funcAddr :: Address
+  , instrAddr :: Address
+  , name :: Maybe Text
+  , description :: Maybe Text
+  } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, SqlRow)

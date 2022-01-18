@@ -19,6 +19,7 @@ import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Poi as Poi
 import Blaze.UI.Types.Poi (Poi)
+import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.Db (MonadDb(withDb))
 import qualified Blaze.UI.Types.Db as Db
@@ -52,7 +53,7 @@ data ServerToBinja = SBLogInfo { message :: Text }
 
                    | SBCfg { cfgId :: CfgId
                            -- So plugin can easily warn if it's out of date
-                           , bndbHash :: BinaryHash
+                           , bndbHash :: BndbHash
                            , poiSearchResults :: Maybe PoiSearchResults 
                            , pendingChanges :: Maybe PendingChanges
                            -- TODO: send cfg with text
@@ -70,12 +71,12 @@ data ServerToBinja = SBLogInfo { message :: Text }
 
 data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
-                   | BSTypeCheckFunction { bndbHash :: BinaryHash
+                   | BSTypeCheckFunction { bndbHash :: BndbHash
                                          , address :: Word64
                                          }
 
                    | BSCfgNew
-                     { bndbHash :: BinaryHash
+                     { bndbHash :: BndbHash
                      , startFuncAddress :: Word64
                      }
                    | BSCfgExpandCall
@@ -175,7 +176,7 @@ data EventLoopCtx = EventLoopCtx
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
   , dbConn :: TMVar Db.Conn
   , activePoi :: TVar (Maybe Poi)
-  , callNodeRatingCtx :: CachedCalc BinaryHash CallNodeRatingCtx
+  , callNodeRatingCtx :: CachedCalc BndbHash CallNodeRatingCtx
   } deriving (Generic)
 
 newtype EventLoopState = EventLoopState
@@ -227,14 +228,14 @@ data SessionState = SessionState
   , eventInbox :: TQueue Event
   , dbConn :: TMVar Db.Conn
   , activePoi :: TVar (Maybe Poi)
-  , callNodeRatingCtx :: CachedCalc BinaryHash CallNodeRatingCtx
+  , callNodeRatingCtx :: CachedCalc BndbHash CallNodeRatingCtx
   } deriving (Generic)
 
 emptySessionState
   :: HostBinaryPath
   -> BinaryManager
   -> TMVar Db.Conn
-  -> CachedCalc BinaryHash CallNodeRatingCtx
+  -> CachedCalc BndbHash CallNodeRatingCtx
   -> STM SessionState
 emptySessionState binPath bm tconn ccCallRating
   = SessionState binPath bm
@@ -251,12 +252,15 @@ emptySessionState binPath bm tconn ccCallRating
 data AppState = AppState
   { serverConfig :: ServerConfig
   , binarySessions :: TVar (HashMap SessionId SessionState)
+    -- used for pushing global POIs
+  , openBinaries :: TVar (HashMap BinaryHash (Set SessionId))
   , dbConn :: TMVar Db.Conn
   } deriving (Generic)
 
 initAppState :: ServerConfig -> Db.Conn -> IO AppState
 initAppState cfg' conn = AppState cfg'
   <$> newTVarIO HashMap.empty
+  <*> newTVarIO HashMap.empty
   <*> newTMVarIO conn
 
 lookupSessionState :: SessionId -> AppState -> STM (Maybe SessionState)

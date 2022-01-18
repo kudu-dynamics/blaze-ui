@@ -32,7 +32,7 @@ import qualified Blaze.UI.Types.Constraint as C
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, Branch, BranchTree, SnapshotType)
 import qualified Blaze.UI.Cfg.Snapshot as Snapshot
-import Blaze.UI.Types.BinaryHash (BinaryHash)
+import Blaze.UI.Types.BndbHash (BndbHash)
 import qualified Blaze.UI.Db as Db
 import Blaze.UI.Types.Cfg (CfgId, convertPilCfg)
 import qualified Blaze.UI.BinaryManager as BM
@@ -221,7 +221,7 @@ autosaveCfg cid pcfg = getCfgType cid >>= \case
     Db.saveNewCfg_ bid autoCid pcfg Snapshot.Autosave
     return $ Just autoCid
 
-sendCfgWithCallRatings :: BinaryHash -> PilCfg -> CfgId -> EventLoop ()
+sendCfgWithCallRatings :: BndbHash -> PilCfg -> CfgId -> EventLoop ()
 sendCfgWithCallRatings bhash cfg cid = do
   poiSearch <- getPoiSearchResults bhash cfg
   sendToBinja . SBCfg cid bhash poiSearch Nothing . convertPilCfg $ cfg
@@ -234,12 +234,12 @@ refreshActiveCfg cid = do
 
 -- | Used after `autosaveCfg`. If second CfgId is Nothing, just send first.
 -- If second is Just, send new CfgId. In both cases, send new snapshot tree.
-sendCfgAndSnapshots :: BinaryHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop ()
+sendCfgAndSnapshots :: BndbHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop ()
 sendCfgAndSnapshots bhash pcfg cid newCid = do
   sendCfgWithCallRatings bhash pcfg $ fromMaybe cid newCid
   sendLatestClientSnapshots
 
-sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
+sendDiffCfg :: BndbHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
 sendDiffCfg bhash cid old new = do
   CfgUI.addCfg cid new
   if isEmptyChanges changes then
@@ -348,8 +348,8 @@ logInfo infoMsg = do
   sendToBinja . SBLogInfo $ infoMsg
   putText infoMsg
 
-getCfgBinaryView :: CfgId -> EventLoop (BNBinaryView, BinaryHash)
-getCfgBinaryView cid = Db.getCfgBinaryHash cid >>= \case
+getCfgBinaryView :: CfgId -> EventLoop (BNBinaryView, BndbHash)
+getCfgBinaryView cid = Db.getCfgBndbHash cid >>= \case
   Nothing ->
     logError $ "Could not find binary hash version for cfg: " <> show cid
 
@@ -357,12 +357,12 @@ getCfgBinaryView cid = Db.getCfgBinaryHash cid >>= \case
     bm <- view #binaryManager <$> ask
     BM.loadBndb bm h >>= either (logError . show) (return . (,h))
 
-getCfgBinaryHash :: CfgId -> EventLoop BinaryHash
-getCfgBinaryHash cid = Db.getCfgBinaryHash cid >>= \case
-  Nothing -> throwError . EventLoopError $ "getCfgBinaryHash cannot find CfgId: " <> show cid
+getCfgBndbHash :: CfgId -> EventLoop BndbHash
+getCfgBndbHash cid = Db.getCfgBndbHash cid >>= \case
+  Nothing -> throwError . EventLoopError $ "getCfgBndbHash cannot find CfgId: " <> show cid
   Just h -> return h
 
-getBinaryView :: BinaryHash -> EventLoop BNBinaryView
+getBinaryView :: BndbHash -> EventLoop BNBinaryView
 getBinaryView bhash = do
   bm <- view #binaryManager <$> ask
   BM.loadBndb bm bhash >>= either (logError . show) return
@@ -403,7 +403,7 @@ getActivePoiTarget bv = do
         Just func -> do
           return . Just . Target func $ poi ^. #instrAddr
 
-getPoiSearchResults :: BinaryHash -> PilCfg -> EventLoop (Maybe PoiSearchResults)
+getPoiSearchResults :: BndbHash -> PilCfg -> EventLoop (Maybe PoiSearchResults)
 getPoiSearchResults bhash pcfg = do
   bv <- getBinaryView bhash
   getActivePoiTarget bv >>= \case
@@ -512,7 +512,7 @@ handleBinjaEvent = \case
   BSCfgRemoveBranch cid (node1, node2) -> do
     debug "Binja remove branch"
     -- TODO: just get the bhash since bv isn't used
-    bhash <- getCfgBinaryHash cid
+    bhash <- getCfgBndbHash cid
     cfg <- getCfg cid
     case (,) <$> Cfg.getFullNodeMay cfg node1 <*> Cfg.getFullNodeMay cfg node2 of
       Nothing -> sendToBinja
@@ -525,7 +525,7 @@ handleBinjaEvent = \case
 
   BSCfgRemoveNode cid node' -> do
     debug "Binja remove node"
-    bhash <- getCfgBinaryHash cid
+    bhash <- getCfgBndbHash cid
     cfg <- getCfg cid
     case Cfg.getFullNodeMay cfg node' of
       Nothing -> sendToBinja
@@ -540,7 +540,7 @@ handleBinjaEvent = \case
 
   BSCfgFocus cid node' -> do
     debug "Binja Focus"
-    bhash <- getCfgBinaryHash cid
+    bhash <- getCfgBndbHash cid
     cfg <- getCfg cid
     case Cfg.getFullNodeMay cfg node' of
       Nothing -> sendToBinja
@@ -556,7 +556,7 @@ handleBinjaEvent = \case
     CfgUI.getCfg cid >>= \case
       Nothing -> throwError . EventLoopError $ "Could not find existing CFG with id " <> show cid
       Just pcfg -> do
-        bhash <- getCfgBinaryHash cid
+        bhash <- getCfgBndbHash cid
         autosaveCfg cid pcfg
           >>= sendCfgAndSnapshots bhash pcfg cid
 
@@ -564,7 +564,7 @@ handleBinjaEvent = \case
     Nothing -> throwError . EventLoopError $ "Could not find existing CFG with id " <> show cid
     Just pcfg -> do
       CfgUI.addCfg cid pcfg
-      bhash <- getCfgBinaryHash cid
+      bhash <- getCfgBndbHash cid
       poiSearch <- getPoiSearchResults bhash pcfg
       sendToBinja . SBCfg cid bhash poiSearch Nothing $ convertPilCfg pcfg
       
@@ -597,7 +597,7 @@ handleBinjaEvent = \case
         Just _br -> sendLatestSnapshots
 
     Snapshot.LoadSnapshot cid -> do
-      bhash <- getCfgBinaryHash cid
+      bhash <- getCfgBndbHash cid
       cfg <- getStoredCfg cid
       poiSearch <- getPoiSearchResults bhash cfg
       sendToBinja . SBCfg cid bhash poiSearch Nothing . convertPilCfg $ cfg
@@ -615,7 +615,8 @@ handleBinjaEvent = \case
       sendLatestSnapshots
 
   BSPoi poiMsg' -> case poiMsg' of
-    Poi.GetPoisOfBinary -> sendLatestPois
+    Poi.GetPoisOfBinary ogBinHash -> do
+      sendLatestPois
 
     Poi.AddPoi funcAddr instrAddr poiName poiDescription -> do
       ctx <- ask
@@ -664,13 +665,13 @@ handleBinjaEvent = \case
         Right expr -> do
           cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Constraint . Pil.ConstraintOp $ expr)
           simplifiedCfg <- simplify cfg'
-          bhash <- getCfgBinaryHash cid
+          bhash <- getCfgBndbHash cid
           sendDiffCfg bhash cid cfg' simplifiedCfg
 
   BSComment cid nid stmtIndex comment' -> do
     cfg <- getCfg cid
     cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Annotation comment')
-    bhash <- getCfgBinaryHash cid
+    bhash <- getCfgBndbHash cid
     sendDiffCfg bhash cid cfg' cfg'
 
 insertStmt ::

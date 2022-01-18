@@ -6,7 +6,7 @@ import qualified Blaze.Graph as G
 import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.UI.Types.Cfg.Snapshot
 import qualified Blaze.UI.Types.Graph as Graph
-import Blaze.UI.Types.BinaryHash (BinaryHash)
+import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import qualified Data.HashMap.Strict as HashMap
 
@@ -17,7 +17,7 @@ addChild parent child = G.addEdge (G.LEdge () $ G.Edge parent child)
 
 singletonBranch
   :: HostBinaryPath
-  -> BinaryHash
+  -> BndbHash
   -> Address
   -> Text
   -> Maybe Text
