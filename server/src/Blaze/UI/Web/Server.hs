@@ -4,7 +4,7 @@ import Blaze.UI.Prelude hiding (get)
 import qualified Prelude as P
 
 import Blaze.UI.Types hiding (cfg)
-import qualified Blaze.UI.Types.BinaryHash as BinaryHash
+import qualified Blaze.UI.Types.BndbHash as BndbHash
 import qualified Blaze.UI.BinaryManager as BM
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import qualified Blaze.UI.Types.HostBinaryPath as HBP
@@ -64,7 +64,7 @@ uploadBinary st = do
       json h
       putText $ "New bndb uploaded: "
         <> HBP.toText hostBinaryPath'
-        <> " (" <> BinaryHash.toText h <> ")"
+        <> " (" <> BndbHash.toText h <> ")"
     saveBndb _ _ _ = return ()
 
 showErrorPage :: ActionM ()
