@@ -172,15 +172,22 @@ spawnEventHandler cid st ss = do
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
       putText "Spawned event handlers"
 
+
 app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case splitPath of
-  ["binja"] -> WS.acceptRequest pconn >>= binjaApp HashMap.empty st
+  ["binja"] -> WS.acceptRequest pconn >>= runBinjaApp
   _ -> do
     putText $ "Rejected request to invalid path: " <> cs path
     WS.rejectRequest pconn $ "Invalid path: " <> path
   where
     path = WS.requestPath $ WS.pendingRequest pconn
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
+    runBinjaApp conn = catch (binjaApp HashMap.empty st conn) catchConnectionException
+    catchConnectionException :: WS.ConnectionException -> IO ()
+    catchConnectionException e = do
+      putText "------------Catch ConnectionException---------"
+      -- TODO: clean-up SessionState
+      print e
 
 run :: AppState -> IO ()
 run st = do
