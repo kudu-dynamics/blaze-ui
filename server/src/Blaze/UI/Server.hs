@@ -166,12 +166,10 @@ spawnEventHandler cid st ss = do
                   (ss ^. #activePoi)
                   (ss ^. #callNodeRatingCtx)
 
-        -- TOOD: maybe should save these threadIds to kill later or limit?
         void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx
 
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
       putText "Spawned event handlers"
-
 
 app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case splitPath of
