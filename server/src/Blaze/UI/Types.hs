@@ -337,7 +337,6 @@ cleanupClosedConn cid st = do
       , foldl' (flip HashMap.delete) HashMap.empty sids
       )
 
-
 initAppState :: ServerConfig -> Db.Conn -> IO AppState
 initAppState cfg' conn = AppState cfg'
   <$> newTVarIO HashMap.empty
