@@ -93,22 +93,23 @@ removeSessionState sid st = atomically $ do
   modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
 
 createBinjaOutbox :: WS.Connection
+                  -> ConnId
                   -> SessionState
                   -> ClientId
                   -> HostBinaryPath
                   -> IO ThreadId
-createBinjaOutbox conn ss cid hpath = do
+createBinjaOutbox conn connId ss cid hpath = do
   q <- newTQueueIO
   t <- forkIO . forever $ do
     msg <- atomically . readTQueue $ q
     sendJSON conn . BinjaMessage cid hpath $ msg
   atomically . modifyTVar (ss ^. #binjaOutboxes)
-    $ HashMap.insert t q
+    $ HashMap.insert connId (t, q)
   return t
 
 sendToBinja :: ServerToBinja -> EventLoop ()
 sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
-  qs <- fmap HashMap.elems . readTVar $ ctx ^. #binjaOutboxes
+  qs <- fmap (fmap snd . HashMap.elems) . readTVar $ ctx ^. #binjaOutboxes
   mapM_ (`writeTQueue` msg) qs
 
 -- | Websocket message handler for binja.
@@ -116,8 +117,8 @@ sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
 -- localOutboxThreads is needed to store if an outbox thread has already been
 -- started for this particular binja conn, since there might already be an outbox
 -- to a different binja.
-binjaApp :: HashMap SessionId ThreadId -> AppState -> WS.Connection -> IO ()
-binjaApp localOutboxThreads st conn = do
+binjaApp :: HashMap SessionId ThreadId -> AppState -> ConnId -> WS.Connection -> IO ()
+binjaApp localOutboxThreads st connId conn = do
   er <- receiveJSON conn :: IO (Either Text (BinjaMessage BinjaToServer))
   -- putText $ "got binja message: " <> show er
   case er of
@@ -132,20 +133,21 @@ binjaApp localOutboxThreads st conn = do
             reply . SBLogInfo $ txt
             putText txt
       ss <- getSessionState sid st
+      atomically $ addSessionConn sid connId st
       let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
                       . BinjaEvent
                       $ x ^. #action
       -- check to see if this conn has registered outbox thread
       case HashMap.member sid localOutboxThreads of
         False -> do
-          outboxThread <- createBinjaOutbox conn ss cid hpath
+          outboxThread <- createBinjaOutbox conn connId ss cid hpath
           pushEvent
           logInfo' $ "Blaze Connected. Attached to existing session for binary: " <> show hpath
           -- logInfo "For web plugin, go here:"
           -- logInfo $ webUri (st ^. #serverConfig) sid
-          binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
+          binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st connId conn
         True -> do
-          pushEvent >> binjaApp localOutboxThreads st conn
+          pushEvent >> binjaApp localOutboxThreads st connId conn
 
 spawnEventHandler :: ClientId -> AppState -> SessionState -> IO ()
 spawnEventHandler cid st ss = do
@@ -180,12 +182,13 @@ app st pconn = case splitPath of
   where
     path = WS.requestPath $ WS.pendingRequest pconn
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
-    runBinjaApp conn = catch (binjaApp HashMap.empty st conn) catchConnectionException
-    catchConnectionException :: WS.ConnectionException -> IO ()
-    catchConnectionException e = do
-      putText "------------Catch ConnectionException---------"
-      -- TODO: clean-up SessionState
+    runBinjaApp conn = do
+      connId <- newConnId
+      catch (binjaApp HashMap.empty st connId conn) (catchConnectionException connId)
+    catchConnectionException :: ConnId -> WS.ConnectionException -> IO ()
+    catchConnectionException connId e = do
       print e
+      cleanupClosedConn connId st
 
 run :: AppState -> IO ()
 run st = do

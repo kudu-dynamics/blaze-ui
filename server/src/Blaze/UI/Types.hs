@@ -28,7 +28,6 @@ import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.Pretty (Token)
 import Blaze.Types.Cfg.Analysis (CallNodeRating, CallNodeRatingCtx)
 import Blaze.UI.Types.CachedCalc (CachedCalc)
-import qualified Network.WebSockets as WS
 import System.Random (Random)
 import qualified Data.HashSet as HashSet
 
@@ -174,7 +173,7 @@ data EventLoopCtx = EventLoopCtx
   { clientId :: ClientId
   , hostBinaryPath :: HostBinaryPath
   , binaryManager :: BinaryManager
-  , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
+  , binjaOutboxes :: TVar (HashMap ConnId (ThreadId, TQueue ServerToBinja))
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
   , dbConn :: TMVar Db.Conn
   , activePoi :: TVar (Maybe Poi)
@@ -225,7 +224,7 @@ data SessionState = SessionState
   { binaryPath :: HostBinaryPath
   , binaryManager :: BinaryManager
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
-  , binjaOutboxes :: TVar (HashMap ThreadId (TQueue ServerToBinja))
+  , binjaOutboxes :: TVar (HashMap ConnId (ThreadId, TQueue ServerToBinja))
   , eventHandlerThread :: TMVar ThreadId
   , eventInbox :: TQueue Event
   , dbConn :: TMVar Db.Conn
@@ -269,52 +268,72 @@ data AppState = AppState
 -- | Inserts a unique ConnId for a SessionId.
 -- SessionIds can have multiple active connections if a single user opens multiple
 -- copies of a BNDB.
-addSessionConn :: SessionId -> ConnId -> AppState -> IO ()
-addSessionConn sid cid st = atomically
-  $ readTVar tv
-  >>= writeTVar tv
-    . HashMap.alter (Just . f) sid
+addSessionConn :: SessionId -> ConnId -> AppState -> STM ()
+addSessionConn sid cid st =
+  readTVar tv >>= writeTVar tv . HashMap.alter (Just . f) sid
   where
     tv = st ^. #sessionConns
     f Nothing = HashSet.singleton cid
     f (Just s) = HashSet.insert cid s
 
 cleanupSessionState :: SessionState -> IO ()
-cleanupSessionState ss = return ()
+cleanupSessionState ss = do
+  (outboxThreads, mehandler) <- atomically $ do
+    outboxThreads <- fmap fst . HashMap.elems <$> readTVar (ss ^. #binjaOutboxes)
+    (outboxThreads ,) <$> tryReadTMVar (ss ^. #eventHandlerThread)
+  mapM_ killThread outboxThreads
+  maybe (return ()) killThread mehandler
+  return ()
+
+cleanupBinjaOutbox :: ConnId -> SessionState -> IO ()
+cleanupBinjaOutbox connId ss = do
+  mOutboxThread <- atomically $ do
+    m <- readTVar $ ss ^. #binjaOutboxes
+    return $ fst <$> HashMap.lookup connId m
+  maybe (return ()) killThread mOutboxThread
 
 -- | Removes ConnId from all sessions and frees up sessions with no active connections.
 cleanupClosedConn :: ConnId -> AppState -> IO ()
 cleanupClosedConn cid st = do
-  sstates <- atomically $ do
+  (sstates, affectedButNotAbandonedStates) <- atomically $ do
     sessConnsMap <- readTVar (st ^. #sessionConns)
-    let (abondonedSids, sessConnsMap') = removeConnsAndReturnAbandonedSessions sessConnsMap
+    let (abondonedSids, affectedButNotAbandonedSids, sessConnsMap')
+          = removeConnsAndReturnAbandonedSessions sessConnsMap
     writeTVar (st ^. #sessionConns) sessConnsMap'
     sstateMap <- readTVar (st ^. #binarySessions)
     let (abandonedSessionsStates, sstateMap') = removeSessionsAndReturnSessionStates abondonedSids sstateMap
+        affectedButNotAbandonedStates
+          = mapMaybe (`HashMap.lookup` sstateMap) affectedButNotAbandonedSids
     writeTVar (st ^. #binarySessions) sstateMap'
-    return abandonedSessionsStates
+    return (abandonedSessionsStates, affectedButNotAbandonedStates)
+  mapM_ (cleanupBinjaOutbox cid) affectedButNotAbandonedStates
+  putText $ "Removed " <> show (length affectedButNotAbandonedStates) <> " outboxes"
   mapM_ cleanupSessionState sstates
+  putText $ "Removed " <> show (length sstates) <> " abandoned session states"
   where
+    -- returns (abandoned sids, affected but not abandoned sids, m)
     removeConnsAndReturnAbandonedSessions
       :: HashMap SessionId (HashSet ConnId)
-      -> ([SessionId], HashMap SessionId (HashSet ConnId))
-    removeConnsAndReturnAbandonedSessions = HashMap.foldlWithKey' f ([], HashMap.empty) where
-      f :: ([SessionId], HashMap SessionId (HashSet ConnId))
+      -> ([SessionId], [SessionId], HashMap SessionId (HashSet ConnId))
+    removeConnsAndReturnAbandonedSessions = HashMap.foldlWithKey' f ([], [], HashMap.empty) where
+      f :: ([SessionId], [SessionId], HashMap SessionId (HashSet ConnId))
         -> SessionId
-        -> (HashSet ConnId)
-        -> ([SessionId], HashMap SessionId (HashSet ConnId))
-      f (sids, m) sid conns = let conns' = HashSet.delete cid conns in
-        if HashSet.null conns' then
-          (sid:sids, m)
-        else
-          (sids, HashMap.insert sid conns' m)
+        -> HashSet ConnId
+        -> ([SessionId], [SessionId], HashMap SessionId (HashSet ConnId))
+      f (abSids, affSids, m) sid conns
+        | HashSet.member cid conns = let conns' = HashSet.delete cid conns in
+            if HashSet.null conns' then
+              (sid:abSids, affSids, m)
+            else
+              (abSids, sid:affSids, HashMap.insert sid conns' m)
+        | otherwise = (abSids, affSids, m)
 
     removeSessionsAndReturnSessionStates
       :: [SessionId]
       -> HashMap SessionId SessionState
       -> ([SessionState], HashMap SessionId SessionState)
     removeSessionsAndReturnSessionStates sids m =
-      ( mapMaybe (flip HashMap.lookup m) sids
+      ( mapMaybe (`HashMap.lookup` m) sids
       , foldl' (flip HashMap.delete) HashMap.empty sids
       )
 
