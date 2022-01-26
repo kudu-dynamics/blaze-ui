@@ -8,7 +8,6 @@ import Blaze.UI.Prelude hiding ((:*:), Selector)
 import qualified Prelude as P
 import Blaze.UI.Types.Db as Exports hiding (cfg)
 import Database.Selda
-import Database.Selda.SQLite
 import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.Types.Cfg (PilCfg)
 import qualified Blaze.UI.Types.Cfg as Cfg
@@ -38,9 +37,6 @@ init blazeSqliteFilePath = do
     tryCreateTable snapshotBranchTable
     tryCreateTable poiTable
   return conn
-
-close :: Conn -> IO ()
-close (Conn conn) = seldaClose conn
 
 -- | Only called when creating a fresh CFG from a function
 saveNewCfgAndBranch :: MonadDb m

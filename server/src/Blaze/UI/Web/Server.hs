@@ -15,6 +15,7 @@ import qualified Blaze.UI.Types.CachedCalc as CC
 import qualified Blaze.Cfg.Analysis as CfgA
 import Blaze.Import.Source.BinaryNinja (BNImporter(BNImporter))
 import qualified Blaze.UI.Db.Poi.Global as GlobalPoi
+import Blaze.UI.Types.Poi (ServerToBinja(GlobalPoisOfBinary))
 
 import Data.List (lookup)
 import qualified Data.Text.Lazy
@@ -83,9 +84,12 @@ submitPoi st = do
   (binHash :: BinaryHash) <- requiredParam "binaryHash"
   (funcAddr :: Address) <- requiredParam "funcAddr"
   (instrOffset :: Bytes) <- requiredParam "instrOffset"
-  (name :: Maybe Text) <- optionalParam "name"
+  (poiName :: Maybe Text) <- optionalParam "name"
   (description :: Maybe Text) <- optionalParam "description"
-  liftIO $ GlobalPoi.saveNew binHash funcAddr instrOffset name description
+  pois <- liftIO . flip runReaderT st $ do
+    GlobalPoi.saveNew binHash funcAddr instrOffset poiName description
+    GlobalPoi.getPoisOfBinary binHash
+  liftIO . sendToAllWithBinary st binHash . SBPoi . GlobalPoisOfBinary $ pois
   return ()
 
 showErrorPage :: ActionM ()

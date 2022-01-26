@@ -23,7 +23,7 @@ import Database.Selda.Backend (SeldaConnection, runSeldaT)
 import Blaze.UI.Types.Db.Address ()
 
 
-newtype Conn = Conn (SeldaConnection SQLite)
+newtype Conn = Conn (TMVar (SeldaConnection SQLite))
 
 newtype Blob a = Blob a
   deriving (Eq, Ord, Show, Generic, Typeable)
@@ -69,10 +69,22 @@ snapshotBranchTable :: Table SnapshotBranch
 snapshotBranchTable = table "snapshotBranch" [#branchId :- primary]
 
 open :: FilePath -> IO Conn
-open dbPath = Conn <$> sqliteOpen dbPath
+open dbPath = do
+  c <- sqliteOpen dbPath
+  Conn <$> newTMVarIO c
+
+close :: Conn -> IO ()
+close = flip withConn seldaClose
+
+withConn :: MonadIO m => Conn -> (SeldaConnection SQLite-> m a) -> m a
+withConn (Conn tconn) f = do
+  conn <- liftIO . atomically $ takeTMVar tconn
+  r <- f conn
+  liftIO . atomically $ putTMVar tconn conn
+  return r
 
 runSelda :: (MonadMask m, MonadIO m) => Conn -> SeldaT SQLite m a -> m a
-runSelda (Conn conn) m = runSeldaT m conn
+runSelda conn m = withConn conn (runSeldaT m)
 
 class (MonadMask m, MonadIO m, Monad m) => MonadDb m where
   withDb :: SeldaT SQLite m a -> m a

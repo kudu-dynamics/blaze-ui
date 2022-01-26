@@ -177,7 +177,7 @@ data EventLoopCtx = EventLoopCtx
   , binaryManager :: BinaryManager
   , binjaOutboxes :: TVar (HashMap ConnId (ThreadId, TQueue ServerToBinja))
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
-  , dbConn :: TMVar Db.Conn
+  , dbConn :: Db.Conn
   , activePoi :: TVar (Maybe Poi)
   , callNodeRatingCtx :: CachedCalc BndbHash CallNodeRatingCtx
   } deriving (Generic)
@@ -203,11 +203,8 @@ newtype EventLoop a = EventLoop { _runEventLoop :: ReaderT EventLoopCtx (ExceptT
 
 instance MonadDb EventLoop where
   withDb m = do
-    tconn <- view #dbConn <$> ask
-    conn <- liftIO . atomically $ takeTMVar tconn
-    r <- Db.runSelda conn m
-    liftIO . atomically $ putTMVar tconn conn
-    return r
+    conn <- view #dbConn <$> ask
+    Db.runSelda conn m
 
 runEventLoop :: EventLoop a -> EventLoopCtx -> IO (Either EventLoopError a)
 runEventLoop m ctx = runExceptT . flip runReaderT ctx $ _runEventLoop m
@@ -230,7 +227,7 @@ data SessionState = SessionState
   , binjaOutboxes :: TVar (HashMap ConnId (ThreadId, TQueue ServerToBinja))
   , eventHandlerThread :: TMVar ThreadId
   , eventInbox :: TQueue Event
-  , dbConn :: TMVar Db.Conn
+  , dbConn :: Db.Conn
   , activePoi :: TVar (Maybe Poi)
   , callNodeRatingCtx :: CachedCalc BndbHash CallNodeRatingCtx
   } deriving (Generic)
@@ -239,7 +236,7 @@ emptySessionState
   :: HostBinaryPath
   -> BinaryHash
   -> BinaryManager
-  -> TMVar Db.Conn
+  -> Db.Conn
   -> CachedCalc BndbHash CallNodeRatingCtx
   -> STM SessionState
 emptySessionState binPath binHash bm tconn ccCallRating
@@ -265,9 +262,14 @@ data AppState = AppState
   { serverConfig :: ServerConfig
   , binarySessions :: TVar (HashMap SessionId SessionState)
   , sessionConns :: TVar (HashMap SessionId (HashSet ConnId))
-  , dbConn :: TMVar Db.Conn
+  , dbConn :: Db.Conn
   } deriving (Generic)
 
+instance MonadDb (ReaderT AppState IO) where
+  withDb m = do
+    conn <- view #dbConn <$> ask
+    Db.runSelda conn m
+  
 -- | Inserts a unique ConnId for a SessionId.
 -- SessionIds can have multiple active connections if a single user opens multiple
 -- copies of a BNDB.
@@ -344,7 +346,7 @@ initAppState :: ServerConfig -> Db.Conn -> IO AppState
 initAppState cfg' conn = AppState cfg'
   <$> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
-  <*> newTMVarIO conn
+  <*> pure conn
 
 lookupSessionState :: SessionId -> AppState -> STM (Maybe SessionState)
 lookupSessionState sid st = do
