@@ -16,6 +16,16 @@ import Control.Concurrent.STM.TMVar as Exports
 import Data.String.Conversions as Exports (ConvertibleStrings)
 import Data.Aeson as Exports (ToJSONKey, FromJSONKey)
 import Control.Monad.Extra as Exports (whenJust)
+import Web.Scotty (Parsable(parseParam))
+
 
 writeManyTQueue :: TQueue a -> [a] -> STM ()
 writeManyTQueue q = mapM_ $ writeTQueue q
+
+instance Parsable Bytes where
+  parseParam s = case readMaybe (cs s) of
+    Nothing -> Left $ "Not a number: " <> s
+    Just n -> Right $ Bytes n
+
+instance Parsable Address where
+  parseParam s = Address <$> parseParam s

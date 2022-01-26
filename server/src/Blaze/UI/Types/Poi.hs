@@ -14,8 +14,8 @@ import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import Blaze.UI.Types.Db.Address ()
 import Blaze.UI.Types.Cfg (CfgId)
-import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
+import Blaze.UI.Types.Db.Bytes ()
 
 newtype PoiId = PoiId UUID
   deriving (Eq, Ord, Show, Generic)
@@ -75,13 +75,26 @@ data Poi = Poi
 poiTable :: Table Poi
 poiTable = table "poi" [#poiId :- primary]
 
+newtype GlobalPoiId = GlobalPoiId UUID
+  deriving (Eq, Ord, Show, Generic)
+  deriving newtype (Random)
+  deriving anyclass (Hashable, ToJSON, FromJSON)
+
+instance SqlType GlobalPoiId where
+   mkLit (GlobalPoiId x) = LCustom TBlob $ Sql.mkLit x
+   sqlType _ = TBlob
+   fromSql x = GlobalPoiId $ Sql.fromSql x
+   defaultValue = LCustom TBlob (Sql.defaultValue :: Lit UUID)
 
 data GlobalPoi = GlobalPoi
-  { poiId :: PoiId
+  { globalPoiId :: GlobalPoiId
   , binaryHash :: BinaryHash
   , created :: UTCTime
   , funcAddr :: Address
-  , instrAddr :: Address
+  , instrOffset :: Bytes
   , name :: Maybe Text
   , description :: Maybe Text
   } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, SqlRow)
+
+globalPoiTable :: Table GlobalPoi
+globalPoiTable = table "global_poi" [#globalPoiId :- primary]

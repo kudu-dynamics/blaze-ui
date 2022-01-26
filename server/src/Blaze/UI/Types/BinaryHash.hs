@@ -10,6 +10,7 @@ import qualified Database.Selda.SqlType as Sql
 import qualified Crypto.Hash.MD5 as MD5
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base16 as B16
+import Web.Scotty (Parsable(parseParam))
 
 
 newtype BinaryHash = BinaryHash Text
@@ -21,6 +22,9 @@ instance SqlType BinaryHash where
    sqlType _ = TText
    fromSql x = BinaryHash $ Sql.fromSql x
    defaultValue = LCustom TText (Sql.defaultValue :: Lit Text)
+
+instance Parsable BinaryHash where
+  parseParam = Right . BinaryHash . cs
 
 -- TODO: crashes if file does not exist
 fromFile :: MonadIO m => FilePath -> m BinaryHash

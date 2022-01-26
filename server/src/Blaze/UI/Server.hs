@@ -33,6 +33,7 @@ import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, Branch, BranchTree, SnapshotType)
 import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.BndbHash (BndbHash)
+import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Blaze.UI.Db as Db
 import Blaze.UI.Types.Cfg (CfgId, convertPilCfg)
 import qualified Blaze.UI.BinaryManager as BM
@@ -49,7 +50,8 @@ import qualified Blaze.UI.Types.CachedCalc as CC
 import qualified Blaze.Pil.Parse as Parse
 import qualified Blaze.Types.Pil as Pil
 import Blaze.Types.Pil (Stmt)
-import qualified Blaze.Cfg.Solver.General as GSolver
+import qualified Blaze.Cfg.Solver.BranchContext as GSolver
+
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -67,9 +69,10 @@ data SessionError
 
 -- | returns session state or creates it.
 getSessionState :: SessionId
+                -> BinaryHash
                 -> AppState
                 -> IO SessionState
-getSessionState sid st = do
+getSessionState sid binHash st = do
   (ss, justCreated) <- atomically $ do
     m <- readTVar $ st ^. #binarySessions
     case HashMap.lookup sid m of
@@ -80,7 +83,7 @@ getSessionState sid st = do
           (sid ^. #clientId)
           (sid ^. #hostBinaryPath)
         ccCallNodeRating <- CC.create
-        ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
+        ss <- emptySessionState (sid ^. #hostBinaryPath) binHash bm (st ^. #dbConn) ccCallNodeRating
         modifyTVar (st ^. #binarySessions)
           $ HashMap.insert sid ss
         return (ss, True)
@@ -92,22 +95,23 @@ removeSessionState sid st = atomically $ do
   modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
 
 createBinjaOutbox :: WS.Connection
+                  -> ConnId
                   -> SessionState
                   -> ClientId
                   -> HostBinaryPath
                   -> IO ThreadId
-createBinjaOutbox conn ss cid hpath = do
+createBinjaOutbox conn connId ss cid hpath = do
   q <- newTQueueIO
   t <- forkIO . forever $ do
     msg <- atomically . readTQueue $ q
-    sendJSON conn . BinjaMessage cid hpath $ msg
+    sendJSON conn . BinjaMessage cid hpath (ss ^. #binaryHash) $ msg
   atomically . modifyTVar (ss ^. #binjaOutboxes)
-    $ HashMap.insert t q
+    $ HashMap.insert connId (t, q)
   return t
 
 sendToBinja :: ServerToBinja -> EventLoop ()
 sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
-  qs <- fmap HashMap.elems . readTVar $ ctx ^. #binjaOutboxes
+  qs <- fmap (fmap snd . HashMap.elems) . readTVar $ ctx ^. #binjaOutboxes
   mapM_ (`writeTQueue` msg) qs
 
 -- | Websocket message handler for binja.
@@ -115,8 +119,8 @@ sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
 -- localOutboxThreads is needed to store if an outbox thread has already been
 -- started for this particular binja conn, since there might already be an outbox
 -- to a different binja.
-binjaApp :: HashMap SessionId ThreadId -> AppState -> WS.Connection -> IO ()
-binjaApp localOutboxThreads st conn = do
+binjaApp :: HashMap SessionId ThreadId -> AppState -> ConnId -> WS.Connection -> IO ()
+binjaApp localOutboxThreads st connId conn = do
   er <- receiveJSON conn :: IO (Either Text (BinjaMessage BinjaToServer))
   -- putText $ "got binja message: " <> show er
   case er of
@@ -125,26 +129,28 @@ binjaApp localOutboxThreads st conn = do
     Right x -> do
       let cid = x ^. #clientId
           hpath = x ^. #hostBinaryPath
+          binHash = x ^. #binaryHash
           sid = mkSessionId cid hpath
-          reply = sendJSON conn . BinjaMessage cid hpath
+          reply = sendJSON conn . BinjaMessage cid hpath binHash
           logInfo' txt = do
             reply . SBLogInfo $ txt
             putText txt
-      ss <- getSessionState sid st
+      ss <- getSessionState sid binHash st
+      atomically $ addSessionConn sid connId st
       let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
                       . BinjaEvent
                       $ x ^. #action
       -- check to see if this conn has registered outbox thread
       case HashMap.member sid localOutboxThreads of
         False -> do
-          outboxThread <- createBinjaOutbox conn ss cid hpath
+          outboxThread <- createBinjaOutbox conn connId ss cid hpath
           pushEvent
           logInfo' $ "Blaze Connected. Attached to existing session for binary: " <> show hpath
           -- logInfo "For web plugin, go here:"
           -- logInfo $ webUri (st ^. #serverConfig) sid
-          binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st conn
+          binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st connId conn
         True -> do
-          pushEvent >> binjaApp localOutboxThreads st conn
+          pushEvent >> binjaApp localOutboxThreads st connId conn
 
 spawnEventHandler :: ClientId -> AppState -> SessionState -> IO ()
 spawnEventHandler cid st ss = do
@@ -165,7 +171,6 @@ spawnEventHandler cid st ss = do
                   (ss ^. #activePoi)
                   (ss ^. #callNodeRatingCtx)
 
-        -- TOOD: maybe should save these threadIds to kill later or limit?
         void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx
 
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
@@ -173,13 +178,32 @@ spawnEventHandler cid st ss = do
 
 app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case splitPath of
-  ["binja"] -> WS.acceptRequest pconn >>= binjaApp HashMap.empty st
+  ["binja"] -> WS.acceptRequest pconn >>= runBinjaApp
   _ -> do
     putText $ "Rejected request to invalid path: " <> cs path
     WS.rejectRequest pconn $ "Invalid path: " <> path
   where
     path = WS.requestPath $ WS.pendingRequest pconn
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
+    runBinjaApp conn = do
+      connId <- newConnId
+      catch (binjaApp HashMap.empty st connId conn) (catchConnectionException connId)
+    catchConnectionException :: ConnId -> WS.ConnectionException -> IO ()
+    catchConnectionException connId e = do
+      print e
+      cleanupClosedConn connId st
+
+sendToAllWithBinary :: AppState -> BinaryHash -> ServerToBinja -> IO ()
+sendToAllWithBinary st bh msg = do
+  sss <- fmap HashMap.elems . atomically . readTVar $ st ^. #binarySessions
+  mapM_ addToOutboxesIfBinMatches sss
+  where
+    addToOutboxesIfBinMatches ss
+      | ss ^. #binaryHash == bh = atomically $ do
+          outs <- fmap (fmap snd . HashMap.elems) . readTVar $ ss ^. #binjaOutboxes
+          mapM_ (`writeTQueue` msg) outs
+      | otherwise = return ()
+      
 
 run :: AppState -> IO ()
 run st = do

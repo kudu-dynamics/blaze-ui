@@ -542,6 +542,36 @@ class BlazeNotificationListener(UIContextNotification):
         del self.blaze_plugin._instance_by_bv[bv]
         self.blaze_plugin._instances_by_key[bv_key(bv)].discard(instance)
 
+    def OnBeforeSaveFile(self, context: UIContext, file: FileContext, frame: ViewFrame) -> bool:
+        bv = frame.getCurrentViewInterface().getData()
+
+        old_key = bv_key(file.getFilename())
+        new_key = bv_key(bv)
+
+        log.debug(
+            'BinaryView for %r saved (new filename %r)',
+            old_key,
+            new_key,
+            extra={
+                'bv': bv,
+                'old_key': old_key,
+                'new_key': new_key,
+            })
+
+        instance = self.blaze_plugin._instance_by_bv[bv]
+
+        if old_key != new_key:
+            s = self.blaze_plugin._instances_by_key[old_key]
+            s.remove(instance)
+            if not s:
+                del self.blaze_plugin._instances_by_key[old_key]
+
+            self.blaze_plugin._instances_by_key[new_key].add(instance)
+
+            instance.bndbHash = None
+
+        return True
+
 
 blaze = BlazePlugin()
 BlazeNotificationListener.instance = BlazeNotificationListener(blaze)
@@ -593,6 +623,7 @@ def mark_poi(bv: BinaryView, addr: int):
         blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
     else:
         log.warn(r'No function containing address: 0x%x', addr)
+
 
 @register_for_function(Action.TYPE_CHECK_FUNCTION, 'Type Check Function')
 def type_check_function(bv: BinaryView, func: binaryninja.Function):
