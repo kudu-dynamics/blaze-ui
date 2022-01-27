@@ -174,6 +174,7 @@ newtype Event = BinjaEvent BinjaToServer
 data EventLoopCtx = EventLoopCtx
   { clientId :: ClientId
   , hostBinaryPath :: HostBinaryPath
+  , binaryHash :: BinaryHash
   , binaryManager :: BinaryManager
   , binjaOutboxes :: TVar (HashMap ConnId (ThreadId, TQueue ServerToBinja))
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))

@@ -44,6 +44,7 @@ import Blaze.UI.Types.Session ( SessionId
                               )
 import Blaze.Function (Function)
 import qualified Blaze.UI.Db.Poi as PoiDb
+import qualified Blaze.UI.Db.Poi.Global as GlobalPoiDb
 import qualified Blaze.UI.Types.Poi as Poi
 import Blaze.Types.Cfg.Analysis (Target(Target))
 import qualified Blaze.UI.Types.CachedCalc as CC
@@ -164,6 +165,7 @@ spawnEventHandler cid st ss = do
         let ctx = EventLoopCtx
                   cid
                   (ss ^. #binaryPath)
+                  (ss ^. #binaryHash)
                   (ss ^. #binaryManager)
                   (ss ^. #binjaOutboxes)
                   (ss ^. #cfgs)
@@ -195,7 +197,7 @@ app st pconn = case splitPath of
 
 sendToAllWithBinary :: AppState -> BinaryHash -> ServerToBinja -> IO ()
 sendToAllWithBinary st bh msg = do
-  sss <- fmap HashMap.elems . atomically . readTVar $ st ^. #binarySessions
+  sss <- fmap HashMap.elems . readTVarIO $ st ^. #binarySessions
   mapM_ addToOutboxesIfBinMatches sss
   where
     addToOutboxesIfBinMatches ss
@@ -334,6 +336,16 @@ sendLatestPois = do
     . SBPoi
     . Poi.PoisOfBinary
     $ pois
+
+-- | Sends global POIs to single session.
+sendGlobalPois :: EventLoop ()
+sendGlobalPois = do
+  ctx <- ask
+  gpois <- GlobalPoiDb.getPoisOfBinary (ctx ^. #binaryHash)
+  sendToBinja
+    . SBPoi
+    . Poi.GlobalPoisOfBinary
+    $ gpois
 
 simplify :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
 simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
@@ -639,8 +651,9 @@ handleBinjaEvent = \case
       sendLatestSnapshots
 
   BSPoi poiMsg' -> case poiMsg' of
-    Poi.GetPoisOfBinary ogBinHash -> do
+    Poi.GetPoisOfBinary -> do
       sendLatestPois
+      sendGlobalPois
 
     Poi.AddPoi funcAddr instrAddr poiName poiDescription -> do
       ctx <- ask

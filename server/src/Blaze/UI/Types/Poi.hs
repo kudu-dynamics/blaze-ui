@@ -35,7 +35,7 @@ data ServerToBinja
   deriving anyclass (ToJSON, FromJSON)
 
 data BinjaToServer
-  = GetPoisOfBinary { originalBinaryHash :: BinaryHash }
+  = GetPoisOfBinary
   
   | AddPoi { funcAddr :: Address
            , instrAddr :: Address

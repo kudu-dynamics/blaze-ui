@@ -20,7 +20,7 @@ instance SqlType Bytes where
 
    fromSql (SqlString s) = case readMaybe (cs s) of
      Nothing -> P.error $ "Cannot convert " <> cs s <> " to Bytes"
-     Just n -> Bytes $ n
+     Just n -> Bytes n
    fromSql x = P.error $ "Unexpected sql field type: " <> show x
 
    defaultValue = LCustom TText (LText "")
