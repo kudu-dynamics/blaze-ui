@@ -30,7 +30,7 @@ instance SqlType PoiId where
 
 data ServerToBinja
   = PoisOfBinary { pois :: [Poi] }
-  | GlobalPoisOfBinary { globalPois :: [GlobalPoi] }
+  | GlobalPoisOfBinary { globalPois :: [Poi] }
   deriving (Eq, Ord, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -64,38 +64,40 @@ data BinjaToServer
 
 data Poi = Poi
   { poiId :: PoiId
-  , clientId :: ClientId
-  , hostBinaryPath :: HostBinaryPath
+  , clientId :: Maybe ClientId
+  , hostBinaryPath :: Maybe HostBinaryPath
+  , binaryHash :: BinaryHash
   , created :: UTCTime
   , funcAddr :: Address
   , instrAddr :: Address
   , name :: Maybe Text
   , description :: Maybe Text
+  , isGlobalPoi :: Bool
   } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, SqlRow)
 
 poiTable :: Table Poi
 poiTable = table "poi" [#poiId :- primary]
 
-newtype GlobalPoiId = GlobalPoiId UUID
-  deriving (Eq, Ord, Show, Generic)
-  deriving newtype (Random)
-  deriving anyclass (Hashable, ToJSON, FromJSON)
+-- newtype GlobalPoiId = GlobalPoiId UUID
+--   deriving (Eq, Ord, Show, Generic)
+--   deriving newtype (Random)
+--   deriving anyclass (Hashable, ToJSON, FromJSON)
 
-instance SqlType GlobalPoiId where
-   mkLit (GlobalPoiId x) = LCustom TBlob $ Sql.mkLit x
-   sqlType _ = TBlob
-   fromSql x = GlobalPoiId $ Sql.fromSql x
-   defaultValue = LCustom TBlob (Sql.defaultValue :: Lit UUID)
+-- instance SqlType GlobalPoiId where
+--    mkLit (GlobalPoiId x) = LCustom TBlob $ Sql.mkLit x
+--    sqlType _ = TBlob
+--    fromSql x = GlobalPoiId $ Sql.fromSql x
+--    defaultValue = LCustom TBlob (Sql.defaultValue :: Lit UUID)
 
-data GlobalPoi = GlobalPoi
-  { globalPoiId :: GlobalPoiId
-  , binaryHash :: BinaryHash
-  , created :: UTCTime
-  , funcAddr :: Address
-  , instrOffset :: Bytes
-  , name :: Maybe Text
-  , description :: Maybe Text
-  } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, SqlRow)
+-- data GlobalPoi = GlobalPoi
+--   { globalPoiId :: GlobalPoiId
+--   , binaryHash :: BinaryHash
+--   , created :: UTCTime
+--   , funcAddr :: Address
+--   , instrOffset :: Bytes
+--   , name :: Maybe Text
+--   , description :: Maybe Text
+--   } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, SqlRow)
 
-globalPoiTable :: Table GlobalPoi
-globalPoiTable = table "global_poi" [#globalPoiId :- primary]
+-- globalPoiTable :: Table GlobalPoi
+-- globalPoiTable = table "global_poi" [#globalPoiId :- primary]

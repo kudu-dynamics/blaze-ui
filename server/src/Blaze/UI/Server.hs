@@ -328,8 +328,8 @@ sendLatestBinarySnapshots = do
 sendLatestSnapshots :: EventLoop ()
 sendLatestSnapshots = sendLatestBinarySnapshots
 
-sendLatestPois :: EventLoop ()
-sendLatestPois = do
+sendLatestSessionPois :: EventLoop ()
+sendLatestSessionPois = do
   ctx <- ask
   pois <- PoiDb.getPoisOfBinary (ctx ^. #clientId) (ctx ^. #hostBinaryPath)
   sendToBinja
@@ -346,6 +346,12 @@ sendGlobalPois = do
     . SBPoi
     . Poi.GlobalPoisOfBinary
     $ gpois
+
+-- | Sends global POIs to every session with that binary
+broadcastGlobalPois :: AppState -> BinaryHash -> IO ()
+broadcastGlobalPois st binHash = do
+  pois <- flip runReaderT st $ GlobalPoiDb.getPoisOfBinary binHash
+  sendToAllWithBinary st binHash . SBPoi . Poi.GlobalPoisOfBinary $ pois
 
 simplify :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
 simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
@@ -652,7 +658,7 @@ handleBinjaEvent = \case
 
   BSPoi poiMsg' -> case poiMsg' of
     Poi.GetPoisOfBinary -> do
-      sendLatestPois
+      sendLatestSessionPois
       sendGlobalPois
 
     Poi.AddPoi funcAddr instrAddr poiName poiDescription -> do
@@ -664,19 +670,19 @@ handleBinjaEvent = \case
         instrAddr
         poiName
         poiDescription
-      sendLatestPois
+      sendLatestSessionPois
 
     Poi.DeletePoi pid -> do
       PoiDb.delete pid
-      sendLatestPois
+      sendLatestSessionPois
 
     Poi.RenamePoi pid poiName -> do
       PoiDb.setName pid poiName
-      sendLatestPois
+      sendLatestSessionPois
 
     Poi.DescribePoi pid poiDescription -> do
       PoiDb.setName pid poiDescription
-      sendLatestPois
+      sendLatestSessionPois
 
     Poi.ActivatePoiSearch pid mcid -> PoiDb.getPoi pid >>= \case
       Nothing -> logError $ "Cannot find POI in database: " <> show pid
