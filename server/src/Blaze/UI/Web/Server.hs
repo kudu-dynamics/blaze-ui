@@ -21,6 +21,7 @@ import Web.Scotty (ActionM, File, ScottyM, files, get, json, post, scotty, setHe
 import Web.Scotty.Trans (ActionT, Parsable (parseParam), ScottyError (stringError), html, params, raiseStatus)
 import Network.HTTP.Types (badRequest400)
 
+
 server :: AppState -> ScottyM ()
 server st = do
   get "/" showErrorPage
@@ -60,7 +61,6 @@ uploadBinary st = do
             r <- CfgA.getCallNodeRatingCtx $ BNImporter bv
             putText "Calculated CallNodeRatingCtx."
             return r
-
       json h
       putText $ "New bndb uploaded: "
         <> HBP.toText hostBinaryPath'
