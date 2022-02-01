@@ -66,7 +66,7 @@ data SessionError
   | BinaryManagerError BM.BinaryManagerError
   deriving (Eq, Ord, Show, Generic)
 
--- | returns session state or creates it.
+-- | Returns an existing SessionState or creates it.
 getSessionState :: SessionId
                 -> AppState
                 -> IO SessionState
@@ -81,17 +81,14 @@ getSessionState sid st = do
           (sid ^. #clientId)
           (sid ^. #hostBinaryPath)
         ccCallNodeRating <- CC.create
-        ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
+        ss <- emptySessionState (sid ^. #clientId) (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
         modifyTVar (st ^. #binarySessions)
           $ HashMap.insert sid ss
         return (ss, True)
-  when justCreated $ spawnEventHandler (sid ^. #clientId) st ss
+  when justCreated $ spawnEventHandler ss
   return ss
 
-removeSessionState :: SessionId -> AppState -> IO ()
-removeSessionState sid st = atomically $ do
-  modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
-
+-- | Each ConnId gets its own outbox TQueue and 
 createBinjaOutbox :: WS.Connection
                   -> ConnId
                   -> SessionState
@@ -149,8 +146,8 @@ binjaApp localOutboxThreads st connId conn = do
         True -> do
           pushEvent >> binjaApp localOutboxThreads st connId conn
 
-spawnEventHandler :: ClientId -> AppState -> SessionState -> IO ()
-spawnEventHandler cid st ss = do
+spawnEventHandler :: SessionState -> IO ()
+spawnEventHandler ss = do
   b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
   case b of
     False -> putText "Warning: spawnEventHandler -- event handler already spawned"
@@ -158,17 +155,12 @@ spawnEventHandler cid st ss = do
       -- spawns event handler workers for new messages
       eventTid <- forkIO . forever $ do
         msg <- atomically . readTQueue $ ss ^. #eventInbox
-        let ctx = EventLoopCtx
-                  cid
-                  (ss ^. #binaryPath)
-                  (ss ^. #binaryManager)
-                  (ss ^. #binjaOutboxes)
-                  (ss ^. #cfgs)
-                  (st ^. #dbConn)
-                  (ss ^. #activePoi)
-                  (ss ^. #callNodeRatingCtx)
 
-        void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx
+        void . forkIO $ do
+          tid <- myThreadId
+          atomically $ addWorkerThread tid ss
+          void $ runEventLoop (mainEventLoop msg) ss
+          atomically $ removeCompletedWorkerThread tid ss
 
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
       putText "Spawned event handlers"
