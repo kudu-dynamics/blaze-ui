@@ -67,30 +67,6 @@ def fix_flowgraph_edge(edge: FlowGraphEdge, swapped: bool) -> FlowGraphEdge:
 
     return new_edge
 
-    # del edge
-
-    # # XXX due to a bug in binaryninjaui, we can't trust all the fields of
-    # # `getEdgeForMouseEvent(e)[0]`, so find the original edge and return that instead
-    # for new_edge in cast(Iterable[FlowGraphEdge], source.outgoing_edges):
-    #     if new_edge.target == target:
-
-    #         # XXX a similar bug requires this fixup: edge.style.style is
-    #         # assigned the binaryninjacore `BNEdgeStyle` struct, so we need to
-    #         # translate it to the python API types. This bug might get fixed in
-    #         # the near future, in which case this will hopefully be dead code
-    #         if isinstance(new_edge.style.style, binaryninja.core.BNEdgeStyle):
-    #             core_style = new_edge.style.style
-    #             new_edge = copy.copy(new_edge)
-    #             new_edge.style = EdgeStyle(
-    #                 style=EdgePenStyle(core_style.style),
-    #                 width=core_style.width,
-    #                 theme_color=ThemeColor(core_style.color),
-    #             )
-
-    #         return new_edge
-
-    # raise RuntimeError('Couldn\'t find `edge` among `edge.source.outgoing_edges`')
-
 
 def try_log(
         log: _logging.Logger, level: int, error_level: int, msg: str, *args: Any,
