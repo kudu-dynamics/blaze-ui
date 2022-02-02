@@ -117,7 +117,6 @@ sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
 binjaApp :: HashMap SessionId ThreadId -> AppState -> ConnId -> WS.Connection -> IO ()
 binjaApp localOutboxThreads st connId conn = do
   er <- receiveJSON conn :: IO (Either Text (BinjaMessage BinjaToServer))
-  -- putText $ "got binja message: " <> show er
   case er of
     Left err -> do
       putText $ "Error parsing JSON: " <> show err
@@ -240,6 +239,8 @@ sendCfgAndSnapshots bhash pcfg cid newCid = do
   sendCfgWithCallRatings bhash pcfg $ fromMaybe cid newCid
   sendLatestClientSnapshots
 
+-- | Sends the old ICFG with the nodes and edges that will be removed.
+-- This allows a user to confirm or deny changes
 sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
 sendDiffCfg bhash cid old new = do
   CfgUI.addCfg cid new
@@ -259,6 +260,7 @@ sendDiffCfg bhash cid old new = do
                     . HashSet.toList
                     $ CfgUI.getRemovedEdges old new
 
+-- | Stores the Cfg to the cache and database.
 setCfg :: CfgId -> PilCfg -> EventLoop ()
 setCfg cid pcfg = do
   CfgUI.addCfg cid pcfg
@@ -279,6 +281,7 @@ getStoredCfg cid = Db.getCfg cid >>= \case
       CfgUI.addCfg cid pcfg
       return pcfg
 
+-- | Sends all ICFG snapshots for a particular ClientId to client. 
 sendLatestClientSnapshots :: EventLoop ()
 sendLatestClientSnapshots = do
   ctx <- ask
@@ -289,6 +292,8 @@ sendLatestClientSnapshots = do
     . fmap (over _2 (fmap (over _2 Snapshot.toTransport)))
     $ branches
 
+
+-- | Sends all ICFG snapshots for a particular HostBinaryPath and ClientId to client. 
 sendLatestBinarySnapshots :: EventLoop ()
 sendLatestBinarySnapshots = do
   ctx <- ask
@@ -303,6 +308,7 @@ sendLatestBinarySnapshots = do
 sendLatestSnapshots :: EventLoop ()
 sendLatestSnapshots = sendLatestBinarySnapshots
 
+-- | Sends all POIs for a binary to client.
 sendLatestPois :: EventLoop ()
 sendLatestPois = do
   ctx <- ask
@@ -312,6 +318,11 @@ sendLatestPois = do
     . Poi.PoisOfBinary
     $ pois
 
+-- | Simplifies the CFG by autopruning impossible edges and various passes on
+-- the PIL statements, like copy propagation and phi var reduction.
+-- It first tries the BranchContext pruner; if this fails, which happens
+-- often due to type inference errors, it calls a non-SMT simplify which uses
+-- constant propagation and can only prune constraints with constants on either side.
 simplify :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
 simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
   Left err -> do
@@ -422,6 +433,9 @@ getPoiSearchResults bhash pcfg = do
                     $ CfgA.getNodesContainingAddress (tgt ^. #address) pcfg
       return . Just $ PoiSearchResults ratings' present
 
+-- | Handles messages incoming from the Binja client.
+-- In the future, and the past, this could handle events from other sources,
+-- such as a web browser.
 mainEventLoop :: Event -> EventLoop ()
 mainEventLoop (BinjaEvent msg) = handleBinjaEvent msg
 
