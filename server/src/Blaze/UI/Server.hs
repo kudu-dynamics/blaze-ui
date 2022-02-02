@@ -88,7 +88,7 @@ getSessionState sid st = do
   when justCreated $ spawnEventHandler ss
   return ss
 
--- | Each ConnId gets its own outbox TQueue and 
+-- | Each ConnId gets its own outbox TQueue and dedicated thread to send messages.
 createBinjaOutbox :: WS.Connection
                   -> ConnId
                   -> SessionState
