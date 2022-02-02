@@ -11,24 +11,17 @@
 -- Stability   :  experimental
 -- Portability :  
 --
+-- The Blaze UI server manages websocket connections from BinaryNinja Plugin clients
+-- and runs analysis using Blaze. There is also a webserver used to POST binary data
+-- and submit POIs.
 -- 
--- Software Transactional Memory: a modular composable concurrency
--- abstraction.  See
---
---  * /Composable memory transactions/, by Tim Harris, Simon Marlow, Simon
---    Peyton Jones, and Maurice Herlihy, in
---    /ACM Conference on Principles and Practice of Parallel Programming/ 2005.
---    <https://www.microsoft.com/en-us/research/publication/composable-memory-transactions/>
---
--- This module only defines the 'STM' monad; you probably want to
--- import "Control.Concurrent.STM" (which exports "Control.Monad.STM").
---
--- Note that invariant checking (namely the @always@ and @alwaysSucceeds@
--- functions) has been removed. See ticket [#14324](https://ghc.haskell.org/trac/ghc/ticket/14324) and
--- the [removal proposal](https://github.com/ghc-proposals/ghc-proposals/blob/master/proposals/0011-deprecate-stm-invariants.rst).
--- Existing users are encouraged to encapsulate their STM operations in safe
--- abstractions which can perform the invariant checking without help from the
--- runtime system.
+-- Each `SessionId` corresponds to a bndb path and clientId combo. There exists
+-- one `SessionState` for each `SessionId`.
+-- 
+-- A client can open multiple connections to the same bndb using multiple tabs or
+-- instances of BinaryNinja, but they will share the same `SessionState`
+-- and any actions performed in one window will affect the state, such as the
+-- ICFG view or POI list, of the Blaze plugin in any other windows.
 
 -----------------------------------------------------------------------------
 
