@@ -44,6 +44,9 @@ class BlazeSettings:
         ('blaze', 'Blaze'),
     ]
 
+    DEFAULT_HOST: str = 'localhost'
+    DEFAULT_CLIENT_ID: str = ''
+
     _settings_config: OrderedDict[Key, SettingMetadata] = OrderedDict(
         [
             (
@@ -52,7 +55,7 @@ class BlazeSettings:
                     title='Blaze Host',
                     description='Hostname of Blaze server',
                     type='string',
-                    default='localhost',
+                    default=DEFAULT_HOST,
                     optional=False,
                 )),
             (
@@ -95,7 +98,7 @@ class BlazeSettings:
                         'Blaze server. This ID is used to look up your snapshots, so changing it can '
                         'prevent you from accessing your existing snapshots'),
                     type='string',
-                    default='',
+                    default=DEFAULT_CLIENT_ID,
                     optional=False,
                 )),
         ])
@@ -114,7 +117,7 @@ class BlazeSettings:
 
     @property
     def host(self) -> str:
-        return self._s().get_string(self.Key.HOST)
+        return self._s().get_string(self.Key.HOST) or BlazeSettings.DEFAULT_HOST
 
     @host.setter
     def host(self, val: str) -> bool:
@@ -138,7 +141,7 @@ class BlazeSettings:
 
     @property
     def client_id(self) -> str:
-        return self._s().get_string(self.Key.CLIENT_ID)
+        return self._s().get_string(self.Key.CLIENT_ID) or BlazeSettings.DEFAULT_CLIENT_ID
 
     @client_id.setter
     def client_id(self, val: str) -> bool:

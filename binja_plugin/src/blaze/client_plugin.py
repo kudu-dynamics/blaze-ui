@@ -284,11 +284,12 @@ class BlazePlugin():
                 msg = f"This action will overwrite the existing analysis database {bndb_filename}. If you prefer to use your existing BNDB, please open it and try again.\n\nContinue with ICFG creation?"
             else:
                 msg = f"This action requires generation of an analysis database (BNDB).\n\nContinue with ICFG creation?"
-            to_save: Optional[MessageBoxButtonResult] = show_message_box(
+            # FIXME: Need to wrap the result of show_message_box until BN 3.x API is fixed.
+            to_save: Optional[MessageBoxButtonResult] = MessageBoxButtonResult(show_message_box(
                 "Blaze",
                 msg,
                 buttons=MessageBoxButtonSet.YesNoButtonSet,
-                icon=MessageBoxIcon.WarningIcon)
+                icon=MessageBoxIcon.WarningIcon))
 
             if to_save == MessageBoxButtonResult.NoButton:
                 log.error("failed to send analysis database because it is not yet saved")
