@@ -117,7 +117,9 @@ class BlazeSettings:
 
     @property
     def host(self) -> str:
-        return self._s().get_string(self.Key.HOST) or BlazeSettings.DEFAULT_HOST
+        s = self._s().get_string(self.Key.HOST)
+        assert isinstance(s, str)
+        return s
 
     @host.setter
     def host(self, val: str) -> bool:
@@ -141,7 +143,9 @@ class BlazeSettings:
 
     @property
     def client_id(self) -> str:
-        return self._s().get_string(self.Key.CLIENT_ID) or BlazeSettings.DEFAULT_CLIENT_ID
+        s = self._s().get_string(self.Key.CLIENT_ID) or BlazeSettings.DEFAULT_CLIENT_ID
+        assert isinstance(s, str)
+        return s
 
     @client_id.setter
     def client_id(self, val: str) -> bool:
