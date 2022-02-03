@@ -407,8 +407,7 @@ class ICFGFlowGraph(FlowGraph):
             if node['contents']['uuid'] in self.pending_changes.removed_nodes:
                 fg_node.highlight = HighlightStandardColor.RedHighlightColor
             elif self.poi_search_results and (node['contents']['uuid']
-                                              in self.poi_search_results.get('presentTargetNodes',
-                                                                             {})):
+                                              in self.poi_search_results['presentTargetNodes']):
                 fg_node.highlight = POI_PRESENT_TARGET_COLOR
             elif node['tag'] == 'Call':
                 call_node = cast(CallNode, node['contents'])
