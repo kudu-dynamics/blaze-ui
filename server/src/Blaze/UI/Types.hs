@@ -250,11 +250,11 @@ data SessionState = SessionState
 
 addWorkerThread :: ThreadId -> SessionState -> STM ()
 addWorkerThread tid ss
-  = updateTVar (ss ^. #eventHandlerWorkerThreads) $ HashSet.insert tid
+  = modifyTVar (ss ^. #eventHandlerWorkerThreads) $ HashSet.insert tid
 
 removeCompletedWorkerThread :: ThreadId -> SessionState -> STM ()
 removeCompletedWorkerThread tid ss
-  = updateTVar (ss ^. #eventHandlerWorkerThreads) $ HashSet.delete tid
+  = modifyTVar (ss ^. #eventHandlerWorkerThreads) $ HashSet.delete tid
 
 emptySessionState
   :: ClientId

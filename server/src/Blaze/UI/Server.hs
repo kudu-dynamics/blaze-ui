@@ -120,7 +120,7 @@ binjaApp st connId conn = do
             return True
           True -> return False
       when isNewConn $ do
-        atomically $ updateTVar (ss ^. #binjaConns) $ HashMap.insert connId conn
+        atomically $ modifyTVar (ss ^. #binjaConns) $ HashMap.insert connId conn
         logInfo' $ "Blaze Connected for binary: " <> show hpath
       pushEvent >> binjaApp st connId conn
 

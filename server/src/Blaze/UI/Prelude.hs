@@ -4,7 +4,6 @@
 
 module Blaze.UI.Prelude
   ( module Exports
-  , updateTVar
   , writeManyTQueue
   ) where
 
@@ -17,9 +16,6 @@ import Control.Concurrent.STM.TMVar as Exports
 import Data.String.Conversions as Exports (ConvertibleStrings)
 import Data.Aeson as Exports (ToJSONKey, FromJSONKey)
 import Control.Monad.Extra as Exports (whenJust)
-
-updateTVar :: TVar a -> (a -> a) -> STM ()
-updateTVar tv f = readTVar tv >>= writeTVar tv . f
 
 writeManyTQueue :: TQueue a -> [a] -> STM ()
 writeManyTQueue q = mapM_ $ writeTQueue q
