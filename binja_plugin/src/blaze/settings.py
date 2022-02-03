@@ -143,7 +143,7 @@ class BlazeSettings:
 
     @property
     def client_id(self) -> str:
-        s = self._s().get_string(self.Key.CLIENT_ID) or BlazeSettings.DEFAULT_CLIENT_ID
+        s = self._s().get_string(self.Key.CLIENT_ID)
         assert isinstance(s, str)
         return s
 
