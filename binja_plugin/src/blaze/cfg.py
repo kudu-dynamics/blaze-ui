@@ -136,7 +136,7 @@ def is_conditional_edge(edge: FlowGraphEdge) -> bool:
         return True
 
     if isinstance(edge.style, EdgeStyle):
-        color = edge.style.color
+        color: ThemeColor = edge.style.color
     else:
         raise RuntimeError(f'Bad type for edge: {type(edge)}')
 
