@@ -7,7 +7,7 @@ Add or modify the message actions that the plugin can take by changing the `Serv
 
 ## Known Requirements:
 
-`pip install websockets requests`
+`pip install websockets requests toml-cli build pkginfo`
 
 
 ## Installation
