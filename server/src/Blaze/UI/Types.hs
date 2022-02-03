@@ -229,7 +229,6 @@ forkEventLoop_ = void . forkEventLoop
 debug :: Text -> EventLoop ()
 debug =  putText
 
--- type BinjaOutboxes = HashMap ConnId (ThreadId, TQueue ServerToBinja)
 type BinjaConns = HashMap ConnId WS.Connection
 
 -- | Stores information needed for interaction with a single SessionId
@@ -302,21 +301,8 @@ addSessionConn sid cid st =
   where
     tv = st ^. #sessionConns
 
--- -- | Removes ConnId from the binja outboxes in SessionState.
--- -- Returns thread id of binja outbox, if it exists, and updated BinjaOutboxes map
--- -- Mutatively sets the new map in the SessionState
--- cleanupBinjaOutbox :: ConnId -> SessionState -> STM (Maybe ThreadId, BinjaOutboxes)
--- cleanupBinjaOutbox connId ss = do
---   binjaOutboxMap <- readTVar $ ss ^. #binjaOutboxes
---   case HashMap.lookup connId binjaOutboxMap of
---     Nothing -> return (Nothing, binjaOutboxMap)
---     Just (bthreadId, _) -> do
---       let binjaOutboxMap' = HashMap.delete connId binjaOutboxMap
---       writeTVar (ss ^. #binjaOutboxes) binjaOutboxMap'
---       return (Just bthreadId, binjaOutboxMap')
-
--- | Removes ConnId from the binja outboxes in SessionState.
--- Returns thread id of binja outbox, if it exists, and updated BinjaOutboxes map
+-- | Removes ConnId from the binja websocket conn map in SessionState.
+-- Returns updated BinjaConns map
 -- Mutatively sets the new map in the SessionState
 cleanupBinjaConn :: ConnId -> SessionState -> STM BinjaConns
 cleanupBinjaConn connId ss = do
