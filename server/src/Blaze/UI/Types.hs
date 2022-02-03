@@ -55,6 +55,7 @@ import Blaze.Pretty (Token)
 import Blaze.Types.Cfg.Analysis (CallNodeRating, CallNodeRatingCtx)
 import Blaze.UI.Types.CachedCalc (CachedCalc)
 import System.Random (Random)
+import qualified Network.WebSockets as WS
 
 -- | This meta message wraps every message between the server and BinaryNinja plugin.
 -- The `clientId` and `hostBinaryPath` are provided by the client.
@@ -228,7 +229,8 @@ forkEventLoop_ = void . forkEventLoop
 debug :: Text -> EventLoop ()
 debug =  putText
 
-type BinjaOutboxes = HashMap ConnId (ThreadId, TQueue ServerToBinja)
+-- type BinjaOutboxes = HashMap ConnId (ThreadId, TQueue ServerToBinja)
+type BinjaConns = HashMap ConnId WS.Connection
 
 -- | Stores information needed for interaction with a single SessionId
 -- This is cleaned and garbage-collected when all connections for this
@@ -238,7 +240,7 @@ data SessionState = SessionState
   , hostBinaryPath :: HostBinaryPath
   , binaryManager :: BinaryManager
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
-  , binjaOutboxes :: TVar BinjaOutboxes
+  , binjaConns :: TVar BinjaConns
   , eventHandlerThread :: TMVar ThreadId
   , eventHandlerWorkerThreads :: TVar (HashSet ThreadId)
   , eventInbox :: TQueue Event
@@ -300,18 +302,31 @@ addSessionConn sid cid st =
   where
     tv = st ^. #sessionConns
 
+-- -- | Removes ConnId from the binja outboxes in SessionState.
+-- -- Returns thread id of binja outbox, if it exists, and updated BinjaOutboxes map
+-- -- Mutatively sets the new map in the SessionState
+-- cleanupBinjaOutbox :: ConnId -> SessionState -> STM (Maybe ThreadId, BinjaOutboxes)
+-- cleanupBinjaOutbox connId ss = do
+--   binjaOutboxMap <- readTVar $ ss ^. #binjaOutboxes
+--   case HashMap.lookup connId binjaOutboxMap of
+--     Nothing -> return (Nothing, binjaOutboxMap)
+--     Just (bthreadId, _) -> do
+--       let binjaOutboxMap' = HashMap.delete connId binjaOutboxMap
+--       writeTVar (ss ^. #binjaOutboxes) binjaOutboxMap'
+--       return (Just bthreadId, binjaOutboxMap')
+
 -- | Removes ConnId from the binja outboxes in SessionState.
 -- Returns thread id of binja outbox, if it exists, and updated BinjaOutboxes map
 -- Mutatively sets the new map in the SessionState
-cleanupBinjaOutbox :: ConnId -> SessionState -> STM (Maybe ThreadId, BinjaOutboxes)
-cleanupBinjaOutbox connId ss = do
-  binjaOutboxMap <- readTVar $ ss ^. #binjaOutboxes
-  case HashMap.lookup connId binjaOutboxMap of
-    Nothing -> return (Nothing, binjaOutboxMap)
-    Just (bthreadId, _) -> do
-      let binjaOutboxMap' = HashMap.delete connId binjaOutboxMap
-      writeTVar (ss ^. #binjaOutboxes) binjaOutboxMap'
-      return (Just bthreadId, binjaOutboxMap')
+cleanupBinjaConn :: ConnId -> SessionState -> STM BinjaConns
+cleanupBinjaConn connId ss = do
+  binjaConnsMap <- readTVar $ ss ^. #binjaConns
+  case HashMap.member connId binjaConnsMap of
+    False -> return binjaConnsMap
+    True -> do
+      let binjaConnsMap' = HashMap.delete connId binjaConnsMap
+      writeTVar (ss ^. #binjaConns) binjaConnsMap'
+      return binjaConnsMap'
 
 -- | Removes ConnId from all sessions and frees up sessions with no active connections.
 cleanupClosedConn :: ConnId -> AppState -> IO ()
@@ -326,17 +341,15 @@ cleanupClosedConn cid st = do
         case HashMap.lookup sid binSessions of
           Nothing -> return []
           Just ss -> do
-            (mBinjaOutboxThread, binjaOutboxMap) <- cleanupBinjaOutbox cid ss
-            let bthreads = maybeToList mBinjaOutboxThread
-            case HashMap.null binjaOutboxMap of
-              False -> return bthreads
+            binjaConnsMap <- cleanupBinjaConn cid ss
+            case HashMap.null binjaConnsMap of
+              False -> return []
               True -> do
                 mEventThread <- tryReadTMVar $ ss ^. #eventHandlerThread
                 writeTVar (st ^. #binarySessions) $ HashMap.delete sid binSessions
                 workers <- fmap HashSet.toList . readTVar
                   $ ss ^. #eventHandlerWorkerThreads
-                return $ bthreads <> maybeToList mEventThread <> workers
-  putText $ "Killed " <> show (length threads) <> " threads"
+                return $ maybeToList mEventThread <> workers
   mapM_ killThread threads
 
 initAppState :: ServerConfig -> Db.Conn -> IO AppState

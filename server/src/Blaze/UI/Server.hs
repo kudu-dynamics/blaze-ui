@@ -38,7 +38,6 @@ import Blaze.UI.Types.Cfg (CfgId, convertPilCfg)
 import qualified Blaze.UI.BinaryManager as BM
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session ( SessionId
-                              , ClientId
                               , mkSessionId
                               )
 import Blaze.Function (Function)
@@ -88,34 +87,15 @@ getSessionState sid st = do
   when justCreated $ spawnEventHandler ss
   return ss
 
--- | Each ConnId gets its own outbox TQueue and dedicated thread to send messages.
-createBinjaOutbox :: WS.Connection
-                  -> ConnId
-                  -> SessionState
-                  -> ClientId
-                  -> HostBinaryPath
-                  -> IO ThreadId
-createBinjaOutbox conn connId ss cid hpath = do
-  q <- newTQueueIO
-  t <- forkIO . forever $ do
-    msg <- atomically . readTQueue $ q
-    sendJSON conn . BinjaMessage cid hpath $ msg
-  atomically . modifyTVar (ss ^. #binjaOutboxes)
-    $ HashMap.insert connId (t, q)
-  return t
-
 sendToBinja :: ServerToBinja -> EventLoop ()
-sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
-  outboxes <- readTVar $ ctx ^. #binjaOutboxes
-  mapM_ (`writeTQueue` msg) . fmap snd . HashMap.elems $ outboxes
+sendToBinja msg = ask >>= \ctx -> liftIO $ do
+  conns <- fmap HashMap.elems . readTVarIO $ ctx ^. #binjaConns
+  mapM_ (flip sendJSON $ BinjaMessage (ctx ^. #clientId) (ctx ^. #hostBinaryPath) msg) conns
 
 -- | Websocket message handler for binja.
 -- This handles messages for multiple binaries to/from single binja.
--- localOutboxThreads is needed to store if an outbox thread has already been
--- started for this particular binja conn, since there might already be an outbox
--- to a different binja.
-binjaApp :: HashMap SessionId ThreadId -> AppState -> ConnId -> WS.Connection -> IO ()
-binjaApp localOutboxThreads st connId conn = do
+binjaApp :: AppState -> ConnId -> WS.Connection -> IO ()
+binjaApp st connId conn = do
   er <- receiveJSON conn :: IO (Either Text (BinjaMessage BinjaToServer))
   case er of
     Left err -> do
@@ -129,21 +109,20 @@ binjaApp localOutboxThreads st connId conn = do
             reply . SBLogInfo $ txt
             putText txt
       ss <- getSessionState sid st
-      atomically $ addSessionConn sid connId st
       let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
-                      . BinjaEvent
-                      $ x ^. #action
-      -- check to see if this conn has registered outbox thread
-      case HashMap.member sid localOutboxThreads of
-        False -> do
-          outboxThread <- createBinjaOutbox conn connId ss cid hpath
-          pushEvent
-          logInfo' $ "Blaze Connected. Attached to existing session for binary: " <> show hpath
-          -- logInfo "For web plugin, go here:"
-          -- logInfo $ webUri (st ^. #serverConfig) sid
-          binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st connId conn
-        True -> do
-          pushEvent >> binjaApp localOutboxThreads st connId conn
+            . BinjaEvent
+            $ x ^. #action
+      isNewConn <- atomically $ do
+        sconns <- readTVar $ st ^. #sessionConns
+        case HashMap.member connId sconns of
+          False -> do
+            addSessionConn sid connId st
+            return True
+          True -> return False
+      when isNewConn $ do
+        atomically $ updateTVar (ss ^. #binjaConns) $ HashMap.insert connId conn
+        logInfo' $ "Blaze Connected for binary: " <> show hpath
+      pushEvent >> binjaApp st connId conn
 
 spawnEventHandler :: SessionState -> IO ()
 spawnEventHandler ss = do
@@ -175,7 +154,7 @@ app st pconn = case splitPath of
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
     runBinjaApp conn = do
       connId <- newConnId
-      catch (binjaApp HashMap.empty st connId conn) (catchConnectionException connId)
+      catch (binjaApp st connId conn) (catchConnectionException connId)
     catchConnectionException :: ConnId -> WS.ConnectionException -> IO ()
     catchConnectionException connId e = do
       print e
