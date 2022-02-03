@@ -135,14 +135,8 @@ def is_conditional_edge(edge: FlowGraphEdge) -> bool:
     if edge.type in (BranchType.TrueBranch, BranchType.FalseBranch):
         return True
 
-    # XXX this is to work around the same bug as in util:fix_flowgraph_edge:
-    # edge.style.style is assigned the binaryninjacore `BNEdgeStyle` struct, so
-    # we need to translate it to the python API types. This bug might get fixed
-    # in the near future, in which case this will hopefully be dead code
-    if isinstance(edge.style.style, binaryninja.core.BNEdgeStyle):
-        color: ThemeColor = ThemeColor(edge.style.style.color)
-    elif isinstance(edge.style, EdgeStyle):
-        color = edge.style.color
+    if isinstance(edge.style, EdgeStyle):
+        color: ThemeColor = edge.style.color
     else:
         raise RuntimeError(f'Bad type for edge: {type(edge)}')
 
@@ -413,7 +407,7 @@ class ICFGFlowGraph(FlowGraph):
             if node['contents']['uuid'] in self.pending_changes.removed_nodes:
                 fg_node.highlight = HighlightStandardColor.RedHighlightColor
             elif self.poi_search_results and (node['contents']['uuid']
-                                              in self.poi_search_results.get('presentTargetNodes')):
+                                              in self.poi_search_results['presentTargetNodes']):
                 fg_node.highlight = POI_PRESENT_TARGET_COLOR
             elif node['tag'] == 'Call':
                 call_node = cast(CallNode, node['contents'])
@@ -742,11 +736,15 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
             # 2. popup modal
             # binaryninja.interaction.show_message_box
-            to_continue: Optional[MessageBoxButtonResult] = show_message_box(
-                "Blaze",
-                "Pruning an isolated conditional branch! This will remove all nodes only reachable from this edge. Continue?",
-                buttons=MessageBoxButtonSet.YesNoButtonSet,
-                icon=MessageBoxIcon.WarningIcon)
+            # FIXME: In BN 3.x this function now returns a MessageBoxButtonResultEnum instead of a
+            #        MessageBoxButtonResult. This issue should be reported as it is likely a bug.
+            #        For now we wrap with the Python constructor as a workaround.
+            to_continue: Optional[MessageBoxButtonResult] = MessageBoxButtonResult(
+                show_message_box(
+                    "Blaze",
+                    "Pruning an isolated conditional branch! This will remove all nodes only reachable from this edge. Continue?",
+                    buttons=MessageBoxButtonSet.YesNoButtonSet,
+                    icon=MessageBoxIcon.WarningIcon))
 
             # 3. if cancel, return
             if to_continue == MessageBoxButtonResult.NoButton:
@@ -959,8 +957,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         self.clicked_token = self.getTokenForMouseEvent(event)
 
-        if (fg_edge := self.getEdgeForMouseEvent(event)):
-            fg_edge, swapped = fg_edge
+        if (event_edge := self.getEdgeForMouseEvent(event)):
+            fg_edge, swapped = event_edge
             self.clicked_edge = fix_flowgraph_edge(fg_edge, swapped)
         else:
             self.clicked_edge = None

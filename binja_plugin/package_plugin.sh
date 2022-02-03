@@ -12,7 +12,7 @@ PLUGIN_JSON_TEMPLATE=plugin.json.jq
 
 # Update version in pyproject.toml
 base_version=$(toml get --toml-path pyproject.toml tool.poetry.version)
-version=${base_version}.${CI_PIPELINE_ID}
+version=${base_version}.${CI_PIPELINE_ID:-dev1}
 toml set --toml-path pyproject.toml tool.poetry.version "$version"
 
 # Build the wheel
