@@ -11,8 +11,21 @@ DIST_DIR=./dist
 PLUGIN_JSON_TEMPLATE=plugin.json.jq
 
 # Update version in pyproject.toml
+cp -a pyproject.toml pyproject.toml.bak
+function restore_pyproject { mv pyproject.toml.bak pyproject.toml; }
+trap restore_pyproject EXIT
 base_version=$(toml get --toml-path pyproject.toml tool.poetry.version)
-version=${base_version}.${CI_PIPELINE_ID:-dev1}
+case x"${CI_PIPELINE_ID:-}" in
+  x)
+    echo 'CI_PIPELINE_ID is unset or empty; creating dev release' >&2
+    _init=${base_version%.*}
+    _last=${base_version##*.}
+    version=${_init}.$((_last + 1)).dev1
+    ;;
+  *)
+    version=${base_version}.${CI_PIPELINE_ID}
+    ;;
+esac
 toml set --toml-path pyproject.toml tool.poetry.version "$version"
 
 # Build the wheel
