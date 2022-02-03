@@ -5,6 +5,8 @@
 # of relevant headers in binaryninja-api/ui/, so if you're getting a type error
 # and you don't think you should be, a type sig in this file might be the culprit
 
+# Last updated against binaryninja-api 5518388b
+
 from ._action import *
 from ._dockhandler import *
 from ._filecontext import *
