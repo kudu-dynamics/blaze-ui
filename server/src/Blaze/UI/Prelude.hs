@@ -19,3 +19,4 @@ import Control.Monad.Extra as Exports (whenJust)
 
 writeManyTQueue :: TQueue a -> [a] -> STM ()
 writeManyTQueue q = mapM_ $ writeTQueue q
+
