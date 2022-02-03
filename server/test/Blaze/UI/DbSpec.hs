@@ -9,7 +9,7 @@ import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Db as Db
 import Blaze.UI.Prelude hiding (ignore)
 import Blaze.UI.Types
-  ( EventLoopCtx (EventLoopCtx)
+  ( SessionState (SessionState)
   , EventLoop
   , runEventLoop
   )
@@ -36,11 +36,14 @@ tryRemoveFile p = removeFile p `catch` ignore
     ignore :: SomeException -> IO ()
     ignore _ = return ()
 
-mockEventLoopCtx :: Db.Conn -> IO EventLoopCtx
-mockEventLoopCtx conn = EventLoopCtx cid hpath
+mockSessionState :: Db.Conn -> IO SessionState
+mockSessionState conn = SessionState cid hpath
   <$> atomically (BM.create bmdir cid hpath)
   <*> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
+  <*> newEmptyTMVarIO
+  <*> newTVarIO HashSet.empty
+  <*> newTQueueIO
   <*> newTMVarIO conn
   <*> newTVarIO Nothing
   <*> atomically CC.create
@@ -53,7 +56,7 @@ mockEventLoop :: EventLoop a -> IO a
 mockEventLoop m = do
   dbFile <- emptySystemTempFile "blazeTest"
   conn <- Db.init dbFile
-  ctx' <- mockEventLoopCtx conn
+  ctx' <- mockSessionState conn
   (Right r) <- runEventLoop m ctx'
   tryRemoveFile dbFile
   return r 

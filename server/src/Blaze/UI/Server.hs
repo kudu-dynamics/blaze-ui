@@ -38,7 +38,6 @@ import Blaze.UI.Types.Cfg (CfgId, convertPilCfg)
 import qualified Blaze.UI.BinaryManager as BM
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session ( SessionId
-                              , ClientId
                               , mkSessionId
                               )
 import Blaze.Function (Function)
@@ -66,7 +65,7 @@ data SessionError
   | BinaryManagerError BM.BinaryManagerError
   deriving (Eq, Ord, Show, Generic)
 
--- | returns session state or creates it.
+-- | Returns an existing SessionState or creates it.
 getSessionState :: SessionId
                 -> AppState
                 -> IO SessionState
@@ -81,46 +80,23 @@ getSessionState sid st = do
           (sid ^. #clientId)
           (sid ^. #hostBinaryPath)
         ccCallNodeRating <- CC.create
-        ss <- emptySessionState (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
+        ss <- emptySessionState (sid ^. #clientId) (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
         modifyTVar (st ^. #binarySessions)
           $ HashMap.insert sid ss
         return (ss, True)
-  when justCreated $ spawnEventHandler (sid ^. #clientId) st ss
+  when justCreated $ spawnEventHandler ss
   return ss
 
-removeSessionState :: SessionId -> AppState -> IO ()
-removeSessionState sid st = atomically $ do
-  modifyTVar (st ^. #binarySessions) $ HashMap.delete sid
-
-createBinjaOutbox :: WS.Connection
-                  -> ConnId
-                  -> SessionState
-                  -> ClientId
-                  -> HostBinaryPath
-                  -> IO ThreadId
-createBinjaOutbox conn connId ss cid hpath = do
-  q <- newTQueueIO
-  t <- forkIO . forever $ do
-    msg <- atomically . readTQueue $ q
-    sendJSON conn . BinjaMessage cid hpath $ msg
-  atomically . modifyTVar (ss ^. #binjaOutboxes)
-    $ HashMap.insert connId (t, q)
-  return t
-
 sendToBinja :: ServerToBinja -> EventLoop ()
-sendToBinja msg = ask >>= \ctx -> liftIO . atomically $ do
-  outboxes <- readTVar $ ctx ^. #binjaOutboxes
-  mapM_ (`writeTQueue` msg) . fmap snd . HashMap.elems $ outboxes
+sendToBinja msg = ask >>= \ctx -> liftIO $ do
+  conns <- fmap HashMap.elems . readTVarIO $ ctx ^. #binjaConns
+  mapM_ (flip sendJSON $ BinjaMessage (ctx ^. #clientId) (ctx ^. #hostBinaryPath) msg) conns
 
 -- | Websocket message handler for binja.
 -- This handles messages for multiple binaries to/from single binja.
--- localOutboxThreads is needed to store if an outbox thread has already been
--- started for this particular binja conn, since there might already be an outbox
--- to a different binja.
-binjaApp :: HashMap SessionId ThreadId -> AppState -> ConnId -> WS.Connection -> IO ()
-binjaApp localOutboxThreads st connId conn = do
+binjaApp :: AppState -> ConnId -> WS.Connection -> IO ()
+binjaApp st connId conn = do
   er <- receiveJSON conn :: IO (Either Text (BinjaMessage BinjaToServer))
-  -- putText $ "got binja message: " <> show er
   case er of
     Left err -> do
       putText $ "Error parsing JSON: " <> show err
@@ -133,24 +109,23 @@ binjaApp localOutboxThreads st connId conn = do
             reply . SBLogInfo $ txt
             putText txt
       ss <- getSessionState sid st
-      atomically $ addSessionConn sid connId st
       let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
-                      . BinjaEvent
-                      $ x ^. #action
-      -- check to see if this conn has registered outbox thread
-      case HashMap.member sid localOutboxThreads of
-        False -> do
-          outboxThread <- createBinjaOutbox conn connId ss cid hpath
-          pushEvent
-          logInfo' $ "Blaze Connected. Attached to existing session for binary: " <> show hpath
-          -- logInfo "For web plugin, go here:"
-          -- logInfo $ webUri (st ^. #serverConfig) sid
-          binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st connId conn
-        True -> do
-          pushEvent >> binjaApp localOutboxThreads st connId conn
+            . BinjaEvent
+            $ x ^. #action
+      isNewConn <- atomically $ do
+        sconns <- readTVar $ st ^. #sessionConns
+        case HashMap.member connId sconns of
+          False -> do
+            addSessionConn sid connId st
+            return True
+          True -> return False
+      when isNewConn $ do
+        atomically $ modifyTVar (ss ^. #binjaConns) $ HashMap.insert connId conn
+        logInfo' $ "Blaze Connected for binary: " <> show hpath
+      pushEvent >> binjaApp st connId conn
 
-spawnEventHandler :: ClientId -> AppState -> SessionState -> IO ()
-spawnEventHandler cid st ss = do
+spawnEventHandler :: SessionState -> IO ()
+spawnEventHandler ss = do
   b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
   case b of
     False -> putText "Warning: spawnEventHandler -- event handler already spawned"
@@ -158,17 +133,12 @@ spawnEventHandler cid st ss = do
       -- spawns event handler workers for new messages
       eventTid <- forkIO . forever $ do
         msg <- atomically . readTQueue $ ss ^. #eventInbox
-        let ctx = EventLoopCtx
-                  cid
-                  (ss ^. #binaryPath)
-                  (ss ^. #binaryManager)
-                  (ss ^. #binjaOutboxes)
-                  (ss ^. #cfgs)
-                  (st ^. #dbConn)
-                  (ss ^. #activePoi)
-                  (ss ^. #callNodeRatingCtx)
 
-        void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx
+        void . forkIO $ do
+          tid <- myThreadId
+          atomically $ addWorkerThread tid ss
+          void $ runEventLoop (mainEventLoop msg) ss
+          atomically $ removeCompletedWorkerThread tid ss
 
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
       putText "Spawned event handlers"
@@ -184,7 +154,7 @@ app st pconn = case splitPath of
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
     runBinjaApp conn = do
       connId <- newConnId
-      catch (binjaApp HashMap.empty st connId conn) (catchConnectionException connId)
+      catch (binjaApp st connId conn) (catchConnectionException connId)
     catchConnectionException :: ConnId -> WS.ConnectionException -> IO ()
     catchConnectionException connId e = do
       print e
@@ -248,6 +218,8 @@ sendCfgAndSnapshots bhash pcfg cid newCid = do
   sendCfgWithCallRatings bhash pcfg $ fromMaybe cid newCid
   sendLatestClientSnapshots
 
+-- | Sends the old ICFG with the nodes and edges that will be removed.
+-- This allows a user to confirm or deny changes
 sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
 sendDiffCfg bhash cid old new = do
   CfgUI.addCfg cid new
@@ -267,6 +239,7 @@ sendDiffCfg bhash cid old new = do
                     . HashSet.toList
                     $ CfgUI.getRemovedEdges old new
 
+-- | Stores the Cfg to the cache and database.
 setCfg :: CfgId -> PilCfg -> EventLoop ()
 setCfg cid pcfg = do
   CfgUI.addCfg cid pcfg
@@ -287,6 +260,7 @@ getStoredCfg cid = Db.getCfg cid >>= \case
       CfgUI.addCfg cid pcfg
       return pcfg
 
+-- | Sends all ICFG snapshots for a particular ClientId to client. 
 sendLatestClientSnapshots :: EventLoop ()
 sendLatestClientSnapshots = do
   ctx <- ask
@@ -297,6 +271,8 @@ sendLatestClientSnapshots = do
     . fmap (over _2 (fmap (over _2 Snapshot.toTransport)))
     $ branches
 
+
+-- | Sends all ICFG snapshots for a particular HostBinaryPath and ClientId to client. 
 sendLatestBinarySnapshots :: EventLoop ()
 sendLatestBinarySnapshots = do
   ctx <- ask
@@ -311,6 +287,7 @@ sendLatestBinarySnapshots = do
 sendLatestSnapshots :: EventLoop ()
 sendLatestSnapshots = sendLatestBinarySnapshots
 
+-- | Sends all POIs for a binary to client.
 sendLatestPois :: EventLoop ()
 sendLatestPois = do
   ctx <- ask
@@ -320,6 +297,11 @@ sendLatestPois = do
     . Poi.PoisOfBinary
     $ pois
 
+-- | Simplifies the CFG by autopruning impossible edges and various passes on
+-- the PIL statements, like copy propagation and phi var reduction.
+-- It first tries the BranchContext pruner; if this fails, which happens
+-- often due to type inference errors, it calls a non-SMT simplify which uses
+-- constant propagation and can only prune constraints with constants on either side.
 simplify :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
 simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
   Left err -> do
@@ -430,6 +412,9 @@ getPoiSearchResults bhash pcfg = do
                     $ CfgA.getNodesContainingAddress (tgt ^. #address) pcfg
       return . Just $ PoiSearchResults ratings' present
 
+-- | Handles messages incoming from the Binja client.
+-- In the future, and the past, this could handle events from other sources,
+-- such as a web browser.
 mainEventLoop :: Event -> EventLoop ()
 mainEventLoop (BinjaEvent msg) = handleBinjaEvent msg
 
