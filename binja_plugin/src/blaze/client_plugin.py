@@ -285,11 +285,12 @@ class BlazePlugin():
             else:
                 msg = f"This action requires generation of an analysis database (BNDB).\n\nContinue with ICFG creation?"
             # FIXME: Need to wrap the result of show_message_box until BN 3.x API is fixed.
-            to_save: Optional[MessageBoxButtonResult] = MessageBoxButtonResult(show_message_box(
-                "Blaze",
-                msg,
-                buttons=MessageBoxButtonSet.YesNoButtonSet,
-                icon=MessageBoxIcon.WarningIcon))
+            to_save: Optional[MessageBoxButtonResult] = MessageBoxButtonResult(
+                show_message_box(
+                    "Blaze",
+                    msg,
+                    buttons=MessageBoxButtonSet.YesNoButtonSet,
+                    icon=MessageBoxIcon.WarningIcon))
 
             if to_save == MessageBoxButtonResult.NoButton:
                 log.error("failed to send analysis database because it is not yet saved")

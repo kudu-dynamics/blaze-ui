@@ -407,7 +407,8 @@ class ICFGFlowGraph(FlowGraph):
             if node['contents']['uuid'] in self.pending_changes.removed_nodes:
                 fg_node.highlight = HighlightStandardColor.RedHighlightColor
             elif self.poi_search_results and (node['contents']['uuid']
-                                              in self.poi_search_results.get('presentTargetNodes', {})):
+                                              in self.poi_search_results.get('presentTargetNodes',
+                                                                             {})):
                 fg_node.highlight = POI_PRESENT_TARGET_COLOR
             elif node['tag'] == 'Call':
                 call_node = cast(CallNode, node['contents'])
@@ -739,11 +740,12 @@ class ICFGWidget(FlowGraphWidget, QObject):
             # FIXME: In BN 3.x this function now returns a MessageBoxButtonResultEnum instead of a
             #        MessageBoxButtonResult. This issue should be reported as it is likely a bug.
             #        For now we wrap with the Python constructor as a workaround.
-            to_continue: Optional[MessageBoxButtonResult] = MessageBoxButtonResult(show_message_box(
-                "Blaze",
-                "Pruning an isolated conditional branch! This will remove all nodes only reachable from this edge. Continue?",
-                buttons=MessageBoxButtonSet.YesNoButtonSet,
-                icon=MessageBoxIcon.WarningIcon))
+            to_continue: Optional[MessageBoxButtonResult] = MessageBoxButtonResult(
+                show_message_box(
+                    "Blaze",
+                    "Pruning an isolated conditional branch! This will remove all nodes only reachable from this edge. Continue?",
+                    buttons=MessageBoxButtonSet.YesNoButtonSet,
+                    icon=MessageBoxIcon.WarningIcon))
 
             # 3. if cancel, return
             if to_continue == MessageBoxButtonResult.NoButton:
