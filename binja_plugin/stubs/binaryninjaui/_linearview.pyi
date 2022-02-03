@@ -9,6 +9,7 @@ from binaryninja.lineardisassembly import LinearDisassemblyLine, LinearViewCurso
 
 class LinearViewLine(LinearDisassemblyLine):
     cursor: LinearViewCursor
+    cursorSize: int
     lineIndex: int
 
 

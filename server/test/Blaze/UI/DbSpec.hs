@@ -9,7 +9,7 @@ import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Db as Db
 import Blaze.UI.Prelude hiding (ignore)
 import Blaze.UI.Types
-  ( EventLoopCtx (EventLoopCtx)
+  ( SessionState (SessionState)
   , EventLoop
   , runEventLoop
   )
@@ -25,7 +25,7 @@ import Blaze.UI.Types.Session (ClientId(ClientId))
 import Test.Hspec
 import qualified Data.UUID as UUID
 import qualified Data.Text as Text
-
+import qualified Blaze.UI.Types.BinaryHash as BinaryHash
 
 diveBin :: FilePath
 diveBin = "res/test_bins/Dive_Logger/Dive_Logger.bndb"
@@ -36,24 +36,28 @@ tryRemoveFile p = removeFile p `catch` ignore
     ignore :: SomeException -> IO ()
     ignore _ = return ()
 
-mockEventLoopCtx :: Db.Conn -> IO EventLoopCtx
-mockEventLoopCtx conn = EventLoopCtx cid hpath
+mockSessionState :: Db.Conn -> IO SessionState
+mockSessionState conn = SessionState cid hpath bhash
   <$> atomically (BM.create bmdir cid hpath)
   <*> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
-  <*> newTMVarIO conn
+  <*> newEmptyTMVarIO
+  <*> newTVarIO HashSet.empty
+  <*> newTQueueIO
+  <*> pure conn
   <*> newTVarIO Nothing
   <*> atomically CC.create
   where
     bmdir = "/tmp/blaze/bm"
     hpath = "/tmp/blaze/spec"
+    bhash = BinaryHash.fromByteString "mockHash"
     cid = ClientId . Text.append "testuser_" . UUID.toText $ mkUuid1 (0 :: Int)
 
 mockEventLoop :: EventLoop a -> IO a
 mockEventLoop m = do
   dbFile <- emptySystemTempFile "blazeTest"
   conn <- Db.init dbFile
-  ctx' <- mockEventLoopCtx conn
+  ctx' <- mockSessionState conn
   (Right r) <- runEventLoop m ctx'
   tryRemoveFile dbFile
   return r 
