@@ -11,6 +11,9 @@ DIST_DIR=./dist
 PLUGIN_JSON_TEMPLATE=plugin.json.jq
 
 # Update version in pyproject.toml
+cp -a pyproject.toml pyproject.toml.bak
+function restore_pyproject { mv pyproject.toml.bak pyproject.toml; }
+trap restore_pyproject EXIT
 base_version=$(toml get --toml-path pyproject.toml tool.poetry.version)
 version=${base_version}.${CI_PIPELINE_ID:-dev1}
 toml set --toml-path pyproject.toml tool.poetry.version "$version"
