@@ -312,8 +312,10 @@ class BlazePlugin():
                 'clientId': self.settings.client_id,
             }
             try:
-                r = requests.post(
-                    uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
+                ### FIXME why can we not set the connect timeout here? See #170
+                # r = requests.post(
+                #     uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
+                r = requests.post(uri, data=post_data, files=files, timeout=None)
             except requests.exceptions.RequestException as e:
                 log.error('Failed to upload BNDB: ' + str(e))
                 return None
