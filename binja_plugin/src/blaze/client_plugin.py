@@ -34,6 +34,7 @@ from binaryninja.interaction import (
 )
 from binaryninjaui import DockHandler, FileContext, UIContext, UIContextNotification, ViewFrame
 from websockets.client import WebSocketClientProtocol
+import hashlib
 
 REQUEST_ACTIVITY_TIMEOUT = 5
 
@@ -79,7 +80,8 @@ class BlazeInstance():
         self.bv: BinaryView = bv
         self.blaze: 'BlazePlugin' = blaze
         self.graph: Optional[ICFGFlowGraph] = None
-        self.bndbHash: Optional[BinaryHash] = None
+        self.bndbHash: Optional[BndbHash] = None
+        self.binaryHash: Optional[BinaryHash] = hashlib.md5(bv.file.raw.read(0,len(bv.file.raw))).hexdigest()
         self._icfg_dock_widget: Optional[ICFGDockWidget] = None
         self._snaptree_dock_widget: Optional[SnapTreeDockWidget] = None
         self._poi_list_dock_widget: Optional[PoiListDockWidget] = None
@@ -139,7 +141,7 @@ class BlazeInstance():
 
         if self.bndbHash == None or self.bv.file.analysis_changed or self.bv.file.modified:
             u = UploadBndb(
-                f'Uploading {self.bv.file.filename!r} to Blaze server...', self.blaze, self.bv,
+                f'Uploading {self.bv.file.filename!r} to Blaze server...', self.blaze, self.bv, self.binaryHash,
                 set_hash_and_do_callback)
             u.start()
         else:
@@ -152,15 +154,17 @@ class UploadBndb(BackgroundTaskThread):
         msg: str,
         blaze: 'BlazePlugin',
         bv: BinaryView,
+        binaryHash: BinaryHash,
         callback: Callable[[BinaryHash], None],
     ) -> None:
         BackgroundTaskThread.__init__(self, msg, False)
         self.bv: BinaryView = bv
         self.blaze: 'BlazePlugin' = blaze
+        self.binaryHash: BinaryHash = binaryHash
         self.callback: Callable[[BinaryHash], None] = callback
 
     def run(self):
-        self.blaze.upload_bndb(self.bv, self.callback)
+        self.blaze.upload_bndb(self.bv, self.binaryHash, self.callback)
 
 
 class BlazePlugin():
@@ -275,7 +279,7 @@ class BlazePlugin():
             if self.websocket_thread.is_alive():
                 log.warn('websocket thread is still alive after timeout')
 
-    def upload_bndb(self, bv: BinaryView, callback: Callable[[BinaryHash], None]) -> None:
+    def upload_bndb(self, bv: BinaryView, binaryHash: BinaryHash, callback: Callable[[BinaryHash], None]) -> None:
         log.debug(
             f'{bv=!r}, {bv.file=!r}, {bv.file.raw=!r}, {bv.file.raw and bv.file.raw.handle = !r}')
         if (not bv.file.filename.endswith('.bndb')):
@@ -310,6 +314,7 @@ class BlazePlugin():
             post_data = {
                 'hostBinaryPath': og_filename,
                 'clientId': self.settings.client_id,
+                'binaryHash': binaryHash,
             }
             try:
                 r = requests.post(
@@ -350,10 +355,9 @@ class BlazePlugin():
 
     def send(self, bv: BinaryView, msg: BinjaToServer) -> None:
         self._init_thread()
-        self.ensure_instance(bv)
-
+        bhash = self.ensure_instance(bv).binaryHash
         new_msg = BinjaMessage(
-            clientId=self.settings.client_id, hostBinaryPath=bv_key(bv), action=msg)
+            clientId=self.settings.client_id, hostBinaryPath=bv_key(bv), binaryHash=bhash, action=msg)
         # log.debug('enqueueing %s', new_msg)
         self.out_queue.put(new_msg)
 
@@ -451,6 +455,7 @@ class BlazePlugin():
         relevant_instances: Iterable[BlazeInstance],
         msg: ServerToBinja,
     ) -> None:
+
         tag = msg['tag']
         # log.debug('Got message: %s', json.dumps(msg, indent=2))
 

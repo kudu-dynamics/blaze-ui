@@ -131,41 +131,6 @@ binjaApp st connId conn = do
         logInfo' $ "Blaze Connected for binary: " <> show hpath
       pushEvent >> binjaApp st connId conn
 
--- -- | Websocket message handler for binja.
--- -- This handles messages for multiple binaries to/from single binja.
--- binjaApp :: AppState -> ConnId -> WS.Connection -> IO ()
--- binjaApp st connId conn = do
---   er <- receiveJSON conn :: IO (Either Text (BinjaMessage BinjaToServer))
---   case er of
---     Left err -> do
---       putText $ "Error parsing JSON: " <> show err
---     Right x -> do
---       let cid = x ^. #clientId
---           hpath = x ^. #hostBinaryPath
---           binHash = x ^. #binaryHash
---           sid = mkSessionId cid hpath
---           reply = sendJSON conn . BinjaMessage cid hpath binHash
---           logInfo' txt = do
---             reply . SBLogInfo $ txt
---             putText txt
---       ss <- getSessionState sid binHash st
---       atomically $ addSessionConn sid connId st
---       let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
--- <<<<<<< HEAD
---                       . BinjaEvent
---                       $ x ^. #action
---       -- check to see if this conn has registered outbox thread
---       case HashMap.member sid localOutboxThreads of
---         False -> do
---           outboxThread <- createBinjaOutbox conn connId ss cid hpath
---           pushEvent
---           logInfo' $ "Blaze Connected. Attached to existing session for binary: " <> show hpath
---           -- logInfo "For web plugin, go here:"
---           -- logInfo $ webUri (st ^. #serverConfig) sid
---           binjaApp (HashMap.insert sid outboxThread localOutboxThreads) st connId conn
---         True -> do
---           pushEvent >> binjaApp localOutboxThreads st connId conn
-
 spawnEventHandler :: SessionState -> IO ()
 spawnEventHandler ss = do
   b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
@@ -185,59 +150,6 @@ spawnEventHandler ss = do
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
       putText "Spawned event handlers"
 
-
--- spawnEventHandler :: ClientId -> AppState -> SessionState -> IO ()
--- spawnEventHandler cid st ss = do
--- =======
---             . BinjaEvent
---             $ x ^. #action
---       isNewConn <- atomically $ do
---         sconns <- readTVar $ st ^. #sessionConns
---         case HashMap.member connId sconns of
---           False -> do
---             addSessionConn sid connId st
---             return True
---           True -> return False
---       when isNewConn $ do
---         atomically $ modifyTVar (ss ^. #binjaConns) $ HashMap.insert connId conn
---         logInfo' $ "Blaze Connected for binary: " <> show hpath
---       pushEvent >> binjaApp st connId conn
-
--- spawnEventHandler :: SessionState -> IO ()
--- spawnEventHandler ss = do
--- >>>>>>> 175-combine-sessionstate-and-eventloopctx
---   b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
---   case b of
---     False -> putText "Warning: spawnEventHandler -- event handler already spawned"
---     True -> do
---       -- spawns event handler workers for new messages
---       eventTid <- forkIO . forever $ do
---         msg <- atomically . readTQueue $ ss ^. #eventInbox
--- <<<<<<< HEAD
---         let ctx = EventLoopCtx
---                   cid
---                   (ss ^. #binaryPath)
---                   (ss ^. #binaryHash)
---                   (ss ^. #binaryManager)
---                   (ss ^. #binjaOutboxes)
---                   (ss ^. #cfgs)
---                   (st ^. #dbConn)
---                   (ss ^. #activePoi)
---                   (ss ^. #callNodeRatingCtx)
-
---         void . forkIO . void $ runEventLoop (mainEventLoop msg) ctx
--- =======
-
---         void . forkIO $ do
---           tid <- myThreadId
---           atomically $ addWorkerThread tid ss
---           void $ runEventLoop (mainEventLoop msg) ss
---           atomically $ removeCompletedWorkerThread tid ss
--- >>>>>>> 175-combine-sessionstate-and-eventloopctx
-
---       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
---       putText "Spawned event handlers"
-
 app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case splitPath of
   ["binja"] -> WS.acceptRequest pconn >>= runBinjaApp
@@ -254,28 +166,6 @@ app st pconn = case splitPath of
     catchConnectionException connId e = do
       print e
       cleanupClosedConn connId st
-
--- app :: AppState -> WS.PendingConnection -> IO ()
--- app st pconn = case splitPath of
---   ["binja"] -> WS.acceptRequest pconn >>= runBinjaApp
---   _ -> do
---     putText $ "Rejected request to invalid path: " <> cs path
---     WS.rejectRequest pconn $ "Invalid path: " <> path
---   where
---     path = WS.requestPath $ WS.pendingRequest pconn
---     splitPath = drop 1 . BSC.splitWith (== '/') $ path
---     runBinjaApp conn = do
---       connId <- newConnId
--- <<<<<<< HEAD
---       catch (binjaApp HashMap.empty st connId conn) (catchConnectionException connId)
--- =======
---       catch (binjaApp st connId conn) (catchConnectionException connId)
--- >>>>>>> 175-combine-sessionstate-and-eventloopctx
---     catchConnectionException :: ConnId -> WS.ConnectionException -> IO ()
---     catchConnectionException connId e = do
---       print e
---       cleanupClosedConn connId st
--- <<<<<<< HEAD
 
 sendToAllWithBinary :: AppState -> BinaryHash -> ServerToBinja -> IO ()
 sendToAllWithBinary st bh msg = do
@@ -344,7 +234,6 @@ sendCfgAndSnapshots bhash pcfg cid newCid = do
   sendCfgWithCallRatings bhash pcfg $ fromMaybe cid newCid
   sendLatestClientSnapshots
 
-
 -- | Sends the old ICFG with the nodes and edges that will be removed.
 -- This allows a user to confirm or deny changes
 sendDiffCfg :: BndbHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
@@ -397,7 +286,6 @@ sendLatestClientSnapshots = do
     . Snapshot.BranchesOfClient
     . fmap (over _2 (fmap (over _2 Snapshot.toTransport)))
     $ branches
-
 
 -- | Sends all ICFG snapshots for a particular HostBinaryPath and ClientId to client. 
 sendLatestBinarySnapshots :: EventLoop ()
