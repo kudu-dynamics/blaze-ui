@@ -163,7 +163,6 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         self._view_frame: ViewFrame = view_frame
         self.blaze_instance: 'BlazeInstance' = blaze_instance
         self.poi_list_widget = PoiListWidget(self, blaze_instance)
-        log.info("=========== INIITIIITIITIITIITITIT ============")
         self.local_pois: List[Poi] = []
         self.global_pois: List[Poi] = []
 
@@ -217,7 +216,6 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         self.poi_list_widget.clear()
 
         # Redraw POI list
-        log.info(f'locals: {len(self.local_pois)}, globals: {len(self.global_pois)}')
         for poi in (self.local_pois + self.global_pois):
             self.add_poi_list_item(poi)
                 
