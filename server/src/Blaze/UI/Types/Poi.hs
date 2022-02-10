@@ -15,7 +15,7 @@ import Blaze.UI.Types.Session (ClientId)
 import Blaze.UI.Types.Db.Address ()
 import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
-import Blaze.UI.Types.Db.Bytes ()
+
 
 newtype PoiId = PoiId UUID
   deriving (Eq, Ord, Show, Generic)

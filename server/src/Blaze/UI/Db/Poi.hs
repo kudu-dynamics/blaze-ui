@@ -12,8 +12,10 @@ import Blaze.UI.Types.Session (ClientId)
 import Blaze.UI.Types.Poi (Poi(Poi), PoiId, poiTable)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 
+
 -- | use `saveNewCfgAndBranch`
-saveNew :: MonadDb m
+saveNew
+  :: MonadDb m
   => ClientId
   -> HostBinaryPath
   -> BinaryHash

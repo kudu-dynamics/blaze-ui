@@ -8,7 +8,6 @@ import Blaze.UI.Types.Db as Exports hiding (cfg)
 import Database.Selda
 import Data.Time.Clock (getCurrentTime)
 import Blaze.UI.Types.Poi (Poi(Poi), poiTable)
-import Blaze.UI.Types.Db.Bytes ()
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 
 
