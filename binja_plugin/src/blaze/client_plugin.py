@@ -317,10 +317,12 @@ class BlazePlugin():
                 'binaryHash': binaryHash,
             }
             try:
-                r = requests.post(
-                    uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
+                ### FIXME why can we not set the connect timeout here? See #170
+                # r = requests.post(
+                #     uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
+                r = requests.post(uri, data=post_data, files=files, timeout=None)
             except requests.exceptions.RequestException as e:
-                log.error('Failed to upload BNDB: ' + str(e))
+                log.exception('Failed to upload BNDB: ' + str(e))
                 return None
 
         if r.status_code != requests.codes['ok']:
@@ -382,7 +384,7 @@ class BlazePlugin():
                     except asyncio.CancelledError:
                         pass
         except Exception as e:
-            log.error("Websocket error: " + str(e))
+            log.exception("Websocket error: " + str(e))
             return None
 
     async def recv_loop(self, websocket: WebSocketClientProtocol) -> None:

@@ -63,7 +63,7 @@ RUN apt update && apt install -y --no-install-recommends jq
 RUN pip install toml-cli build pkginfo
 COPY binja_plugin/ /binja_plugin/
 WORKDIR /binja_plugin
-ARG CI_PIPELINE_ID=0
+ARG CI_PIPELINE_ID=
 RUN CI_PIPELINE_ID=${CI_PIPELINE_ID} ./package_plugin.sh
 
 

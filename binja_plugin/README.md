@@ -25,7 +25,6 @@ $ ln -s <THIS_REPO>/binja_plugin/src/blaze ~/.binaryninja/plugins/blaze
 $ pip install websockets requests
 ```
 
-
 ### Repository Method
 
 The plugin is built and served as part of the docker-compose.yml configuration in the parent directory.
@@ -35,6 +34,11 @@ $ cd ..
 $ docker-compose pull
 $ docker-compose up
 ```
+
+Building of the plugin with the `package_plugins.sh` script requires additional dependencies:
+
+`pip install toml-cli build pkginfo`.
+
 
 To build and serve `plugins.json`:
 1. run: `./package_plugin.sh http://localhost:8000` (or wherever the plugin will be served from)
