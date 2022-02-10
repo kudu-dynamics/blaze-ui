@@ -164,8 +164,8 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         self.blaze_instance: 'BlazeInstance' = blaze_instance
         self.poi_list_widget = PoiListWidget(self, blaze_instance)
         log.info("=========== INIITIIITIITIITIITITIT ============")
-        self.local_poi_items: List[Poi] = []
-        self.global_poi_items: List[Poi] = []
+        self.local_pois: List[Poi] = []
+        self.global_pois: List[Poi] = []
 
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -178,7 +178,7 @@ class PoiListDockWidget(QWidget, DockContextHandler):
     def __del__(self):
         try_debug(log, 'Deleting object: %r', self)
 
-    def make_poi_item(self, is_global: bool, poi: Poi) -> Optional[PoiListItem]:
+    def add_poi_list_item(self, poi: Poi) -> None:
         # TODO: Handle cases where function isn't found
         func = get_function_at(self.blaze_instance.bv, poi['funcAddr'])
         if func:
@@ -191,8 +191,9 @@ class PoiListDockWidget(QWidget, DockContextHandler):
                 func.name,
                 poi['instrAddr'],
                 created_time,
-                is_global,
-            )            
+                poi['isGlobalPoi'],
+            )
+            self.poi_list_widget.addItem(poi_item)
         else:
             log.info(
                 'No function found at address 0x%x for %s', poi['funcAddr'],
@@ -204,32 +205,21 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         """
         tag = poi_msg['tag']
 
-        local_pois_changed = False
-        global_pois_changed = False
-
-        self.poi_list_widget.clear()
-
         if tag == 'PoisOfBinary':
-            local_pois_changed = True
-            self.local_poi_items = []
-            for poi in poi_msg['pois']:
-                poi_item = self.make_poi_item(False, poi)
-                if poi_item:
-                    self.local_poi_items.append(poi_item)                    
+            log.info(f"Got LOCAL {len(poi_msg['pois'])}")
+            self.local_pois = poi_msg['pois']
                     
         elif tag == 'GlobalPoisOfBinary':
-            global_pois_changed = True
-            self.global_poi_items = []
-            for poi in poi_msg['globalPois']:
-                poi_item = self.make_poi_item(True, poi)
-                if poi_item:
-                    self.global_poi_items.append(poi_item)                    
+            log.info(f"Got GLOBAL {len(poi_msg['globalPois'])}")
+            self.global_pois = poi_msg['globalPois']
 
-        if (global_pois_changed or local_pois_changed):
-            # Clear existing list of POIs
-            log.info(f'locals: {len(self.local_poi_items)}, globals: {len(self.global_poi_items)}')
-            for poi_item in (self.local_poi_items + self.global_poi_items):
-                self.poi_list_widget.addItem(poi_item)
+        # Clear list items
+        self.poi_list_widget.clear()
+
+        # Redraw POI list
+        log.info(f'locals: {len(self.local_pois)}, globals: {len(self.global_pois)}')
+        for poi in (self.local_pois + self.global_pois):
+            self.add_poi_list_item(poi)
                 
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
         if view_frame is None:

@@ -277,7 +277,6 @@ class Poi(TypedDict):
     description: Optional[str]
     isGlobalPoi: bool
 
-
 class PoiServerToBinjaTotal(TypedDict, total=True):
     tag: Literal['PoisOfBinary', 'GlobalPoisOfBinary']
 

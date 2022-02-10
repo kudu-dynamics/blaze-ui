@@ -56,7 +56,6 @@ import Blaze.Pretty (Token)
 import Blaze.Types.Cfg.Analysis (CallNodeRating, CallNodeRatingCtx)
 import Blaze.UI.Types.CachedCalc (CachedCalc)
 import System.Random (Random)
-import qualified Data.HashSet as HashSet
 import qualified Network.WebSockets as WS
 
 -- | This meta message wraps every message between the server and BinaryNinja plugin.
@@ -265,17 +264,16 @@ emptySessionState
   -> Db.Conn
   -> CachedCalc BndbHash CallNodeRatingCtx
   -> STM SessionState
-emptySessionState cid binPath binHash bm dbConn ccCallRating
+emptySessionState cid binPath binHash bm dbConn' ccCallRating
   = SessionState cid binPath binHash bm
     <$> newTVar HashMap.empty
     <*> newTVar HashMap.empty
     <*> newEmptyTMVar
     <*> newTVar HashSet.empty
     <*> newTQueue
-    <*> pure dbConn
+    <*> pure dbConn'
     <*> newTVar Nothing
     <*> pure ccCallRating
-
 
 -- | A `ConnId` is a unique websocket connection.
 newtype ConnId = ConnId UUID

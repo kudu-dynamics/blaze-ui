@@ -77,27 +77,3 @@ data Poi = Poi
 
 poiTable :: Table Poi
 poiTable = table "poi" [#poiId :- primary]
-
--- newtype GlobalPoiId = GlobalPoiId UUID
---   deriving (Eq, Ord, Show, Generic)
---   deriving newtype (Random)
---   deriving anyclass (Hashable, ToJSON, FromJSON)
-
--- instance SqlType GlobalPoiId where
---    mkLit (GlobalPoiId x) = LCustom TBlob $ Sql.mkLit x
---    sqlType _ = TBlob
---    fromSql x = GlobalPoiId $ Sql.fromSql x
---    defaultValue = LCustom TBlob (Sql.defaultValue :: Lit UUID)
-
--- data GlobalPoi = GlobalPoi
---   { globalPoiId :: GlobalPoiId
---   , binaryHash :: BinaryHash
---   , created :: UTCTime
---   , funcAddr :: Address
---   , instrOffset :: Bytes
---   , name :: Maybe Text
---   , description :: Maybe Text
---   } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, SqlRow)
-
--- globalPoiTable :: Table GlobalPoi
--- globalPoiTable = table "global_poi" [#globalPoiId :- primary]
