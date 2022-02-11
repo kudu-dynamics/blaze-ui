@@ -103,6 +103,10 @@ data TArrayOp t = TArrayOp
   , elemType :: t
   } deriving (Eq, Ord, Read, Show, Functor, Foldable, Traversable, Generic, ToJSON, FromJSON)
 
+data TCStringOp t = TCStringOp
+  { len :: t
+  } deriving (Eq, Ord, Read, Show, Functor, Foldable, Traversable, Generic, ToJSON, FromJSON)
+
 -- data TRecordOp t = TRecordOp
 --   { fields :: HashMap BitOffset t
 --   -- todo: change bitwidth to 't'?
@@ -123,7 +127,7 @@ data PilType t = TBool
                | TBitVector (TBitVectorOp t)
                | TPointer (TPointerOp t) 
 
---               | TCString { len :: t }
+               | TCString (TCStringOp t)
 
                | TArray (TArrayOp t)
                | TRecord [(BitOffset, t)]
@@ -164,6 +168,7 @@ convertPilType = \case
   Ch.TBitVector w ->  TBitVector $ TBitVectorOp w
   Ch.TPointer w t -> TPointer $ TPointerOp w t
   Ch.TArray l t -> TArray $ TArrayOp l t
+  Ch.TCString l -> TCString $ TCStringOp l
   Ch.TRecord xs -> TRecord (HashMap.toList xs)
   Ch.TBottom (Ch.Sym s) -> TBottom (Sym s)
   Ch.TUnit -> TUnit
