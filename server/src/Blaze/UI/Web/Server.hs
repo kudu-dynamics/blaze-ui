@@ -55,6 +55,7 @@ uploadBinary st = do
       bv <- BM.loadBndb (ss ^. #binaryManager) h >>= \case
         Left err -> P.error $ "Could not open recently uploaded bndb. " <> show err
         Right bv -> return bv
+
       void . liftIO
         . CC.setCalc h (ss ^. #callNodeRatingCtx)
         $ do
