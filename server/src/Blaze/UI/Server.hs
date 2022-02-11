@@ -163,7 +163,10 @@ app st pconn = case splitPath of
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
     runBinjaApp conn = do
       connId <- newConnId
-      catch (binjaApp st connId conn) (catchConnectionException connId)
+      forkIO $ catch (binjaApp st connId conn) (catchConnectionException connId)
+      putText "fork forked"
+      -- WS.withPingThread conn 3 (putText "ping")
+      --   $ catch (binjaApp st connId conn) (catchConnectionException connId)
     catchConnectionException :: ConnId -> WS.ConnectionException -> IO ()
     catchConnectionException connId e = do
       print e
@@ -484,13 +487,16 @@ handleBinjaEvent = \case
   -- where the root node is the auto-cfg
   -- Sends back two messages: one auto-cfg, one new snapshot tree
   BSCfgNew bhash funcAddr -> do
+    putText "Getting BV"
     bv <- getBinaryView bhash
+    putText "Got BV"
     mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
     case mfunc of
       Nothing -> sendToBinja
         . SBLogError $ "Couldn't find function at " <> showHex funcAddr
       Just func -> do
         mr <- liftIO $ BnCfg.getCfg (BNImporter bv) bv func
+
         case mr of
           Nothing -> sendToBinja
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
