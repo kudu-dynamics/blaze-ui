@@ -276,6 +276,7 @@ emptySessionState cid binPath bm tconn ccCallRating
 
 
 -- | A `ConnId` is a unique websocket connection.
+-- There is only one ConnId per BinaryNinja instance, shared across bndbs.
 newtype ConnId = ConnId UUID
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable, Random)
@@ -288,7 +289,7 @@ newConnId = randomIO
 data AppState = AppState
   { serverConfig :: ServerConfig
   , binarySessions :: TVar (HashMap SessionId SessionState)
-  , sessionConns :: TVar (HashMap ConnId SessionId)
+  , sessionConns :: TVar (HashMap ConnId (HashSet SessionId))
   , dbConn :: TMVar Db.Conn
   } deriving (Generic)
 
@@ -297,8 +298,10 @@ data AppState = AppState
 -- copies of a BNDB.
 addSessionConn :: SessionId -> ConnId -> AppState -> STM ()
 addSessionConn sid cid st =
-  readTVar tv >>= writeTVar tv . HashMap.insert cid sid
+  readTVar tv >>= writeTVar tv . HashMap.alter upsert cid
   where
+    upsert Nothing = Just $ HashSet.singleton sid
+    upsert (Just s) = Just $ HashSet.insert sid s
     tv = st ^. #sessionConns
 
 -- | Removes ConnId from the binja websocket conn map in SessionState.
@@ -321,22 +324,27 @@ cleanupClosedConn cid st = do
     sconns <- readTVar $ st ^. #sessionConns
     case HashMap.lookup cid sconns of
       Nothing -> return []
-      Just sid -> do
+      Just sids -> do
         writeTVar (st ^. #sessionConns) $ HashMap.delete cid sconns
         binSessions <- readTVar $ st ^. #binarySessions
-        case HashMap.lookup sid binSessions of
-          Nothing -> return []
-          Just ss -> do
-            binjaConnsMap <- cleanupBinjaConn cid ss
-            case HashMap.null binjaConnsMap of
-              False -> return []
-              True -> do
-                mEventThread <- tryReadTMVar $ ss ^. #eventHandlerThread
-                writeTVar (st ^. #binarySessions) $ HashMap.delete sid binSessions
-                workers <- fmap HashSet.toList . readTVar
-                  $ ss ^. #eventHandlerWorkerThreads
-                return $ maybeToList mEventThread <> workers
+        concatMapM (cleanSession binSessions) . HashSet.toList $ sids
+        where
+          cleanSession :: HashMap SessionId SessionState -> SessionId -> STM [ThreadId]
+          cleanSession binSessions sid =
+            case HashMap.lookup sid binSessions of
+              Nothing -> return []
+              Just ss -> do
+                binjaConnsMap <- cleanupBinjaConn cid ss
+                case HashMap.null binjaConnsMap of
+                  False -> return []
+                  True -> do
+                    mEventThread <- tryReadTMVar $ ss ^. #eventHandlerThread
+                    writeTVar (st ^. #binarySessions) $ HashMap.delete sid binSessions
+                    workers <- fmap HashSet.toList . readTVar
+                      $ ss ^. #eventHandlerWorkerThreads
+                    return $ maybeToList mEventThread <> workers
   mapM_ killThread threads
+  putText $ "Killed " <> show (length threads) <> " thread(s)."
 
 initAppState :: ServerConfig -> Db.Conn -> IO AppState
 initAppState cfg' conn = AppState cfg'

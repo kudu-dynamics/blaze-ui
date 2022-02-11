@@ -114,14 +114,13 @@ binjaApp st connId conn = do
             $ x ^. #action
       isNewConn <- atomically $ do
         sconns <- readTVar $ st ^. #sessionConns
-        case HashMap.member connId sconns of
-          False -> do
+        case HashSet.member sid <$> HashMap.lookup connId sconns of
+          Just True -> return False
+          _ -> do
             addSessionConn sid connId st
+            modifyTVar (ss ^. #binjaConns) $ HashMap.insert connId conn
             return True
-          True -> return False
-      when isNewConn $ do
-        atomically $ modifyTVar (ss ^. #binjaConns) $ HashMap.insert connId conn
-        logInfo' $ "Blaze Connected for binary: " <> show hpath
+      when isNewConn . logInfo' $ "Blaze Connected for binary: " <> show hpath
       pushEvent >> binjaApp st connId conn
 
 spawnEventHandler :: SessionState -> IO ()
