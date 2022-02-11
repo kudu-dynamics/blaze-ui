@@ -8,7 +8,8 @@ OUTPUT_WHEEL_NAME=${OUTPUT_WHEEL_NAME:-blaze-0.1.0-py3-none-any.whl}
 BLAZE_WHEEL_SERVER_BASE_URL=${BLAZE_WHEEL_SERVER_BASE_URL:-http://localhost:8000}
 
 DIST_DIR=./dist
-PLUGIN_JSON_TEMPLATE=plugin.json.jq
+BLAZE_PLUGIN_JSON_TEMPLATE=plugin.json.jq
+PLUGINS_JSON_TEMPLATE=plugins.json.jq
 
 # Update version in pyproject.toml
 cp -a pyproject.toml pyproject.toml.bak
@@ -48,13 +49,13 @@ dependencies=$(pkginfo "$wheel" -f requires_dist --single --sequence-delim=$'\n'
 
 mv "${wheel}" "${DIST_DIR}/${OUTPUT_WHEEL_NAME}"
 
-jq -n -f "${PLUGIN_JSON_TEMPLATE}" \
+jq -n -f "${BLAZE_PLUGIN_JSON_TEMPLATE}" \
   --arg timestamp "$(date +%s)" \
   --arg version "${version}" \
   --arg packageurl "${packageurl}" \
   --arg dependencies "${dependencies}" \
   > "${DIST_DIR}/plugin.json"
 
-jq '[.plugin]' \
-  < "${DIST_DIR}/plugin.json" \
+jq -n -f "${PLUGINS_JSON_TEMPLATE}" \
+  --arg blaze_plugin "$(jq '.plugin' "${DIST_DIR}/plugin.json")" \
   > "${DIST_DIR}/plugins.json"
