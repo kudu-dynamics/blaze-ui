@@ -268,7 +268,7 @@ class SnapshotBinjaToServer(SnapshotBinjaToServerTotal, total=False):
 class Poi(TypedDict):
     poiId: PoiId
     clientId: Optional[ClientId]
-    hostBinaryPath: HostBinaryPath
+    hostBinaryPath: Optional[HostBinaryPath]
     binaryHash: BinaryHash
     created: str  # Parseable with util.servertime_to_clienttime
     funcAddr: Address

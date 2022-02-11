@@ -81,7 +81,7 @@ class BlazeInstance():
         self.blaze: 'BlazePlugin' = blaze
         self.graph: Optional[ICFGFlowGraph] = None
         self.bndbHash: Optional[BndbHash] = None
-        self.binaryHash: Optional[BinaryHash] = hashlib.md5(bv.file.raw.read(0,len(bv.file.raw))).hexdigest()
+        self.binaryHash: BinaryHash = hashlib.md5(bv.file.raw.read(0,len(bv.file.raw))).hexdigest()
         self._icfg_dock_widget: Optional[ICFGDockWidget] = None
         self._snaptree_dock_widget: Optional[SnapTreeDockWidget] = None
         self._poi_list_dock_widget: Optional[PoiListDockWidget] = None

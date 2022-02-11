@@ -140,10 +140,12 @@ spawnEventHandler ss = do
       -- spawns event handler workers for new messages
       eventTid <- forkIO . forever $ do
         msg <- atomically . readTQueue $ ss ^. #eventInbox
+        putText $ "Spawned EventHandler thread"
 
         void . forkIO $ do
           tid <- myThreadId
           atomically $ addWorkerThread tid ss
+          putText $ "Spawning Event Worker thread: " <> show tid
           void $ runEventLoop (mainEventLoop msg) ss
           atomically $ removeCompletedWorkerThread tid ss
 

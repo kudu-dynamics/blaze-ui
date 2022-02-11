@@ -183,14 +183,14 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         if func:
             created_time = datetime.fromisoformat(servertime_to_clienttime(poi['created']))
             poi_item = PoiListItem(
-                self.poi_list_widget,
-                poi['poiId'],
-                poi['name'] or '',
-                poi['description'] or '',
-                func.name,
-                poi['instrAddr'],
-                created_time,
-                poi['isGlobalPoi'],
+                parent = self.poi_list_widget,
+                poiId = poi['poiId'],
+                name = poi['name'] or '',
+                desc = poi['description'] or '',
+                func_name = func.name,
+                instr_addr = poi['instrAddr'],
+                created_on = created_time,
+                is_global = poi['isGlobalPoi'],
             )
             self.poi_list_widget.addItem(poi_item)
         else:
