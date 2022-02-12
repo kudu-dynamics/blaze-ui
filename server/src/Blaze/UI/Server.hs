@@ -121,14 +121,13 @@ binjaApp st connId conn = do
             $ x ^. #action
       isNewConn <- atomically $ do
         sconns <- readTVar $ st ^. #sessionConns
-        case HashMap.member connId sconns of
-          False -> do
+        case HashSet.member sid <$> HashMap.lookup connId sconns of
+          Just True -> return False
+          _ -> do
             addSessionConn sid connId st
+            modifyTVar (ss ^. #binjaConns) $ HashMap.insert connId conn
             return True
-          True -> return False
-      when isNewConn $ do
-        atomically $ modifyTVar (ss ^. #binjaConns) $ HashMap.insert connId conn
-        logInfo' $ "Blaze Connected for binary: " <> show hpath
+      when isNewConn . logInfo' $ "Blaze Connected for binary: " <> show hpath
       pushEvent >> binjaApp st connId conn
 
 spawnEventHandler :: SessionState -> IO ()
@@ -163,10 +162,8 @@ app st pconn = case splitPath of
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
     runBinjaApp conn = do
       connId <- newConnId
-      forkIO $ catch (binjaApp st connId conn) (catchConnectionException connId)
-      putText "fork forked"
-      -- WS.withPingThread conn 3 (putText "ping")
-      --   $ catch (binjaApp st connId conn) (catchConnectionException connId)
+      WS.withPingThread conn 3 (return ())
+        $ catch (binjaApp st connId conn) (catchConnectionException connId)
     catchConnectionException :: ConnId -> WS.ConnectionException -> IO ()
     catchConnectionException connId e = do
       print e
