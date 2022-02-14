@@ -181,7 +181,10 @@ class UploadBndb(BackgroundTaskThread):
         self.callback: Callable[[BinaryHash], None] = callback
 
     def run(self):
-        self.blaze.upload_bndb(self.bv, self.binaryHash, self.callback)
+        try:
+            self.blaze.upload_bndb(self.bv, self.binaryHash, self.callback)
+        except Exception as e:
+            log.exception('Failed to upload BNDB: ' + str(e))
 
 
 class BlazePlugin():
