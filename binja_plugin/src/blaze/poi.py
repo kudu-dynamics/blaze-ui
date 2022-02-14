@@ -206,11 +206,9 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         if tag == 'PoisOfBinary':
             pois = cast(List[Poi], poi_msg.get('pois'))
             self.local_pois = pois
-            log.info(f"Got LOCAL {len(pois)}")
                     
         elif tag == 'GlobalPoisOfBinary':
             global_pois = cast(List[Poi], poi_msg.get('globalPois'))
-            log.info(f"Got GLOBAL {len(global_pois)}")
             self.global_pois = global_pois
 
         # Clear list items
