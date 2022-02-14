@@ -2,7 +2,6 @@ import logging as _logging
 from copy import deepcopy
 from typing import TYPE_CHECKING, Container, Dict, List, Mapping, Optional, Tuple, cast
 
-import binaryninja
 from binaryninja import BinaryView
 from binaryninja.enums import (
     BranchType,
