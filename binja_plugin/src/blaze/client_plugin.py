@@ -364,12 +364,8 @@ class BlazePlugin():
                 'binaryHash': binaryHash,
             }
             self.ping_server()
-            try:
-                r = requests.post(
-                    self.web_api_url('upload'), data=post_data, files=files, timeout=UPLOAD_TIMEOUT)
-            except requests.exceptions.RequestException as e:
-                log.exception('Failed to upload BNDB: ' + str(e))
-                return None
+            r = requests.post(
+                self.web_api_url('upload'), data=post_data, files=files, timeout=UPLOAD_TIMEOUT)
 
         if r.status_code != requests.codes['ok']:
             log.error(
@@ -430,8 +426,9 @@ class BlazePlugin():
                     except asyncio.CancelledError:
                         pass
         except Exception as e:
-            log.exception("Websocket error: " + str(e))
-            return None
+            raise BlazeNetworkError(
+                f'There was an error connecting to {uri}. Are your client settings correct and is the server up?'
+            ) from e
 
     async def recv_loop(self, websocket: WebSocketClientProtocol) -> None:
         async for ws_msg in websocket:
