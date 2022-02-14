@@ -2,13 +2,12 @@ import copy
 import dataclasses
 import logging as _logging
 from pathlib import Path
-from typing import Any, Callable, Iterable, List, Optional, TypeVar, Union, cast
+from typing import Any, Callable, List, Optional, TypeVar, Union, cast
 
 import binaryninja
 from binaryninja import BinaryView
 from binaryninja.binaryview import Section
-from binaryninja.enums import EdgePenStyle, ThemeColor
-from binaryninja.flowgraph import EdgeStyle, FlowGraphEdge, FlowGraphNode
+from binaryninja.flowgraph import FlowGraphEdge, FlowGraphNode
 from binaryninja.plugin import PluginCommand
 from binaryninjaui import ActionPriority, Menu, UIAction, UIActionContext, UIActionHandler
 

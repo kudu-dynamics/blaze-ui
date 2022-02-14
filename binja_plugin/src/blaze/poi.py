@@ -148,7 +148,6 @@ class PoiListWidget(QListWidget):
         poi_msg = PoiBinjaToServer(tag='GetPoisOfBinary')
         self.blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
 
-
         
 class PoiListDockWidget(QWidget, DockContextHandler):
     """
@@ -205,12 +204,14 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         tag = poi_msg['tag']
 
         if tag == 'PoisOfBinary':
-            log.info(f"Got LOCAL {len(poi_msg['pois'])}")
-            self.local_pois = poi_msg['pois']
+            pois = cast(List[Poi], poi_msg.get('pois'))
+            self.local_pois = pois
+            log.info(f"Got LOCAL {len(pois)}")
                     
         elif tag == 'GlobalPoisOfBinary':
-            log.info(f"Got GLOBAL {len(poi_msg['globalPois'])}")
-            self.global_pois = poi_msg['globalPois']
+            global_pois = cast(List[Poi], poi_msg.get('globalPois'))
+            log.info(f"Got GLOBAL {len(global_pois)}")
+            self.global_pois = global_pois
 
         # Clear list items
         self.poi_list_widget.clear()

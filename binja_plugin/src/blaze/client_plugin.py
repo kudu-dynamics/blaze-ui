@@ -49,6 +49,7 @@ from .types import (
     BinaryHash,
     BinjaMessage,
     BinjaToServer,
+    BndbHash,
     BranchId,
     CfgId,
     PoiBinjaToServer,
@@ -81,7 +82,7 @@ class BlazeInstance():
         self.blaze: 'BlazePlugin' = blaze
         self.graph: Optional[ICFGFlowGraph] = None
         self.bndbHash: Optional[BndbHash] = None
-        self.binaryHash: BinaryHash = hashlib.md5(bv.file.raw.read(0,len(bv.file.raw))).hexdigest()
+        self.binaryHash: BinaryHash = self.get_bin_hash()
         self._icfg_dock_widget: Optional[ICFGDockWidget] = None
         self._snaptree_dock_widget: Optional[SnapTreeDockWidget] = None
         self._poi_list_dock_widget: Optional[PoiListDockWidget] = None
@@ -97,6 +98,18 @@ class BlazeInstance():
     def send(self, msg: BinjaToServer):
         self.blaze.send(self.bv, msg)
 
+    def get_bin_hash(self) -> BinaryHash:
+        r = self.bv.file.raw
+
+        if r is None:
+            raise ValueError('BlazeInstance.get_bin_hash cannot open file')
+
+        else:
+            f = r.read(0,len(r))
+            if f is None:
+                raise ValueError('BlazeInstance.get_bin_hash cannot open file')
+            return hashlib.md5(f).hexdigest()
+        
     @property
     def bv_key(self) -> str:
         return bv_key(self.bv)
