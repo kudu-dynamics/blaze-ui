@@ -16,6 +16,7 @@ CfgId = UUID
 ClientId = UUID
 PoiId = UUID
 BinaryHash = str
+BndbHash = str
 HostBinaryPath = str
 
 # What Aeson encodes the unit value `()` as
@@ -266,17 +267,23 @@ class SnapshotBinjaToServer(SnapshotBinjaToServerTotal, total=False):
 
 class Poi(TypedDict):
     poiId: PoiId
-    clientId: ClientId
-    hostBinaryPath: HostBinaryPath
+    clientId: Optional[ClientId]
+    hostBinaryPath: Optional[HostBinaryPath]
+    binaryHash: BinaryHash
     created: str  # Parseable with util.servertime_to_clienttime
     funcAddr: Address
     instrAddr: Address
     name: Optional[str]
     description: Optional[str]
+    isGlobalPoi: bool
+
+class PoiServerToBinjaTotal(TypedDict, total=True):
+    tag: Literal['PoisOfBinary', 'GlobalPoisOfBinary']
 
 
-class PoiServerToBinja(TypedDict):
+class PoiServerToBinja(PoiServerToBinjaTotal, total=False):
     pois: List[Poi]
+    globalPois: List[Poi]
 
 
 class PoiBinjaToServerTotal(TypedDict, total=True):
@@ -382,6 +389,7 @@ class BinjaToServer(BinjaToServerTotal, total=False):
 class BinjaMessage(TypedDict):
     clientId: ClientId
     hostBinaryPath: HostBinaryPath
+    binaryHash: BinaryHash
     action: Union[BinjaToServer, ServerToBinja]
 
 

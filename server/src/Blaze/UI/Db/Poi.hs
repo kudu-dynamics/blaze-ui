@@ -10,30 +10,35 @@ import Data.Time.Clock (getCurrentTime)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import Blaze.UI.Types.Poi (Poi(Poi), PoiId, poiTable)
+import Blaze.UI.Types.BinaryHash (BinaryHash)
 
 
 -- | use `saveNewCfgAndBranch`
-saveNew :: MonadDb m
+saveNew
+  :: MonadDb m
   => ClientId
   -> HostBinaryPath
+  -> BinaryHash
   -> Address
   -> Address
   -> Maybe Text
   -> Maybe Text
   -> m ()
-saveNew cid hpath funcAddr instrAddr poiName poiDescription = withDb $ do
+saveNew cid hpath binHash funcAddr instrAddr poiName poiDescription = withDb $ do
   pid <- liftIO randomIO
   utc <- liftIO getCurrentTime
   insert_ poiTable
     [ Poi
       pid
-      cid
-      hpath
+      (Just cid)
+      (Just hpath)
+      binHash
       utc
       funcAddr
       instrAddr
       poiName
       poiDescription
+      False
     ]
 
 delete :: MonadDb m => PoiId -> m ()
@@ -56,8 +61,8 @@ setDescription pid mdescription = withDb $ do
 getPoisOfBinary :: MonadDb m => ClientId -> HostBinaryPath -> m [Poi]
 getPoisOfBinary cid hpath = withDb . query $ do
     poi <- select poiTable
-    restrict ( poi ! #clientId .== literal cid
-               .&& poi ! #hostBinaryPath .== literal hpath
+    restrict ( poi ! #clientId .== literal (Just cid)
+               .&& poi ! #hostBinaryPath .== literal (Just hpath)
              )
     return poi
 

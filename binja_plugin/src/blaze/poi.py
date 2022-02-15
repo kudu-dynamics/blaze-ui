@@ -14,7 +14,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 
-from .types import BinjaToServer, PoiBinjaToServer, PoiId, PoiServerToBinja
+from .types import BinjaToServer, PoiBinjaToServer, PoiId, PoiServerToBinja, Poi
 from .util import (
     BNAction,
     add_actions,
@@ -40,6 +40,7 @@ class PoiListItem(QListWidgetItem):
         func_name: str,
         instr_addr: int,
         created_on: datetime,
+        is_global: bool,
     ):
         """
         parent: the parent list widget
@@ -52,16 +53,23 @@ class PoiListItem(QListWidgetItem):
         self.func_name = func_name
         self.instr_addr = instr_addr
         self.created_on = created_on
+        self.is_global = is_global
 
         self.update_text()
 
     def update_text(self):
         if self.name:
             item_str = f'{self.name} ({self.func_name} @ 0x{hex(self.instr_addr)})'
-            self.setText(item_str)
         else:
             item_str = f'{self.func_name} @ 0x{hex(self.instr_addr)}'
-            self.setText(item_str)
+
+        if self.desc:
+            item_str = item_str + f' :: {self.desc}'
+
+        if self.is_global:
+            item_str = '* ' + item_str
+
+        self.setText(item_str)
 
 
 class PoiListWidget(QListWidget):
@@ -140,7 +148,7 @@ class PoiListWidget(QListWidget):
         poi_msg = PoiBinjaToServer(tag='GetPoisOfBinary')
         self.blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
 
-
+        
 class PoiListDockWidget(QWidget, DockContextHandler):
     """
     Binary Ninja dock widget containing the POI list view.
@@ -154,6 +162,8 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         self._view_frame: ViewFrame = view_frame
         self.blaze_instance: 'BlazeInstance' = blaze_instance
         self.poi_list_widget = PoiListWidget(self, blaze_instance)
+        self.local_pois: List[Poi] = []
+        self.global_pois: List[Poi] = []
 
         layout = QVBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -166,34 +176,48 @@ class PoiListDockWidget(QWidget, DockContextHandler):
     def __del__(self):
         try_debug(log, 'Deleting object: %r', self)
 
+    def add_poi_list_item(self, poi: Poi) -> None:
+        # TODO: Handle cases where function isn't found
+        func = get_function_at(self.blaze_instance.bv, poi['funcAddr'])
+        if func:
+            created_time = datetime.fromisoformat(servertime_to_clienttime(poi['created']))
+            poi_item = PoiListItem(
+                parent = self.poi_list_widget,
+                poiId = poi['poiId'],
+                name = poi['name'] or '',
+                desc = poi['description'] or '',
+                func_name = func.name,
+                instr_addr = poi['instrAddr'],
+                created_on = created_time,
+                is_global = poi['isGlobalPoi'],
+            )
+            self.poi_list_widget.addItem(poi_item)
+        else:
+            log.info(
+                'No function found at address 0x%x for %s', poi['funcAddr'],
+                self.blaze_instance.bv)
+
     def handle_server_msg(self, poi_msg: PoiServerToBinja):
         """
         Handle POI messages from the Blaze server.
         """
-        # Clear existing list of POIs
+        tag = poi_msg['tag']
+
+        if tag == 'PoisOfBinary':
+            pois = cast(List[Poi], poi_msg.get('pois'))
+            self.local_pois = pois
+                    
+        elif tag == 'GlobalPoisOfBinary':
+            global_pois = cast(List[Poi], poi_msg.get('globalPois'))
+            self.global_pois = global_pois
+
+        # Clear list items
         self.poi_list_widget.clear()
 
-        # The only message currently sent from the server is the list of POIs
-        for poi in poi_msg['pois']:
-            # TODO: Handle cases where function isn't found
-            func = get_function_at(self.blaze_instance.bv, poi['funcAddr'])
-            if func:
-                created_time = datetime.fromisoformat(servertime_to_clienttime(poi['created']))
-                poi_item = PoiListItem(
-                    self.poi_list_widget,
-                    poi['poiId'],
-                    poi['name'] or '',
-                    poi['description'] or '',
-                    func.name,
-                    poi['instrAddr'],
-                    created_time,
-                )
-                self.poi_list_widget.addItem(poi_item)
-            else:
-                log.info(
-                    'No function found at address 0x%x for %s', poi['funcAddr'],
-                    self.blaze_instance.bv)
-
+        # Redraw POI list
+        for poi in (self.local_pois + self.global_pois):
+            self.add_poi_list_item(poi)
+                
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
         if view_frame is None:
             log.error('view_frame is None')

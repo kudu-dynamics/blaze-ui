@@ -5,7 +5,7 @@ import Data.Time.Clock (UTCTime(UTCTime))
 import qualified Blaze.Types.Graph as G
 import Blaze.UI.Types.Cfg.Snapshot
 import Blaze.UI.Types.Cfg (CfgId(CfgId))
-import qualified Blaze.UI.Types.BinaryHash as BinaryHash
+import qualified Blaze.UI.Types.BndbHash as BndbHash
 import Blaze.Util.Spec (mkUuid1)
 import qualified Data.HashMap.Strict as HashMap
 import Test.Hspec
@@ -21,7 +21,7 @@ mkId = CfgId . mkUuid1
 branch1 :: Branch BranchTree
 branch1 = Branch
   { hostBinaryPath = "/tmp"
-  , bndbHash = BinaryHash.fromByteString "branch1"
+  , bndbHash = BndbHash.fromByteString "branch1"
   , originFuncAddr = 0
   , originFuncName = "foo"
   , branchName = Nothing

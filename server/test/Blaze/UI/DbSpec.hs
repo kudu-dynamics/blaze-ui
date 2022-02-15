@@ -25,7 +25,7 @@ import Blaze.UI.Types.Session (ClientId(ClientId))
 import Test.Hspec
 import qualified Data.UUID as UUID
 import qualified Data.Text as Text
-
+import qualified Blaze.UI.Types.BinaryHash as BinaryHash
 
 diveBin :: FilePath
 diveBin = "res/test_bins/Dive_Logger/Dive_Logger.bndb"
@@ -37,19 +37,20 @@ tryRemoveFile p = removeFile p `catch` ignore
     ignore _ = return ()
 
 mockSessionState :: Db.Conn -> IO SessionState
-mockSessionState conn = SessionState cid hpath
+mockSessionState conn = SessionState cid hpath bhash
   <$> atomically (BM.create bmdir cid hpath)
   <*> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
   <*> newEmptyTMVarIO
   <*> newTVarIO HashSet.empty
   <*> newTQueueIO
-  <*> newTMVarIO conn
+  <*> pure conn
   <*> newTVarIO Nothing
   <*> atomically CC.create
   where
     bmdir = "/tmp/blaze/bm"
     hpath = "/tmp/blaze/spec"
+    bhash = BinaryHash.fromByteString "mockHash"
     cid = ClientId . Text.append "testuser_" . UUID.toText $ mkUuid1 (0 :: Int)
 
 mockEventLoop :: EventLoop a -> IO a

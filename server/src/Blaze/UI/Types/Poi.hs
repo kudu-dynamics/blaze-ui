@@ -14,6 +14,7 @@ import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import Blaze.UI.Types.Db.Address ()
 import Blaze.UI.Types.Cfg (CfgId)
+import Blaze.UI.Types.BinaryHash (BinaryHash)
 
 
 newtype PoiId = PoiId UUID
@@ -27,8 +28,9 @@ instance SqlType PoiId where
    fromSql x = PoiId $ Sql.fromSql x
    defaultValue = LCustom TBlob (Sql.defaultValue :: Lit UUID)
 
-newtype ServerToBinja
+data ServerToBinja
   = PoisOfBinary { pois :: [Poi] }
+  | GlobalPoisOfBinary { globalPois :: [Poi] }
   deriving (Eq, Ord, Show, Generic)
   deriving anyclass (ToJSON, FromJSON)
 
@@ -62,13 +64,15 @@ data BinjaToServer
 
 data Poi = Poi
   { poiId :: PoiId
-  , clientId :: ClientId
-  , hostBinaryPath :: HostBinaryPath
+  , clientId :: Maybe ClientId
+  , hostBinaryPath :: Maybe HostBinaryPath
+  , binaryHash :: BinaryHash
   , created :: UTCTime
   , funcAddr :: Address
   , instrAddr :: Address
   , name :: Maybe Text
   , description :: Maybe Text
+  , isGlobalPoi :: Bool
   } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, SqlRow)
 
 poiTable :: Table Poi

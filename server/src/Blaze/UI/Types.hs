@@ -45,6 +45,7 @@ import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Poi as Poi
 import Blaze.UI.Types.Poi (Poi)
+import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.Db (MonadDb(withDb))
 import qualified Blaze.UI.Types.Db as Db
@@ -62,6 +63,7 @@ import qualified Network.WebSockets as WS
 data BinjaMessage a = BinjaMessage
   { clientId :: ClientId
   , hostBinaryPath :: HostBinaryPath
+  , binaryHash :: BinaryHash
   , action :: a
   } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
 
@@ -86,7 +88,7 @@ data ServerToBinja = SBLogInfo { message :: Text }
 
                    | SBCfg { cfgId :: CfgId
                            -- So plugin can easily warn if it's out of date
-                           , bndbHash :: BinaryHash
+                           , bndbHash :: BndbHash
                            , poiSearchResults :: Maybe PoiSearchResults 
                            , pendingChanges :: Maybe PendingChanges
                            -- TODO: send cfg with text
@@ -105,12 +107,12 @@ data ServerToBinja = SBLogInfo { message :: Text }
 -- | Messages from the Binaryninja Blaze plugin to the server.
 data BinjaToServer = BSConnect
                    | BSTextMessage { message :: Text }
-                   | BSTypeCheckFunction { bndbHash :: BinaryHash
+                   | BSTypeCheckFunction { bndbHash :: BndbHash
                                          , address :: Word64
                                          }
 
                    | BSCfgNew
-                     { bndbHash :: BinaryHash
+                     { bndbHash :: BndbHash
                      , startFuncAddress :: Word64
                      }
                    | BSCfgExpandCall
@@ -211,11 +213,8 @@ newtype EventLoop a = EventLoop { _runEventLoop :: ReaderT SessionState (ExceptT
 
 instance MonadDb EventLoop where
   withDb m = do
-    tconn <- view #dbConn <$> ask
-    conn <- liftIO . atomically $ takeTMVar tconn
-    r <- Db.runSelda conn m
-    liftIO . atomically $ putTMVar tconn conn
-    return r
+    conn <- view #dbConn <$> ask
+    Db.runSelda conn m
 
 runEventLoop :: EventLoop a -> SessionState -> IO (Either EventLoopError a)
 runEventLoop m ctx = runExceptT . flip runReaderT ctx $ _runEventLoop m
@@ -237,15 +236,16 @@ type BinjaConns = HashMap ConnId WS.Connection
 data SessionState = SessionState
   { clientId :: ClientId
   , hostBinaryPath :: HostBinaryPath
+  , binaryHash :: BinaryHash
   , binaryManager :: BinaryManager
   , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
   , binjaConns :: TVar BinjaConns
   , eventHandlerThread :: TMVar ThreadId
   , eventHandlerWorkerThreads :: TVar (HashSet ThreadId)
   , eventInbox :: TQueue Event
-  , dbConn :: TMVar Db.Conn
+  , dbConn :: Db.Conn
   , activePoi :: TVar (Maybe Poi)
-  , callNodeRatingCtx :: CachedCalc BinaryHash CallNodeRatingCtx
+  , callNodeRatingCtx :: CachedCalc BndbHash CallNodeRatingCtx
   } deriving (Generic)
 
 addWorkerThread :: ThreadId -> SessionState -> STM ()
@@ -259,21 +259,21 @@ removeCompletedWorkerThread tid ss
 emptySessionState
   :: ClientId
   -> HostBinaryPath
+  -> BinaryHash
   -> BinaryManager
-  -> TMVar Db.Conn
-  -> CachedCalc BinaryHash CallNodeRatingCtx
+  -> Db.Conn
+  -> CachedCalc BndbHash CallNodeRatingCtx
   -> STM SessionState
-emptySessionState cid binPath bm tconn ccCallRating
-  = SessionState cid binPath bm
+emptySessionState cid binPath binHash bm dbConn' ccCallRating
+  = SessionState cid binPath binHash bm
     <$> newTVar HashMap.empty
     <*> newTVar HashMap.empty
     <*> newEmptyTMVar
     <*> newTVar HashSet.empty
     <*> newTQueue
-    <*> pure tconn
+    <*> pure dbConn'
     <*> newTVar Nothing
     <*> pure ccCallRating
-
 
 -- | A `ConnId` is a unique websocket connection.
 -- There is only one ConnId per BinaryNinja instance, shared across bndbs.
@@ -290,8 +290,13 @@ data AppState = AppState
   { serverConfig :: ServerConfig
   , binarySessions :: TVar (HashMap SessionId SessionState)
   , sessionConns :: TVar (HashMap ConnId (HashSet SessionId))
-  , dbConn :: TMVar Db.Conn
+  , dbConn :: Db.Conn
   } deriving (Generic)
+
+instance MonadDb (ReaderT AppState IO) where
+  withDb m = do
+    conn <- view #dbConn <$> ask
+    Db.runSelda conn m
 
 -- | Inserts a unique ConnId for a SessionId.
 -- SessionIds can have multiple active connections if a single user opens multiple
@@ -350,7 +355,7 @@ initAppState :: ServerConfig -> Db.Conn -> IO AppState
 initAppState cfg' conn = AppState cfg'
   <$> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
-  <*> newTMVarIO conn
+  <*> pure conn
 
 lookupSessionState :: SessionId -> AppState -> STM (Maybe SessionState)
 lookupSessionState sid st = do

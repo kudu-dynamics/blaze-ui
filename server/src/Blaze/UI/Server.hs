@@ -32,6 +32,7 @@ import qualified Blaze.UI.Types.Constraint as C
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, Branch, BranchTree, SnapshotType)
 import qualified Blaze.UI.Cfg.Snapshot as Snapshot
+import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Blaze.UI.Db as Db
 import Blaze.UI.Types.Cfg (CfgId, convertPilCfg)
@@ -42,6 +43,7 @@ import Blaze.UI.Types.Session ( SessionId
                               )
 import Blaze.Function (Function)
 import qualified Blaze.UI.Db.Poi as PoiDb
+import qualified Blaze.UI.Db.Poi.Global as GlobalPoiDb
 import qualified Blaze.UI.Types.Poi as Poi
 import Blaze.Types.Cfg.Analysis (Target(Target))
 import qualified Blaze.UI.Types.CachedCalc as CC
@@ -67,9 +69,10 @@ data SessionError
 
 -- | Returns an existing SessionState or creates it.
 getSessionState :: SessionId
+                -> BinaryHash
                 -> AppState
                 -> IO SessionState
-getSessionState sid st = do
+getSessionState sid binHash st = do
   (ss, justCreated) <- atomically $ do
     m <- readTVar $ st ^. #binarySessions
     case HashMap.lookup sid m of
@@ -80,17 +83,20 @@ getSessionState sid st = do
           (sid ^. #clientId)
           (sid ^. #hostBinaryPath)
         ccCallNodeRating <- CC.create
-        ss <- emptySessionState (sid ^. #clientId) (sid ^. #hostBinaryPath) bm (st ^. #dbConn) ccCallNodeRating
+        ss <- emptySessionState (sid ^. #clientId) (sid ^. #hostBinaryPath) binHash bm (st ^. #dbConn) ccCallNodeRating
         modifyTVar (st ^. #binarySessions)
           $ HashMap.insert sid ss
         return (ss, True)
   when justCreated $ spawnEventHandler ss
   return ss
 
+sendToBinja_ :: ServerToBinja -> SessionState -> IO ()
+sendToBinja_ msg ss = do
+  conns <- fmap HashMap.elems . readTVarIO $ ss ^. #binjaConns
+  mapM_ (flip sendJSON $ BinjaMessage (ss ^. #clientId) (ss ^. #hostBinaryPath) (ss ^. #binaryHash) msg) conns
+
 sendToBinja :: ServerToBinja -> EventLoop ()
-sendToBinja msg = ask >>= \ctx -> liftIO $ do
-  conns <- fmap HashMap.elems . readTVarIO $ ctx ^. #binjaConns
-  mapM_ (flip sendJSON $ BinjaMessage (ctx ^. #clientId) (ctx ^. #hostBinaryPath) msg) conns
+sendToBinja msg = ask >>= liftIO . sendToBinja_ msg
 
 -- | Websocket message handler for binja.
 -- This handles messages for multiple binaries to/from single binja.
@@ -103,12 +109,13 @@ binjaApp st connId conn = do
     Right x -> do
       let cid = x ^. #clientId
           hpath = x ^. #hostBinaryPath
+          bhash = x ^. #binaryHash
           sid = mkSessionId cid hpath
-          reply = sendJSON conn . BinjaMessage cid hpath
+          reply = sendJSON conn . BinjaMessage cid hpath bhash
           logInfo' txt = do
             reply . SBLogInfo $ txt
             putText txt
-      ss <- getSessionState sid st
+      ss <- getSessionState sid bhash st
       let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
             . BinjaEvent
             $ x ^. #action
@@ -140,7 +147,6 @@ spawnEventHandler ss = do
           atomically $ removeCompletedWorkerThread tid ss
 
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
-      putText "Spawned event handlers"
 
 app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case splitPath of
@@ -153,12 +159,22 @@ app st pconn = case splitPath of
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
     runBinjaApp conn = do
       connId <- newConnId
-      catch (binjaApp st connId conn) (catchConnectionException connId)
+      WS.withPingThread conn 3 (return ())
+        $ catch (binjaApp st connId conn) (catchConnectionException connId)
     catchConnectionException :: ConnId -> WS.ConnectionException -> IO ()
     catchConnectionException connId e = do
       print e
       cleanupClosedConn connId st
 
+sendToAllWithBinary :: AppState -> BinaryHash -> ServerToBinja -> IO ()
+sendToAllWithBinary st bh msg = do
+  sss <- fmap HashMap.elems . readTVarIO $ st ^. #binarySessions
+  mapM_ addToOutboxesIfBinMatches sss
+  where
+    addToOutboxesIfBinMatches ss
+      | ss ^. #binaryHash == bh = sendToBinja_ msg ss
+      | otherwise = return ()
+      
 run :: AppState -> IO ()
 run st = do
   putText $ "Starting Blaze UI Server at "
@@ -199,7 +215,7 @@ autosaveCfg cid pcfg = getCfgType cid >>= \case
     Db.saveNewCfg_ bid autoCid pcfg Snapshot.Autosave
     return $ Just autoCid
 
-sendCfgWithCallRatings :: BinaryHash -> PilCfg -> CfgId -> EventLoop ()
+sendCfgWithCallRatings :: BndbHash -> PilCfg -> CfgId -> EventLoop ()
 sendCfgWithCallRatings bhash cfg cid = do
   poiSearch <- getPoiSearchResults bhash cfg
   sendToBinja . SBCfg cid bhash poiSearch Nothing . convertPilCfg $ cfg
@@ -212,14 +228,14 @@ refreshActiveCfg cid = do
 
 -- | Used after `autosaveCfg`. If second CfgId is Nothing, just send first.
 -- If second is Just, send new CfgId. In both cases, send new snapshot tree.
-sendCfgAndSnapshots :: BinaryHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop ()
+sendCfgAndSnapshots :: BndbHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop ()
 sendCfgAndSnapshots bhash pcfg cid newCid = do
   sendCfgWithCallRatings bhash pcfg $ fromMaybe cid newCid
   sendLatestClientSnapshots
 
 -- | Sends the old ICFG with the nodes and edges that will be removed.
 -- This allows a user to confirm or deny changes
-sendDiffCfg :: BinaryHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
+sendDiffCfg :: BndbHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
 sendDiffCfg bhash cid old new = do
   CfgUI.addCfg cid new
   if isEmptyChanges changes then
@@ -270,7 +286,6 @@ sendLatestClientSnapshots = do
     . fmap (over _2 (fmap (over _2 Snapshot.toTransport)))
     $ branches
 
-
 -- | Sends all ICFG snapshots for a particular HostBinaryPath and ClientId to client. 
 sendLatestBinarySnapshots :: EventLoop ()
 sendLatestBinarySnapshots = do
@@ -287,14 +302,30 @@ sendLatestSnapshots :: EventLoop ()
 sendLatestSnapshots = sendLatestBinarySnapshots
 
 -- | Sends all POIs for a binary to client.
-sendLatestPois :: EventLoop ()
-sendLatestPois = do
+sendLatestSessionPois :: EventLoop ()
+sendLatestSessionPois = do
   ctx <- ask
   pois <- PoiDb.getPoisOfBinary (ctx ^. #clientId) (ctx ^. #hostBinaryPath)
   sendToBinja
     . SBPoi
     . Poi.PoisOfBinary
     $ pois
+
+-- | Sends global POIs to single session.
+sendGlobalPois :: EventLoop ()
+sendGlobalPois = do
+  ctx <- ask
+  gpois <- GlobalPoiDb.getPoisOfBinary (ctx ^. #binaryHash)
+  sendToBinja
+    . SBPoi
+    . Poi.GlobalPoisOfBinary
+    $ gpois
+
+-- | Sends global POIs to every session with that binary
+broadcastGlobalPois :: AppState -> BinaryHash -> IO ()
+broadcastGlobalPois st binHash = do
+  pois <- flip runReaderT st $ GlobalPoiDb.getPoisOfBinary binHash
+  sendToAllWithBinary st binHash . SBPoi . Poi.GlobalPoisOfBinary $ pois
 
 -- | Simplifies the CFG by autopruning impossible edges and various passes on
 -- the PIL statements, like copy propagation and phi var reduction.
@@ -338,8 +369,8 @@ logInfo infoMsg = do
   sendToBinja . SBLogInfo $ infoMsg
   putText infoMsg
 
-getCfgBinaryView :: CfgId -> EventLoop (BNBinaryView, BinaryHash)
-getCfgBinaryView cid = Db.getCfgBinaryHash cid >>= \case
+getCfgBinaryView :: CfgId -> EventLoop (BNBinaryView, BndbHash)
+getCfgBinaryView cid = Db.getCfgBndbHash cid >>= \case
   Nothing ->
     logError $ "Could not find binary hash version for cfg: " <> show cid
 
@@ -347,12 +378,12 @@ getCfgBinaryView cid = Db.getCfgBinaryHash cid >>= \case
     bm <- view #binaryManager <$> ask
     BM.loadBndb bm h >>= either (logError . show) (return . (,h))
 
-getCfgBinaryHash :: CfgId -> EventLoop BinaryHash
-getCfgBinaryHash cid = Db.getCfgBinaryHash cid >>= \case
-  Nothing -> throwError . EventLoopError $ "getCfgBinaryHash cannot find CfgId: " <> show cid
+getCfgBndbHash :: CfgId -> EventLoop BndbHash
+getCfgBndbHash cid = Db.getCfgBndbHash cid >>= \case
+  Nothing -> throwError . EventLoopError $ "getCfgBndbHash cannot find CfgId: " <> show cid
   Just h -> return h
 
-getBinaryView :: BinaryHash -> EventLoop BNBinaryView
+getBinaryView :: BndbHash -> EventLoop BNBinaryView
 getBinaryView bhash = do
   bm <- view #binaryManager <$> ask
   BM.loadBndb bm bhash >>= either (logError . show) return
@@ -393,7 +424,7 @@ getActivePoiTarget bv = do
         Just func -> do
           return . Just . Target func $ poi ^. #instrAddr
 
-getPoiSearchResults :: BinaryHash -> PilCfg -> EventLoop (Maybe PoiSearchResults)
+getPoiSearchResults :: BndbHash -> PilCfg -> EventLoop (Maybe PoiSearchResults)
 getPoiSearchResults bhash pcfg = do
   bv <- getBinaryView bhash
   getActivePoiTarget bv >>= \case
@@ -450,13 +481,16 @@ handleBinjaEvent = \case
   -- where the root node is the auto-cfg
   -- Sends back two messages: one auto-cfg, one new snapshot tree
   BSCfgNew bhash funcAddr -> do
+    putText "Getting BV"
     bv <- getBinaryView bhash
+    putText "Got BV"
     mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
     case mfunc of
       Nothing -> sendToBinja
         . SBLogError $ "Couldn't find function at " <> showHex funcAddr
       Just func -> do
         mr <- liftIO $ BnCfg.getCfg (BNImporter bv) bv func
+
         case mr of
           Nothing -> sendToBinja
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
@@ -505,7 +539,7 @@ handleBinjaEvent = \case
   BSCfgRemoveBranch cid (node1, node2) -> do
     debug "Binja remove branch"
     -- TODO: just get the bhash since bv isn't used
-    bhash <- getCfgBinaryHash cid
+    bhash <- getCfgBndbHash cid
     cfg <- getCfg cid
     case (,) <$> Cfg.getFullNodeMay cfg node1 <*> Cfg.getFullNodeMay cfg node2 of
       Nothing -> sendToBinja
@@ -518,7 +552,7 @@ handleBinjaEvent = \case
 
   BSCfgRemoveNode cid node' -> do
     debug "Binja remove node"
-    bhash <- getCfgBinaryHash cid
+    bhash <- getCfgBndbHash cid
     cfg <- getCfg cid
     case Cfg.getFullNodeMay cfg node' of
       Nothing -> sendToBinja
@@ -533,7 +567,7 @@ handleBinjaEvent = \case
 
   BSCfgFocus cid node' -> do
     debug "Binja Focus"
-    bhash <- getCfgBinaryHash cid
+    bhash <- getCfgBndbHash cid
     cfg <- getCfg cid
     case Cfg.getFullNodeMay cfg node' of
       Nothing -> sendToBinja
@@ -549,7 +583,7 @@ handleBinjaEvent = \case
     CfgUI.getCfg cid >>= \case
       Nothing -> throwError . EventLoopError $ "Could not find existing CFG with id " <> show cid
       Just pcfg -> do
-        bhash <- getCfgBinaryHash cid
+        bhash <- getCfgBndbHash cid
         autosaveCfg cid pcfg
           >>= sendCfgAndSnapshots bhash pcfg cid
 
@@ -557,7 +591,7 @@ handleBinjaEvent = \case
     Nothing -> throwError . EventLoopError $ "Could not find existing CFG with id " <> show cid
     Just pcfg -> do
       CfgUI.addCfg cid pcfg
-      bhash <- getCfgBinaryHash cid
+      bhash <- getCfgBndbHash cid
       poiSearch <- getPoiSearchResults bhash pcfg
       sendToBinja . SBCfg cid bhash poiSearch Nothing $ convertPilCfg pcfg
       
@@ -590,7 +624,7 @@ handleBinjaEvent = \case
         Just _br -> sendLatestSnapshots
 
     Snapshot.LoadSnapshot cid -> do
-      bhash <- getCfgBinaryHash cid
+      bhash <- getCfgBndbHash cid
       cfg <- getStoredCfg cid
       poiSearch <- getPoiSearchResults bhash cfg
       sendToBinja . SBCfg cid bhash poiSearch Nothing . convertPilCfg $ cfg
@@ -608,30 +642,33 @@ handleBinjaEvent = \case
       sendLatestSnapshots
 
   BSPoi poiMsg' -> case poiMsg' of
-    Poi.GetPoisOfBinary -> sendLatestPois
+    Poi.GetPoisOfBinary -> do
+      sendLatestSessionPois
+      sendGlobalPois
 
     Poi.AddPoi funcAddr instrAddr poiName poiDescription -> do
       ctx <- ask
       PoiDb.saveNew
         (ctx ^. #clientId)
         (ctx ^. #hostBinaryPath)
+        (ctx ^. #binaryHash)
         funcAddr
         instrAddr
         poiName
         poiDescription
-      sendLatestPois
+      sendLatestSessionPois
 
     Poi.DeletePoi pid -> do
       PoiDb.delete pid
-      sendLatestPois
+      sendLatestSessionPois
 
     Poi.RenamePoi pid poiName -> do
       PoiDb.setName pid poiName
-      sendLatestPois
+      sendLatestSessionPois
 
     Poi.DescribePoi pid poiDescription -> do
       PoiDb.setName pid poiDescription
-      sendLatestPois
+      sendLatestSessionPois
 
     Poi.ActivatePoiSearch pid mcid -> PoiDb.getPoi pid >>= \case
       Nothing -> logError $ "Cannot find POI in database: " <> show pid
@@ -657,13 +694,13 @@ handleBinjaEvent = \case
         Right expr -> do
           cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Constraint . Pil.ConstraintOp $ expr)
           simplifiedCfg <- simplify cfg'
-          bhash <- getCfgBinaryHash cid
+          bhash <- getCfgBndbHash cid
           sendDiffCfg bhash cid cfg' simplifiedCfg
 
   BSComment cid nid stmtIndex comment' -> do
     cfg <- getCfg cid
     cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Annotation comment')
-    bhash <- getCfgBinaryHash cid
+    bhash <- getCfgBndbHash cid
     sendDiffCfg bhash cid cfg' cfg'
 
 insertStmt ::

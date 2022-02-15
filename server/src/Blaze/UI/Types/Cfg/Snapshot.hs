@@ -12,7 +12,7 @@ import Database.Selda.SqlType ( Lit(LCustom)
                               )
 import qualified Database.Selda.SqlType as Sql
 import Blaze.UI.Types.Graph (GraphTransport)
-import Blaze.UI.Types.BinaryHash (BinaryHash)
+import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 
 newtype BranchId = BranchId UUID
@@ -88,7 +88,7 @@ type BranchTransport = GraphTransport () () CfgId
 
 data Branch a = Branch
   { hostBinaryPath :: HostBinaryPath
-  , bndbHash :: BinaryHash
+  , bndbHash :: BndbHash
   , originFuncAddr :: Address
   , originFuncName :: Text
   , branchName :: Maybe Text
