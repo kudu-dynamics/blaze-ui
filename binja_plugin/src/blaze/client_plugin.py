@@ -25,6 +25,7 @@ from typing import (
 import binaryninja
 import requests
 import websockets
+from websockets.exceptions import ConnectionClosed
 from binaryninja import BackgroundTaskThread, BinaryView
 from binaryninja.interaction import (
     MessageBoxButtonResult,
@@ -468,7 +469,7 @@ class BlazePlugin():
                 except Exception:
                     log.exception("Couldn't handle message", extra={'websocket_message': msg})
                     continue
-        except websockets.ConnectionClosed:
+        except ConnectionClosed:
             log.info("Websocket disconnected.")
             self.shutdown()
 
