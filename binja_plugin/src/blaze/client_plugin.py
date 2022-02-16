@@ -278,6 +278,7 @@ class BlazePlugin():
 
     def _init_thread(self) -> None:
         if not self.websocket_thread or not self.websocket_thread.is_alive():
+            log.info('Starting or restarting websocket thread')
             self.out_queue = queue.Queue()
             t = threading.Thread(target=lambda: asyncio.run(self.main_websocket_loop()))
             t.name = 'Blaze websocket thread'
