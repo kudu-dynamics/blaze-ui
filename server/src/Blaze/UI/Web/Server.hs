@@ -20,8 +20,9 @@ import Blaze.UI.Types.Poi (ServerToBinja(GlobalPoisOfBinary))
 import Data.List (lookup)
 import qualified Data.Text.Lazy
 import qualified Data.Text.IO as TextIO
+import qualified Data.ByteString.Lazy as LB
 import qualified Network.Wai.Parse as Wai
-import Web.Scotty (ActionM, File, ScottyM, files, get, json, post, scotty, setHeader)
+import Web.Scotty (ActionM, File, ScottyM, body, files, get, json, post, raw, scotty, setHeader)
 import Web.Scotty.Trans (ActionT, Parsable (parseParam), ScottyError (stringError), html, params, raiseStatus)
 import Network.HTTP.Types (badRequest400)
 
@@ -29,12 +30,18 @@ import Network.HTTP.Types (badRequest400)
 server :: AppState -> ScottyM ()
 server st = do
   get "/" showErrorPage
+  post "/ping" ping
   post "/upload" $ uploadBinary st
   post "/poi" $ submitPoi st
   get "/demo/poi/set" $ htmlFile "res/html/poiset.html"
 
 htmlFile :: FilePath -> ActionM ()
 htmlFile = html . cs <=< liftIO . TextIO.readFile
+
+-- | Responds with the first 64 bytes of the request body
+ping :: ActionM ()
+ping = do
+  raw . LB.take 64 =<< body
 
 -- | Same as 'Web.Scotty.Trans.param' but do not call
 -- 'Web.Scotty.Trans.next' if it fails to parse. Instead, throw an error

@@ -5,7 +5,9 @@ import logging as _logging
 import os
 import os.path
 import queue
+import random
 import threading
+import urllib.parse
 from typing import (
     Callable,
     DefaultDict,
@@ -36,12 +38,14 @@ from binaryninjaui import DockHandler, FileContext, UIContext, UIContextNotifica
 from websockets.client import WebSocketClientProtocol
 import hashlib
 
-REQUEST_ACTIVITY_TIMEOUT = 5
+WEB_API_PING_TIMEOUT = 5  # 5 seconds
+UPLOAD_TIMEOUT = 300  # 5 minutes
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
+from .exceptions import BlazeNetworkError
 from .poi import PoiListDockWidget
 from .settings import BlazeSettings
 from .snaptree import SnapTreeDockWidget
@@ -177,7 +181,10 @@ class UploadBndb(BackgroundTaskThread):
         self.callback: Callable[[BinaryHash], None] = callback
 
     def run(self):
-        self.blaze.upload_bndb(self.bv, self.binaryHash, self.callback)
+        try:
+            self.blaze.upload_bndb(self.bv, self.binaryHash, self.callback)
+        except Exception as e:
+            log.exception('Failed to upload BNDB: ' + str(e))
 
 
 class BlazePlugin():
@@ -292,9 +299,40 @@ class BlazePlugin():
             if self.websocket_thread.is_alive():
                 log.warn('websocket thread is still alive after timeout')
 
+    def web_api_url(self, path: str = None, query: str = None) -> str:
+        return urllib.parse.ParseResult(
+            scheme='http',
+            netloc=f'{self.settings.host}:{self.settings.http_port}',
+            path=path or '',
+            query=query or '',
+            params='',
+            fragment='',
+        ).geturl()
+
+    def ping_server(self, data: bytes = None, timeout: float = WEB_API_PING_TIMEOUT) -> None:
+        if isinstance(data, bytes) and len(data) > 64:
+            raise ValueError('len(data) should be <= 64')
+
+        if data is None:
+            # TODO Change to randybytes(64) in Python 3.9+
+            data = bytes(random.getrandbits(8) for _ in range(64))
+
+        try:
+            r = requests.post(self.web_api_url('ping'), data=data, timeout=timeout)
+        except requests.RequestException as e:
+            raise BlazeNetworkError(
+                f'Could not connect to server {self.web_api_url()}. Are your client settings correct and is the server up?'
+            ) from e
+
+        if r.status_code != requests.codes['ok']:
+            raise BlazeNetworkError(f'Server returned {r.status_code} for ping request')
+
+        if r.content != data:
+            raise BlazeNetworkError(
+                f'Server responded to ping request with {r.content!r}, but we were expecting {data!r}'
+            )
+
     def upload_bndb(self, bv: BinaryView, binaryHash: BinaryHash, callback: Callable[[BinaryHash], None]) -> None:
-        log.debug(
-            f'{bv=!r}, {bv.file=!r}, {bv.file.raw=!r}, {bv.file.raw and bv.file.raw.handle = !r}')
         if (not bv.file.filename.endswith('.bndb')):
             bndb_filename: str = bv.file.filename + '.bndb'
             if (os.path.isfile(bndb_filename)):
@@ -321,7 +359,6 @@ class BlazePlugin():
         if bv.file.analysis_changed:
             bv.create_database(og_filename)
 
-        uri = f'http://{self.settings.host}:{self.settings.http_port}/upload'
         with open(og_filename, 'rb') as f:
             files = {'bndb': f}
             post_data = {
@@ -329,14 +366,9 @@ class BlazePlugin():
                 'clientId': self.settings.client_id,
                 'binaryHash': binaryHash,
             }
-            try:
-                ### FIXME why can we not set the connect timeout here? See #170
-                # r = requests.post(
-                #     uri, data=post_data, files=files, timeout=(REQUEST_ACTIVITY_TIMEOUT, None))
-                r = requests.post(uri, data=post_data, files=files, timeout=None)
-            except requests.exceptions.RequestException as e:
-                log.exception('Failed to upload BNDB: ' + str(e))
-                return None
+            self.ping_server()
+            r = requests.post(
+                self.web_api_url('upload'), data=post_data, files=files, timeout=UPLOAD_TIMEOUT)
 
         if r.status_code != requests.codes['ok']:
             log.error(
@@ -397,8 +429,9 @@ class BlazePlugin():
                     except asyncio.CancelledError:
                         pass
         except Exception as e:
-            log.exception("Websocket error: " + str(e))
-            return None
+            raise BlazeNetworkError(
+                f'There was an error connecting to {uri}. Are your client settings correct and is the server up?'
+            ) from e
 
     async def recv_loop(self, websocket: WebSocketClientProtocol) -> None:
         async for ws_msg in websocket:
