@@ -278,7 +278,6 @@ class BlazePlugin():
 
     def _init_thread(self) -> None:
         if not self.websocket_thread or not self.websocket_thread.is_alive():
-            log.info('Starting or restarting websocket thread')
             self.out_queue = queue.Queue()
             t = threading.Thread(target=lambda: asyncio.run(self.main_websocket_loop()))
             t.name = 'Blaze websocket thread'
@@ -434,38 +433,43 @@ class BlazePlugin():
             ) from e
 
     async def recv_loop(self, websocket: WebSocketClientProtocol) -> None:
-        async for ws_msg in websocket:
-            try:
-                msg = json.loads(ws_msg)
-            except json.JSONDecodeError:
-                log.exception(
-                    'Backend returned malformed message', extra={'websocket_message': ws_msg})
-                continue
+        try:
+            async for ws_msg in websocket:
+                try:
+                    msg = json.loads(ws_msg)
 
-            log.debug(
-                'Received websocket message',
-                extra={
-                    'hostBinaryPath': msg['hostBinaryPath'],
-                    'action.tag': msg['action']['tag'],
-                },
-            )
+                except json.JSONDecodeError:
+                    log.exception(
+                        'Backend returned malformed message', extra={'websocket_message': ws_msg})
+                    continue
 
-            relevant_instances: Set[BlazeInstance] = \
-                self.instances_by_key(bv_key(msg['hostBinaryPath']))
+                log.debug(
+                    'Received websocket message',
+                    extra={
+                        'hostBinaryPath': msg['hostBinaryPath'],
+                        'action.tag': msg['action']['tag'],
+                    },
+                )
 
-            if not relevant_instances:
-                log.error(
-                    "Couldn't find existing blaze instance for %r",
-                    msg['hostBinaryPath'],
-                    extra={'blaze_instances': repr(self._instance_by_bv)})
-                continue
+                relevant_instances: Set[BlazeInstance] = \
+                    self.instances_by_key(bv_key(msg['hostBinaryPath']))
 
-            # log.debug('Blaze: received %r', msg)
-            try:
-                self.message_handler(relevant_instances, msg['action'])
-            except Exception:
-                log.exception("Couldn't handle message", extra={'websocket_message': msg})
-                continue
+                if not relevant_instances:
+                    log.error(
+                        "Couldn't find existing blaze instance for %r",
+                        msg['hostBinaryPath'],
+                        extra={'blaze_instances': repr(self._instance_by_bv)})
+                    continue
+
+                # log.debug('Blaze: received %r', msg)
+                try:
+                    self.message_handler(relevant_instances, msg['action'])
+                except Exception:
+                    log.exception("Couldn't handle message", extra={'websocket_message': msg})
+                    continue
+        except websockets.ConnectionClosed:
+            log.info("Websocket disconnected.")
+            self.shutdown()
 
     async def send_loop(self, websocket: WebSocketClientProtocol) -> None:
         while True:
