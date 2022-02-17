@@ -25,6 +25,7 @@ from typing import (
 import binaryninja
 import requests
 import websockets
+from websockets.exceptions import ConnectionClosed
 from binaryninja import BackgroundTaskThread, BinaryView
 from binaryninja.interaction import (
     MessageBoxButtonResult,
@@ -434,9 +435,17 @@ class BlazePlugin():
             ) from e
 
     async def recv_loop(self, websocket: WebSocketClientProtocol) -> None:
-        async for ws_msg in websocket:
+        while True:
+            try:
+                ws_msg = await websocket.recv()
+            except ConnectionClosed:
+                log.info("Websocket disconnected.")
+                self.shutdown()
+                return
+            
             try:
                 msg = json.loads(ws_msg)
+                
             except json.JSONDecodeError:
                 log.exception(
                     'Backend returned malformed message', extra={'websocket_message': ws_msg})
@@ -452,7 +461,7 @@ class BlazePlugin():
 
             relevant_instances: Set[BlazeInstance] = \
                 self.instances_by_key(bv_key(msg['hostBinaryPath']))
-
+            
             if not relevant_instances:
                 log.error(
                     "Couldn't find existing blaze instance for %r",
