@@ -32,7 +32,7 @@ server st = do
   get "/" showErrorPage
   post "/ping" ping
   post "/upload" $ uploadBinary st
-  post "/poi" $ submitPoi st
+  get "/poi" $ submitPoi st
   get "/demo/poi/set" $ htmlFile "res/html/poiset.html"
 
 htmlFile :: FilePath -> ActionM ()
