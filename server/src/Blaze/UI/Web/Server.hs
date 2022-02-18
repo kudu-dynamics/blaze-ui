@@ -1,6 +1,6 @@
 module Blaze.UI.Web.Server where
 
-import Blaze.UI.Prelude hiding (get)
+import Blaze.UI.Prelude hiding (get, put)
 import qualified Prelude as P
 
 import Blaze.UI.Types hiding (cfg)
@@ -22,7 +22,7 @@ import qualified Data.Text.Lazy
 import qualified Data.Text.IO as TextIO
 import qualified Data.ByteString.Lazy as LB
 import qualified Network.Wai.Parse as Wai
-import Web.Scotty (ActionM, File, ScottyM, body, files, get, json, post, raw, scotty, setHeader)
+import Web.Scotty (ActionM, File, ScottyM, body, files, get, json, post, put, raw, scotty, setHeader)
 import Web.Scotty.Trans (ActionT, Parsable (parseParam), ScottyError (stringError), html, params, raiseStatus)
 import Network.HTTP.Types (badRequest400)
 
@@ -33,6 +33,8 @@ server st = do
   post "/ping" ping
   post "/upload" $ uploadBinary st
   get "/poi" $ submitPoi st
+  post "/poi" $ submitPoi st
+  put "/poi" $ submitPoi st
   get "/demo/poi/set" $ htmlFile "res/html/poiset.html"
 
 htmlFile :: FilePath -> ActionM ()
