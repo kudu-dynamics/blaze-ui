@@ -94,6 +94,12 @@ class PoiListWidget(QListWidget):
                 activate=self.ctx_menu_action_set_active_poi,
                 is_valid=lambda ctx: self.clicked_item is not None,
             ),
+            BNAction(
+                'Blaze',
+                'Goto POI',
+                activate=self.ctx_menu_action_goto_poi,
+                is_valid=lambda ctx: self.clicked_item is not None,
+            ),
         ]
 
         bind_actions(self.action_handler, actions)
@@ -140,6 +146,12 @@ class PoiListWidget(QListWidget):
             return
 
         self.set_active_poi(self.clicked_item.poiId)
+
+    def ctx_menu_action_goto_poi(self, context: UIActionContext) -> None:
+        if not self.clicked_item:
+            return
+        bv = self.blaze_instance.bv
+        bv.navigate(bv.view, self.clicked_item.instr_addr)
 
     def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', _view_frame: ViewFrame):
         self.blaze_instance = blaze_instance
