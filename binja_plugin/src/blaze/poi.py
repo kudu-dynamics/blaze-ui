@@ -2,6 +2,8 @@ import logging as _logging
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional, cast
 
+from binaryninja import ( Function )
+from binaryninja.highlight import ( HighlightColor )
 from binaryninjaui import (
     ContextMenuManager,
     DockContextHandler,
@@ -37,7 +39,7 @@ class PoiListItem(QListWidgetItem):
         poiId: PoiId,
         name: str,
         desc: str,
-        func_name: str,
+        func: Function,
         instr_addr: int,
         created_on: datetime,
         is_global: bool,
@@ -50,7 +52,7 @@ class PoiListItem(QListWidgetItem):
         self.poiId = poiId
         self.name = name
         self.desc = desc
-        self.func_name = func_name
+        self.func = func
         self.instr_addr = instr_addr
         self.created_on = created_on
         self.is_global = is_global
@@ -59,9 +61,9 @@ class PoiListItem(QListWidgetItem):
 
     def update_text(self):
         if self.name:
-            item_str = f'{self.name} ({self.func_name} @ 0x{hex(self.instr_addr)})'
+            item_str = f'{self.name} ({self.func.name} @ 0x{hex(self.instr_addr)})'
         else:
-            item_str = f'{self.func_name} @ 0x{hex(self.instr_addr)}'
+            item_str = f'{self.func.name} @ 0x{hex(self.instr_addr)}'
 
         if self.desc:
             item_str = item_str + f' :: {self.desc}'
@@ -92,6 +94,12 @@ class PoiListWidget(QListWidget):
                 'Blaze',
                 'Set Active POI',
                 activate=self.ctx_menu_action_set_active_poi,
+                is_valid=lambda ctx: self.clicked_item is not None,
+            ),
+            BNAction(
+                'Blaze',
+                'Goto POI',
+                activate=self.ctx_menu_action_goto_poi,
                 is_valid=lambda ctx: self.clicked_item is not None,
             ),
         ]
@@ -141,6 +149,14 @@ class PoiListWidget(QListWidget):
 
         self.set_active_poi(self.clicked_item.poiId)
 
+    def ctx_menu_action_goto_poi(self, context: UIActionContext) -> None:
+        if not self.clicked_item:
+            return
+        bv = self.blaze_instance.bv
+        highlight = HighlightColor(red= 150, green = 90, blue = 90)
+        self.clicked_item.func.set_auto_instr_highlight(self.clicked_item.instr_addr, highlight)
+        bv.navigate(bv.view, self.clicked_item.instr_addr)
+
     def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', _view_frame: ViewFrame):
         self.blaze_instance = blaze_instance
 
@@ -186,7 +202,7 @@ class PoiListDockWidget(QWidget, DockContextHandler):
                 poiId = poi['poiId'],
                 name = poi['name'] or '',
                 desc = poi['description'] or '',
-                func_name = func.name,
+                func = func,
                 instr_addr = poi['instrAddr'],
                 created_on = created_time,
                 is_global = poi['isGlobalPoi'],
