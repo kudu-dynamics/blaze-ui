@@ -133,18 +133,23 @@ class PoiListWidget(QListWidget):
             self.context_menu_manager.show(self.context_menu, self.action_handler)
 
     def set_active_poi(self, poiId: PoiId) -> None:
-        if not self.clicked_item or not self.blaze_instance.graph:
+        if not self.clicked_item:
             return
 
+        if self.blaze_instance.graph:
+            active_icfg_id = self.blaze_instance.graph.pil_icfg_id
+        else:
+            active_icfg_id = None
+            
         poi_msg = PoiBinjaToServer(
             tag='ActivatePoiSearch',
             poiId=self.clicked_item.poiId,
-            activeCfg=self.blaze_instance.graph.pil_icfg_id)
+            activeCfg=active_icfg_id)
 
         self.blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
 
     def ctx_menu_action_set_active_poi(self, context: UIActionContext) -> None:
-        if not self.clicked_item or not self.blaze_instance.graph:
+        if not self.clicked_item:
             return
 
         self.set_active_poi(self.clicked_item.poiId)
