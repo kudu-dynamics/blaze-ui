@@ -136,10 +136,7 @@ class PoiListWidget(QListWidget):
         if not self.clicked_item:
             return
 
-        if self.blaze_instance.graph:
-            active_icfg_id = self.blaze_instance.graph.pil_icfg_id
-        else:
-            active_icfg_id = None
+        active_icfg_id = self.blaze_instance.graph.pil_icfg_id if self.blaze_instance.graph else None
             
         poi_msg = PoiBinjaToServer(
             tag='ActivatePoiSearch',
