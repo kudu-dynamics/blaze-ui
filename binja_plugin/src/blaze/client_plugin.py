@@ -35,6 +35,7 @@ from binaryninja.interaction import (
     get_form_input,
     show_message_box,
 )
+from binaryninja.mainthread import execute_on_main_thread_and_wait
 from binaryninjaui import DockHandler, FileContext, UIContext, UIContextNotification, ViewFrame
 from websockets.client import WebSocketClientProtocol
 import hashlib
@@ -470,11 +471,13 @@ class BlazePlugin():
                 continue
 
             # log.debug('Blaze: received %r', msg)
-            try:
-                self.message_handler(relevant_instances, msg['action'])
-            except Exception:
-                log.exception("Couldn't handle message", extra={'websocket_message': msg})
-                continue
+            def run_message_handler():
+                try:
+                    self.message_handler(relevant_instances, msg['action'])
+                except Exception:
+                    log.exception("Couldn't handle message", extra={'websocket_message': msg})
+                
+            execute_on_main_thread_and_wait(run_message_handler)
 
     async def send_loop(self, websocket: WebSocketClientProtocol) -> None:
         while True:
