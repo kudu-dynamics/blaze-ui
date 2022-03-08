@@ -301,7 +301,7 @@ class BlazePlugin():
             if self.websocket_thread.is_alive():
                 log.warn('websocket thread is still alive after timeout')
 
-    def web_api_url(self, path: str = None, query: str = None) -> str:
+    def web_api_url(self, path: Optional[str] = None, query: Optional[str] = None) -> str:
         return urllib.parse.ParseResult(
             scheme='http',
             netloc=f'{self.settings.host}:{self.settings.http_port}',
@@ -311,7 +311,11 @@ class BlazePlugin():
             fragment='',
         ).geturl()
 
-    def ping_server(self, data: bytes = None, timeout: float = WEB_API_PING_TIMEOUT) -> None:
+    def ping_server(
+        self,
+        data: Optional[bytes] = None,
+        timeout: float = WEB_API_PING_TIMEOUT,
+    ) -> None:
         if isinstance(data, bytes) and len(data) > 64:
             raise ValueError('len(data) should be <= 64')
 

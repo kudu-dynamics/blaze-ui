@@ -57,6 +57,7 @@ def cleanup_and_exit(retcode):
 if (ret := stack.poll()) is not None:
     cleanup_and_exit(ret)
 
+assert stack.stdout is not None
 for line in stack.stdout:
     print(line, end='')
     if re.search(r'examples?, 0 failure', line):
