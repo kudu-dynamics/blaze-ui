@@ -130,18 +130,6 @@ def get_edge_style(
     return edge_style
 
 
-def is_conditional_edge(edge: FlowGraphEdge) -> bool:
-    if edge.type in (BranchType.TrueBranch, BranchType.FalseBranch):
-        return True
-
-    if isinstance(edge.style, EdgeStyle):
-        color: ThemeColor = edge.style.color
-    else:
-        raise RuntimeError(f'Bad type for edge: {type(edge)}')
-
-    return color in (ThemeColor.TrueBranchColor, ThemeColor.FalseBranchColor)
-
-
 def is_call_node(node: CfNode) -> bool:
     return node['tag'] == 'Call'
 
@@ -493,7 +481,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 'Blaze\\ICFG\\Edit',
                 'Prune',
                 activate=self.context_menu_action_prune,
-                is_valid=lambda ctx: self.clicked_edge is not None and is_conditional_edge(
+                is_valid=lambda ctx: self.clicked_edge is not None and self.is_conditional_edge(
                     self.clicked_edge),
             ),
             BNAction(
@@ -550,6 +538,21 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
     def __del__(self):
         try_debug(log, 'Deleting object: %r', self)
+
+    def is_conditional_edge(self, fg_edge: FlowGraphEdge) -> bool:
+        if not self.blaze_instance.graph:
+            return False
+
+        source = self.get_cf_node(cast(FlowGraphNode, fg_edge.source))
+        dest = self.get_cf_node(cast(FlowGraphNode, fg_edge.target))
+        assert source and dest
+        if not (edge := self.blaze_instance.graph.get_edge(
+                source['contents']['uuid'],
+                dest['contents']['uuid'],
+        )):
+            return False
+
+        return edge['branchType'] in ('TrueBranch', 'FalseBranch')
 
     def save_icfg(self):
         assert self.blaze_instance.graph
@@ -704,7 +707,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             log.error('Did not right-click on an edge')
             return
 
-        if not is_conditional_edge(self.clicked_edge):
+        if not self.is_conditional_edge(self.clicked_edge):
             log.error('Not a conditional branch')
             return
 
