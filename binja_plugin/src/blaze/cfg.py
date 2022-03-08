@@ -452,7 +452,11 @@ class ICFGFlowGraph(FlowGraph):
     def edges(self) -> List[CfEdge]:
         return self.pil_icfg['edges']
 
-    def get_edge(self, source_id: str = None, dest_id: str = None) -> Optional[CfEdge]:
+    def get_edge(
+        self,
+        source_id: Optional[str] = None,
+        dest_id: Optional[str] = None,
+    ) -> Optional[CfEdge]:
         for edge in self.edges:
             if (source_id is None or edge['src']['contents']['uuid'] == source_id) and \
                (dest_id is None or edge['dst']['contents']['uuid'] == dest_id):
