@@ -115,7 +115,7 @@ class BlazeInstance():
             if f is None:
                 raise ValueError('BlazeInstance.get_bin_hash cannot open file')
             return hashlib.md5(f).hexdigest()
-        
+
     @property
     def bv_key(self) -> str:
         return bv_key(self.bv)
@@ -447,10 +447,10 @@ class BlazePlugin():
                 log.info("Websocket disconnected.")
                 self.shutdown()
                 return
-            
+
             try:
                 msg = json.loads(ws_msg)
-                
+
             except json.JSONDecodeError:
                 log.exception(
                     'Backend returned malformed message', extra={'websocket_message': ws_msg})
@@ -466,7 +466,7 @@ class BlazePlugin():
 
             relevant_instances: Set[BlazeInstance] = \
                 self.instances_by_key(bv_key(msg['hostBinaryPath']))
-            
+
             if not relevant_instances:
                 log.error(
                     "Couldn't find existing blaze instance for %r",
@@ -480,7 +480,7 @@ class BlazePlugin():
                     self.message_handler(relevant_instances, msg['action'])
                 except Exception:
                     log.exception("Couldn't handle message", extra={'websocket_message': msg})
-                
+
             execute_on_main_thread_and_wait(run_message_handler)
 
     async def send_loop(self, websocket: WebSocketClientProtocol) -> None:
@@ -540,6 +540,7 @@ class BlazePlugin():
             cfg = cfg_from_server(cast(ServerCfg, msg.get('cfg')))
             server_pending_changes = msg.get('pendingChanges')
             server_poi_search_results = msg.get('poiSearchResults')
+            server_group_end_nodes = msg.get('groupEndNodes')
 
             if server_poi_search_results:
                 poi_search_results = PoiSearchResults(
@@ -554,9 +555,14 @@ class BlazePlugin():
 
             pending_changes = pending_changes_from_server(server_pending_changes)
 
+            if server_group_end_nodes:
+                group_end_nodes = group_end_nodes_from_server(server_group_end_nodes)
+            else:
+                group_end_nodes = None
+
             for instance in relevant_instances:
                 instance.graph = ICFGFlowGraph(
-                    instance.bv, cfg, cfg_id, poi_search_results, pending_changes)
+                    instance.bv, cfg, cfg_id, poi_search_results, pending_changes, group_end_nodes)
                 instance.icfg_dock_widget.set_graph(instance.graph)
                 instance.snaptree_dock_widget.snaptree_widget.focus_icfg(cfg_id)
 

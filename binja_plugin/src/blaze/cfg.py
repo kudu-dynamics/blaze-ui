@@ -1,5 +1,6 @@
 import logging as _logging
 from copy import deepcopy
+import enum
 from typing import TYPE_CHECKING, Container, Dict, List, Mapping, Optional, Tuple, cast
 
 from binaryninja import BinaryView
@@ -53,6 +54,7 @@ from .types import (
     ConstraintBinjaToServer,
     EnterFuncNode,
     Function,
+    GroupEndNodes,
     LeaveFuncNode,
     PendingChanges,
     PoiBinjaToServer,
@@ -129,6 +131,9 @@ def get_edge_style(
 
     return edge_style
 
+def is_basic_node(node: CfNode) -> bool:
+    return node['tag'] == 'BasicBlock'
+
 
 def is_call_node(node: CfNode) -> bool:
     return node['tag'] == 'Call'
@@ -167,6 +172,10 @@ def is_extern_call_node(call_node: CallNode) -> bool:
 def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
     return not is_plt_call_node(bv, call_node) and not is_got_call_node(
         bv, call_node) and not is_extern_call_node(call_node)
+
+# TODO: Need to add Summary node
+def is_group_start_node(node: CfNode) -> bool:
+    return is_call_node(node) or is_basic_node(node)
 
 
 def get_target_address(call_dest: CallDest) -> Optional[Address]:
@@ -367,13 +376,15 @@ class ICFGFlowGraph(FlowGraph):
         cfg_id: CfgId,
         poi_search_results: Optional[PoiSearchResults],
         pending_changes: PendingChanges,
+        group_end_nodes: Optional[GroupEndNodes]
     ):
         super().__init__()
         self.pil_icfg: Cfg = cfg
         self.pil_icfg_id: CfgId = cfg_id
         self.node_mapping: Dict[FlowGraphNode, CfNode] = {}
-        self.poi_search_results = poi_search_results
+        self.poi_search_results: Optional[PoiSearchResults] = poi_search_results
         self.pending_changes: PendingChanges = pending_changes
+        self.group_end_nodes: Optional[GroupEndNodes] = group_end_nodes
 
         nodes: Dict[UUID, FlowGraphNode] = {}
 
@@ -512,6 +523,15 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 is_valid=lambda ctx: self.clicked_node is not None,
             ),
             BNAction(
+                'Blaze\\ICFG\\Group',
+                'Select Group Start',
+                activate=self.context_menu_action_select_group_start,
+                is_valid=lambda ctx: (
+                    self.clicked_node is not None and
+                    (cf_node := self.get_cf_node(self.clicked_node)) is not None and
+                    is_group_start_node(cf_node)),
+            ),
+            BNAction(
                 'Blaze\\ICFG\\Misc',
                 'Go to Address',
                 activate=self.context_menu_action_go_to_address,
@@ -538,6 +558,14 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
     def __del__(self):
         try_debug(log, 'Deleting object: %r', self)
+
+    class Mode(enum.Enum):
+        '''
+        The various modes supported by the ICFGWidget.
+        '''
+        STANDARD = 1
+        DIFF = 2
+        GROUP_SELECT = 3
 
     def is_conditional_edge(self, fg_edge: FlowGraphEdge) -> bool:
         if not self.blaze_instance.graph:
@@ -597,6 +625,19 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 comment=comment,
             ))
 
+    def select_group_start(self, node: CfNode) -> None:
+        assert self.blaze_instance.graph
+
+        node_uuid = node['contents']['uuid']
+        self.recenter_node_id = node_uuid
+        # Send start node to server
+        self.blaze_instance.send(
+            BinjaToServer(
+                tag='BSStartGroup',
+                cfgId=self.blaze_instance.graph.pil_icfg_id,
+                nodeId=node_uuid,
+            ))
+
     def prune(self, from_node: CfNode, to_node: CfNode):
         '''
         Send a request to the backend that the edge between `from_node` and
@@ -621,6 +662,17 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 tag='BSCfgRemoveBranch',
                 cfgId=self.blaze_instance.graph.pil_icfg_id,
                 edge=(from_node, to_node)))
+
+    def cancel_grouping(self) -> None:
+        self.mode = ICFGWidget.Mode.STANDARD
+        # Get current ICFG
+        graph = self.blaze_instance.graph
+
+        # Remove group selection info
+        graph.group_end_nodes = None
+
+        assert isinstance(self.parent, ICFGDockWidget)
+        self.parent.set_graph(graph)
 
     def customEvent(self, event: QEvent) -> None:
         FlowGraphWidget.customEvent(self, event)
@@ -877,6 +929,16 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         self.add_comment(cf_node, 0, comment)
 
+    def context_menu_action_select_group_start(self, context: UIActionContext):
+        log.debug('Select Group Start')
+
+        start_node = self.get_cf_node(self.clicked_node)
+        assert start_node is not None
+
+        # Send start_node to server
+        self.
+
+
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any
@@ -1042,6 +1104,9 @@ class ICFGToolbarWidget(QWidget):
         self.reject_button = QPushButton('Reject')
         self.reject_button.clicked.connect(self.reject)  # type: ignore
 
+        self.cancel_button = QPushButton('Cancel')
+        self.cancel_button.clicked.connect(self.cancel)  # type: ignore
+
         self.simplification_stats_label = QLabel()
         self.update_stats(0, 0, 0, 0)
 
@@ -1075,6 +1140,13 @@ class ICFGToolbarWidget(QWidget):
                     tag='BSCfgRevertChanges',
                     cfgId=self.blaze_instance.graph.pil_icfg_id,
                 ))
+
+    def cancel(self) -> None:
+        log.debug('Users cancelled grouping')
+        if not self.blaze_instance.graph:
+            log.warn('There is no graph associated with Blaze.')
+        else:
+            self.icfg_widget.cancel_grouping()
 
     def update_stats(
         self,
@@ -1133,15 +1205,27 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         try_debug(log, 'Deleting object: %r', self)
 
     def set_graph(self, graph: ICFGFlowGraph):
-        self.icfg_toolbar_widget.accept_button.setVisible(graph.pending_changes.has_changes)
-        self.icfg_toolbar_widget.reject_button.setVisible(graph.pending_changes.has_changes)
+        # Update mode
+        if graph.pending_changes.has_changes:
+            self.mode = ICFGWidget.Mode.DIFF
+        elif graph.group_end_nodes:
+            self.mode = ICFGWidget.Mode.GROUP_SELECT
+        else:
+            self.mode = ICFGWidget.Mode.STANDARD
 
-        self.icfg_toolbar_widget.update_stats(
-            nodes=len(graph.pil_icfg['nodes']),
-            edges=len(graph.pil_icfg['edges']),
-            diff_nodes=-len(graph.pending_changes.removed_nodes),
-            diff_edges=-len(graph.pending_changes.removed_edges),
-        )
+        if self.mode == ICFGWidget.Mode.DIFF:
+            self.icfg_toolbar_widget.accept_button.setVisible(True)
+            self.icfg_toolbar_widget.reject_button.setVisible(True)
+
+            self.icfg_toolbar_widget.update_stats(
+                nodes=len(graph.pil_icfg['nodes']),
+                edges=len(graph.pil_icfg['edges']),
+                diff_nodes=-len(graph.pending_changes.removed_nodes),
+                diff_edges=-len(graph.pending_changes.removed_edges),
+                )
+
+        if self.mode == ICFGWidget.Mode.GROUP_SELECT:
+            pass
 
         self.icfg_widget.setGraph(graph)
 

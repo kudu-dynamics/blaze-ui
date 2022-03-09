@@ -351,6 +351,19 @@ def pending_changes_from_server(p: ServerPendingChanges) -> PendingChanges:
     )
 
 
+class ServerGroupEndNodes(TypedDict, total=True):
+    nodes: List[UUID]
+
+
+@dataclass
+class GroupEndNodes:
+    nodes: Set[UUID]
+
+
+def group_end_nodes_from_server(n: ServerGroupEndNodes) -> GroupEndNodes:
+    return GroupEndNodes(nodes=n['nodes'])
+
+
 class ServerToBinjaTotal(TypedDict, total=True):
     tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshot', 'SBPoi']
 
