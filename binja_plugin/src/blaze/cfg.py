@@ -54,7 +54,7 @@ from .types import (
     ConstraintBinjaToServer,
     EnterFuncNode,
     Function,
-    GroupEndNodes,
+    GroupOptions,
     LeaveFuncNode,
     PendingChanges,
     PoiBinjaToServer,
@@ -376,7 +376,7 @@ class ICFGFlowGraph(FlowGraph):
         cfg_id: CfgId,
         poi_search_results: Optional[PoiSearchResults],
         pending_changes: PendingChanges,
-        group_end_nodes: Optional[GroupEndNodes]
+        group_options: Optional[GroupOptions]
     ):
         super().__init__()
         self.pil_icfg: Cfg = cfg
@@ -384,7 +384,7 @@ class ICFGFlowGraph(FlowGraph):
         self.node_mapping: Dict[FlowGraphNode, CfNode] = {}
         self.poi_search_results: Optional[PoiSearchResults] = poi_search_results
         self.pending_changes: PendingChanges = pending_changes
-        self.group_end_nodes: Optional[GroupEndNodes] = group_end_nodes
+        self.group_options: Optional[GroupOptions] = group_options
 
         nodes: Dict[UUID, FlowGraphNode] = {}
 
@@ -625,18 +625,28 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 comment=comment,
             ))
 
-    def select_group_start(self, node: CfNode) -> None:
+    def select_group_start(self, start_node: CfNode) -> None:
         assert self.blaze_instance.graph
 
-        node_uuid = node['contents']['uuid']
-        self.recenter_node_id = node_uuid
+        start_uuid = start_node['contents']['uuid']
+        self.recenter_node_id = start_uuid
         # Send start node to server
         self.blaze_instance.send(
             BinjaToServer(
-                tag='BSStartGroup',
+                tag='BSGroupStart',
                 cfgId=self.blaze_instance.graph.pil_icfg_id,
-                nodeId=node_uuid,
+                nodeId=start_uuid,
             ))
+
+    def select_group_end(self, end_node: CfNode) -> None:
+        assert self.blaze_instance.graph
+
+        end_uuid = end_node['contents']['uuid']
+        self.recenter_node_id = end_uuid
+        # Send end node to server
+        self.blaze_instance.send(
+            BinjaToServer(
+                tag='BSGroupDefine',
 
     def prune(self, from_node: CfNode, to_node: CfNode):
         '''
@@ -669,7 +679,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         graph = self.blaze_instance.graph
 
         # Remove group selection info
-        graph.group_end_nodes = None
+        graph.group_options = None
 
         assert isinstance(self.parent, ICFGDockWidget)
         self.parent.set_graph(graph)
@@ -936,7 +946,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         assert start_node is not None
 
         # Send start_node to server
-        self.
+        self.select_group_start(start_node)
 
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
@@ -1208,7 +1218,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         # Update mode
         if graph.pending_changes.has_changes:
             self.mode = ICFGWidget.Mode.DIFF
-        elif graph.group_end_nodes:
+        elif graph.group_options:
             self.mode = ICFGWidget.Mode.GROUP_SELECT
         else:
             self.mode = ICFGWidget.Mode.STANDARD

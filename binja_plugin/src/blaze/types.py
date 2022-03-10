@@ -351,17 +351,19 @@ def pending_changes_from_server(p: ServerPendingChanges) -> PendingChanges:
     )
 
 
-class ServerGroupEndNodes(TypedDict, total=True):
-    nodes: List[UUID]
+class ServerGroupOptions(TypedDict, total=True):
+    start_node: UUID
+    end_nodes: List[UUID]
 
 
 @dataclass
-class GroupEndNodes:
-    nodes: Set[UUID]
+class GroupOptions:
+    start_node: UUID
+    end_nodes: Set[UUID]
 
 
-def group_end_nodes_from_server(n: ServerGroupEndNodes) -> GroupEndNodes:
-    return GroupEndNodes(nodes=n['nodes'])
+def group_options_from_server(n: ServerGroupOptions) -> GroupOptions:
+    return GroupOptions(nodes=n['nodes'])
 
 
 class ServerToBinjaTotal(TypedDict, total=True):
@@ -380,9 +382,11 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
 
 
 class BinjaToServerTotal(TypedDict, total=True):
-    tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
-                 'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop', 'BSCfgFocus',
-                 'BSCfgConfirmChanges', 'BSCfgRevertChanges', 'BSPoi', 'BSConstraint', 'BSComment']
+    tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew',
+                 'BSCfgExpandCall', 'BSCfgRemoveBranch', 'BSCfgRemoveNode',
+                 'BSSnapshot', 'BSNoop', 'BSCfgFocus', 'BSCfgConfirmChanges',
+                 'BSCfgRevertChanges', 'BSPoi', 'BSConstraint', 'BSComment',
+                 'BSGroupStart', 'BSGroupDefine', 'BSGroupExpand']
 
 
 class BinjaToServer(BinjaToServerTotal, total=False):

@@ -11,7 +11,8 @@ import qualified Data.ByteString.Lazy as LBS
 import qualified Data.ByteString.Char8 as BSC
 import Binja.Core (BNBinaryView)
 import qualified Binja.Function as BNFunc
-import Blaze.UI.Types hiding ( cfg, callNode, stmtIndex )
+import Blaze.UI.Types hiding ( cfg, callNode, stmtIndex,
+                               startNode, endNode, groupOptions )
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
@@ -174,7 +175,7 @@ sendToAllWithBinary st bh msg = do
     addToOutboxesIfBinMatches ss
       | ss ^. #binaryHash == bh = sendToBinja_ msg ss
       | otherwise = return ()
-      
+
 run :: AppState -> IO ()
 run st = do
   putText $ "Starting Blaze UI Server at "
@@ -215,22 +216,36 @@ autosaveCfg cid pcfg = getCfgType cid >>= \case
     Db.saveNewCfg_ bid autoCid pcfg Snapshot.Autosave
     return $ Just autoCid
 
-sendCfgWithCallRatings :: BndbHash -> PilCfg -> CfgId -> EventLoop ()
-sendCfgWithCallRatings bhash cfg cid = do
+sendCfg :: BndbHash
+        -> PilCfg
+        -> CfgId
+        -> Maybe PoiSearchResults
+        -> Maybe PendingChanges
+        -> Maybe GroupOptions
+        -> EventLoop ()
+sendCfg bhash cfg cid poiSearch changes groupOptions = do
+  sendToBinja . SBCfg cid bhash poiSearch changes groupOptions . convertPilCfg $ cfg
+
+sendCfgWithCallRatings :: BndbHash
+                       -> PilCfg
+                       -> CfgId
+                       -> Maybe GroupOptions
+                       -> EventLoop ()
+sendCfgWithCallRatings bhash cfg cid groupOptions = do
   poiSearch <- getPoiSearchResults bhash cfg
-  sendToBinja . SBCfg cid bhash poiSearch Nothing . convertPilCfg $ cfg
+  sendCfg bhash cfg cid poiSearch Nothing groupOptions
 
 refreshActiveCfg :: CfgId -> EventLoop ()
 refreshActiveCfg cid = do
-  (_, bhash) <- getCfgBinaryView cid
+  bhash <- getCfgBndbHash cid
   cfg <- getCfg cid
-  sendCfgWithCallRatings bhash cfg cid
+  sendCfgWithCallRatings bhash cfg cid Nothing
 
 -- | Used after `autosaveCfg`. If second CfgId is Nothing, just send first.
 -- If second is Just, send new CfgId. In both cases, send new snapshot tree.
 sendCfgAndSnapshots :: BndbHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop ()
 sendCfgAndSnapshots bhash pcfg cid newCid = do
-  sendCfgWithCallRatings bhash pcfg $ fromMaybe cid newCid
+  sendCfgWithCallRatings bhash pcfg (fromMaybe cid newCid) Nothing
   sendLatestClientSnapshots
 
 -- | Sends the old ICFG with the nodes and edges that will be removed.
@@ -241,7 +256,7 @@ sendDiffCfg bhash cid old new = do
   if isEmptyChanges changes then
     autosaveCfg cid new >>= sendCfgAndSnapshots bhash new cid
   else
-    sendToBinja $ SBCfg cid bhash Nothing (Just changes) $ convertPilCfg old
+    sendCfg bhash old cid Nothing (Just changes) Nothing
 
   where
     isEmptyChanges (PendingChanges [] []) = True
@@ -275,7 +290,7 @@ getStoredCfg cid = Db.getCfg cid >>= \case
       CfgUI.addCfg cid pcfg
       return pcfg
 
--- | Sends all ICFG snapshots for a particular ClientId to client. 
+-- | Sends all ICFG snapshots for a particular ClientId to client.
 sendLatestClientSnapshots :: EventLoop ()
 sendLatestClientSnapshots = do
   ctx <- ask
@@ -286,7 +301,7 @@ sendLatestClientSnapshots = do
     . fmap (over _2 (fmap (over _2 Snapshot.toTransport)))
     $ branches
 
--- | Sends all ICFG snapshots for a particular HostBinaryPath and ClientId to client. 
+-- | Sends all ICFG snapshots for a particular HostBinaryPath and ClientId to client.
 sendLatestBinarySnapshots :: EventLoop ()
 sendLatestBinarySnapshots = do
   ctx <- ask
@@ -507,7 +522,7 @@ handleBinjaEvent = \case
             CfgUI.addCfg cid cfg
             sendLatestSnapshots
             poiSearch <- getPoiSearchResults bhash cfg
-            sendToBinja . SBCfg cid bhash poiSearch Nothing . convertPilCfg $ cfg
+            sendToBinja . SBCfg cid bhash poiSearch Nothing Nothing . convertPilCfg $ cfg
         debug "Created new branch and added auto-cfg."
 
   BSCfgExpandCall cid callNode targetAddr -> do
@@ -592,10 +607,7 @@ handleBinjaEvent = \case
     Just pcfg -> do
       CfgUI.addCfg cid pcfg
       bhash <- getCfgBndbHash cid
-      poiSearch <- getPoiSearchResults bhash pcfg
-      sendToBinja . SBCfg cid bhash poiSearch Nothing $ convertPilCfg pcfg
-      
-    
+      sendCfgWithCallRatings bhash pcfg cid Nothing
 
   BSNoop -> debug "Binja noop"
 
@@ -626,8 +638,7 @@ handleBinjaEvent = \case
     Snapshot.LoadSnapshot cid -> do
       bhash <- getCfgBndbHash cid
       cfg <- getStoredCfg cid
-      poiSearch <- getPoiSearchResults bhash cfg
-      sendToBinja . SBCfg cid bhash poiSearch Nothing . convertPilCfg $ cfg
+      sendCfgWithCallRatings bhash cfg cid Nothing
 
     Snapshot.SaveSnapshot cid -> do
       Db.setCfgSnapshotType cid Snapshot.Immutable
@@ -703,6 +714,32 @@ handleBinjaEvent = \case
     bhash <- getCfgBndbHash cid
     sendDiffCfg bhash cid cfg' cfg'
 
+  BSGroupStart cid nid -> do
+    bhash <- getCfgBndbHash cid
+    cfg <- getCfg cid
+    startNode <- getNode cfg cid nid
+    endNodes <- getGroupOptions cfg startNode
+    sendCfgWithCallRatings bhash cfg cid endNodes
+
+  BSGroupDefine cid startId endId -> do
+    bhash <- getCfgBndbHash cid
+    cfg <- getCfg cid
+    startNode <- getNode cfg cid startId
+    endNode <- getNode cfg cid endId
+    -- group <- createGroup cfg startNode endNode
+    -- summaryNode <- createSummaryNode cfg group
+    -- cfg' <- substituteGroup cfg group summaryNode
+    cfg' <- undefined
+    sendCfgWithCallRatings bhash cfg' cid Nothing
+
+  BSGroupExpand cid summaryId -> do
+    bhash <- getCfgBndbHash cid
+    cfg <- getCfg cid
+    -- summaryNode <- getNode cfg summaryId
+    -- cfg' <- expandGroup cfg summaryNode
+    cfg' <- undefined
+    sendCfgWithCallRatings bhash cfg' cid Nothing
+
 insertStmt ::
   (Eq a, Hashable a) =>
   Cfg [a] ->
@@ -717,6 +754,11 @@ insertStmt cfg cid nid stmtIndex stmt = do
   let stmts' = stmtsA <> [stmt] <> stmtsB
   pure $ Cfg.setNodeData stmts' node' cfg
 
+getGroupOptions :: Cfg [a] -> CfNode [a] -> EventLoop (Maybe GroupOptions)
+getGroupOptions cfg startNode =
+  return $ Just (GroupOptions startNode [])
+
+-- TODO: Should we check if persisting a node index would improve performance?
 getNode ::
   (Eq a, Hashable a) =>
   Cfg a ->
@@ -806,4 +848,3 @@ getFunctionTypeReport bv addr = liftIO $ do
       prettyIndexedStmts indexedStmts''
       let er = Ch.checkIndexedStmts indexedStmts''
       return $ either (Left . show) (Right . (func,)) er
-

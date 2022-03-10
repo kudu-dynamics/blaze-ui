@@ -1,23 +1,24 @@
 {- HLINT ignore "Use if" -}
 {-# LANGUAGE DataKinds #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Blaze.UI.Types
 -- Copyright   :  (c) Kudu Dynamics, 2022
--- License     :  
+-- License     :
 --
--- Maintainer  :  
+-- Maintainer  :
 -- Stability   :  experimental
--- Portability :  
+-- Portability :
 --
 -- The Blaze UI server manages websocket connections from BinaryNinja Plugin clients
 -- and runs analysis using Blaze. There is also a webserver used to POST binary data
 -- and submit POIs.
--- 
+--
 -- Each `SessionId` corresponds to a bndb path and clientId combo. There exists
 -- one `SessionState` for each `SessionId`.
--- 
+--
 -- A client can open multiple connections to the same bndb using multiple tabs or
 -- instances of BinaryNinja, but they will share the same `SessionState`
 -- and any actions performed in one window will affect the state, such as the
@@ -81,6 +82,13 @@ data PoiSearchResults = PoiSearchResults
   , presentTargetNodes :: [UUID]
   } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
 
+-- | Candidate group end nodes that will be shown to the user. The user may
+-- select one of these to finish defining a group.
+data GroupOptions = GroupOptions
+  { startNode :: UUID
+  , endNodes :: [UUID]
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+
 -- | Messages from the server to the BinaryNinja Blaze plugin
 data ServerToBinja = SBLogInfo { message :: Text }
                    | SBLogWarn { message :: Text }
@@ -89,8 +97,9 @@ data ServerToBinja = SBLogInfo { message :: Text }
                    | SBCfg { cfgId :: CfgId
                            -- So plugin can easily warn if it's out of date
                            , bndbHash :: BndbHash
-                           , poiSearchResults :: Maybe PoiSearchResults 
+                           , poiSearchResults :: Maybe PoiSearchResults
                            , pendingChanges :: Maybe PendingChanges
+                           , groupOptions :: Maybe GroupOptions
                            -- TODO: send cfg with text
                            , cfg :: CfgTransport [[Token]]
                            }
@@ -150,6 +159,20 @@ data BinjaToServer = BSConnect
                      , nodeId :: UUID
                      , stmtIndex :: Word64
                      , comment :: Text
+                     }
+
+                   | BSGroupStart
+                     { cfgId :: CfgId
+                     , startNodeId :: UUID
+                     }
+                   | BSGroupDefine
+                     { cfgId :: CfgId
+                     , startNodeId :: UUID
+                     , endNodeId :: UUID
+                     }
+                   | BSGroupExpand
+                     { cfgId :: CfgId
+                     , summaryNodeId :: UUID
                      }
 
                    | BSNoop
