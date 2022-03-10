@@ -67,6 +67,7 @@ from .types import (
     ServerPendingChanges,
     ServerToBinja,
     SnapshotServerToBinja,
+    group_options_from_server,
     pending_changes_from_server,
 )
 from .util import (
@@ -540,7 +541,7 @@ class BlazePlugin():
             cfg = cfg_from_server(cast(ServerCfg, msg.get('cfg')))
             server_pending_changes = msg.get('pendingChanges')
             server_poi_search_results = msg.get('poiSearchResults')
-            server_group_end_nodes = msg.get('groupEndNodes')
+            server_group_options = msg.get('groupOptions')
 
             if server_poi_search_results:
                 poi_search_results = PoiSearchResults(
@@ -555,14 +556,14 @@ class BlazePlugin():
 
             pending_changes = pending_changes_from_server(server_pending_changes)
 
-            if server_group_end_nodes:
-                group_end_nodes = group_end_nodes_from_server(server_group_end_nodes)
+            if server_group_options:
+                group_options = group_options_from_server(server_group_options)
             else:
-                group_end_nodes = None
+                group_options = None
 
             for instance in relevant_instances:
                 instance.graph = ICFGFlowGraph(
-                    instance.bv, cfg, cfg_id, poi_search_results, pending_changes, group_end_nodes)
+                    instance.bv, cfg, cfg_id, poi_search_results, pending_changes, group_options)
                 instance.icfg_dock_widget.set_graph(instance.graph)
                 instance.snaptree_dock_widget.snaptree_widget.focus_icfg(cfg_id)
 

@@ -384,6 +384,7 @@ class ICFGFlowGraph(FlowGraph):
         group_options: Optional[GroupOptions]
     ):
         super().__init__()
+        self.bv: BinaryView = bv
         self.pil_icfg: Cfg = cfg
         self.pil_icfg_id: CfgId = cfg_id
         self.node_mapping: Dict[FlowGraphNode, CfNode] = {}
@@ -404,8 +405,11 @@ class ICFGFlowGraph(FlowGraph):
         # Root node MUST be added to the FlowGraph first, otherwise weird FlowGraphWidget
         # layout issues may ensue
         source_nodes: List[Tuple[UUID, CfNode]]
-        source_nodes = [(cfg['root'], cfg['nodes'][cfg['root']])]
-        source_nodes += [(k, v) for (k, v) in cfg['nodes'].items() if k != cfg['root']]
+        source_nodes = [(self.pil_icfg['root'],
+                         self.pil_icfg['nodes'][self.pil_icfg['root']])]
+        source_nodes += [(k, v)
+                         for (k, v) in self.pil_icfg['nodes'].items()
+                         if k != self.pil_icfg['root']]
 
         for (node_id, node) in source_nodes:
             fg_node = FlowGraphNode(self)
@@ -423,7 +427,7 @@ class ICFGFlowGraph(FlowGraph):
                 fg_node.highlight = POI_PRESENT_TARGET_COLOR
             elif node['tag'] == 'Call':
                 call_node = cast(CallNode, node['contents'])
-                if is_expandable_call_node(bv, call_node):
+                if is_expandable_call_node(self.bv, call_node):
                     if self.poi_search_results:
                         ratings = self.poi_search_results['callNodeRatings']
                         rating = ratings.get(call_node['uuid'])
@@ -437,18 +441,22 @@ class ICFGFlowGraph(FlowGraph):
                     fg_node.highlight = HighlightStandardColor.BlackHighlightColor
             elif node['tag'] == 'EnterFunc':
                 opacity = 0.8 if self.poi_search_results else 1.0
-                fg_node.highlight = muted_color(opacity, HighlightStandardColor.GreenHighlightColor)
+                fg_node.highlight = muted_color(opacity,
+                                                HighlightStandardColor.GreenHighlightColor)
             elif node['tag'] == 'LeaveFunc':
                 opacity = 0.8 if self.poi_search_results else 1.0
-                fg_node.highlight = muted_color(opacity, HighlightStandardColor.BlueHighlightColor)
+                fg_node.highlight = muted_color(opacity,
+                                                HighlightStandardColor.BlueHighlightColor)
             elif (self.group_options and
-                  node['contents']['uuid'] in self.group_options['end_nodes']):
+                  node['contents']['uuid'] in self.group_options.end_nodes):
                 fg_node.highlight = HighlightColor(HighlightStandardColor.BlueHighlightColor)
             nodes[node_id] = fg_node
             self.append(fg_node)
 
-        for edge in cfg['edges']:
-            edge_style = get_edge_style(edge, cfg['nodes'], self.pending_changes.removed_edges)
+        for edge in self.pil_icfg['edges']:
+            edge_style = get_edge_style(edge,
+                                        self.pil_icfg['nodes'],
+                                        self.pending_changes.removed_edges)
             nodes[edge['src']['contents']['uuid']].add_outgoing_edge(
                 BranchType.UserDefinedBranch,
                 nodes[edge['dst']['contents']['uuid']],
@@ -551,6 +559,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
                     self.clicked_node is not None and
                     (cf_node := self.get_cf_node(self.clicked_node)) is not None and
                     is_summary_node(cf_node)),
+            ),
             BNAction(
                 'Blaze\\ICFG\\Misc',
                 'Go to Address',
@@ -661,7 +670,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
     def select_group_end(self, end_node: CfNode) -> None:
         assert self.blaze_instance.graph
 
-        start_uuid = self.blaze_instance.graph['group_options']['start_node']
+        start_uuid = self.blaze_instance.graph.group_options.start_node
         end_uuid = end_node['contents']['uuid']
         self.recenter_node_id = end_uuid
         # Send end node to server
@@ -1171,8 +1180,9 @@ class ICFGToolbarWidget(QWidget):
         layout = QGridLayout()
         layout.addWidget(self.accept_button, 0, 0, 1, 1)
         layout.addWidget(self.reject_button, 0, 1, 1, 1)
+        layout.addWidget(self.cancel_button, 0, 2, 1, 1)
         layout.addWidget(
-            self.simplification_stats_label, 0, 2, 1, 2,
+            self.simplification_stats_label, 0, 3, 1, 2,
             Qt.Alignment(Qt.AlignmentFlag.AlignRight))  # type: ignore
         self.setLayout(layout)
 
@@ -1284,6 +1294,11 @@ class ICFGDockWidget(QWidget, DockContextHandler):
 
         if self.mode == ICFGWidget.Mode.GROUP_SELECT:
             self.icfg_toolbar_widget.cancel_button.setVisible(True)
+
+        if self.mode == ICFGWidget.Mode.STANDARD:
+            self.icfg_toolbar_widget.accept_button.setVisible(False)
+            self.icfg_toolbar_widget.reject_button.setVisible(False)
+            self.icfg_toolbar_widget.cancel_button.setVisible(False)
 
         self.icfg_widget.setGraph(graph)
 

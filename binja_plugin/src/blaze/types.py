@@ -362,8 +362,9 @@ class GroupOptions:
     end_nodes: Set[UUID]
 
 
-def group_options_from_server(n: ServerGroupOptions) -> GroupOptions:
-    return GroupOptions(nodes=n['nodes'])
+def group_options_from_server(g: ServerGroupOptions) -> GroupOptions:
+    return GroupOptions(start_node=g['startNode'],
+                        end_nodes=g['endNodes'])
 
 
 class ServerToBinjaTotal(TypedDict, total=True):
