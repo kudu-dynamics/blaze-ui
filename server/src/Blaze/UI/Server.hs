@@ -718,8 +718,8 @@ handleBinjaEvent = \case
     bhash <- getCfgBndbHash cid
     cfg <- getCfg cid
     startNode <- getNode cfg cid nid
-    endNodes <- getGroupOptions cfg startNode
-    sendCfgWithCallRatings bhash cfg cid endNodes
+    groupOptions <- getGroupOptions cfg startNode
+    sendCfgWithCallRatings bhash cfg cid groupOptions
 
   BSGroupDefine cid startId endId -> do
     bhash <- getCfgBndbHash cid
@@ -756,6 +756,7 @@ insertStmt cfg cid nid stmtIndex stmt = do
 
 getGroupOptions :: Cfg [a] -> CfNode [a] -> EventLoop (Maybe GroupOptions)
 getGroupOptions cfg startNode =
+  -- endNodes <- _
   return $ Just (GroupOptions startNode [])
 
 -- TODO: Should we check if persisting a node index would improve performance?

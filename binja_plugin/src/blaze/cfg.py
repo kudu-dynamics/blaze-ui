@@ -135,6 +135,10 @@ def is_basic_node(node: CfNode) -> bool:
     return node['tag'] == 'BasicBlock'
 
 
+def is_summary_node(node: CfNode) -> bool:
+    return node['tag'] == 'Summary'
+
+
 def is_call_node(node: CfNode) -> bool:
     return node['tag'] == 'Call'
 
@@ -175,8 +179,9 @@ def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
 
 # TODO: Need to add Summary node
 def is_group_start_node(node: CfNode) -> bool:
-    return is_call_node(node) or is_basic_node(node)
-
+    return (is_call_node(node) or
+            is_basic_node(node) or
+            is_summary_node(node))
 
 def get_target_address(call_dest: CallDest) -> Optional[Address]:
     dest_tag = call_dest['tag']
@@ -386,6 +391,14 @@ class ICFGFlowGraph(FlowGraph):
         self.pending_changes: PendingChanges = pending_changes
         self.group_options: Optional[GroupOptions] = group_options
 
+        self.format()
+
+        log.debug('Initialized object: %r', self)
+
+    def __del__(self):
+        try_debug(log, 'Deleting object: %r', self)
+
+    def format(self):
         nodes: Dict[UUID, FlowGraphNode] = {}
 
         # Root node MUST be added to the FlowGraph first, otherwise weird FlowGraphWidget
@@ -404,8 +417,9 @@ class ICFGFlowGraph(FlowGraph):
 
             if node['contents']['uuid'] in self.pending_changes.removed_nodes:
                 fg_node.highlight = HighlightStandardColor.RedHighlightColor
-            elif self.poi_search_results and (node['contents']['uuid']
-                                              in self.poi_search_results['presentTargetNodes']):
+            elif (self.poi_search_results and
+                  (node['contents']['uuid']
+                   in self.poi_search_results['presentTargetNodes'])):
                 fg_node.highlight = POI_PRESENT_TARGET_COLOR
             elif node['tag'] == 'Call':
                 call_node = cast(CallNode, node['contents'])
@@ -427,6 +441,9 @@ class ICFGFlowGraph(FlowGraph):
             elif node['tag'] == 'LeaveFunc':
                 opacity = 0.8 if self.poi_search_results else 1.0
                 fg_node.highlight = muted_color(opacity, HighlightStandardColor.BlueHighlightColor)
+            elif (self.group_options and
+                  node['contents']['uuid'] in self.group_options['end_nodes']):
+                fg_node.highlight = HighlightColor(HighlightStandardColor.BlueHighlightColor)
             nodes[node_id] = fg_node
             self.append(fg_node)
 
@@ -437,11 +454,6 @@ class ICFGFlowGraph(FlowGraph):
                 nodes[edge['dst']['contents']['uuid']],
                 edge_style,
             )
-
-        log.debug('Initialized object: %r', self)
-
-    def __del__(self):
-        try_debug(log, 'Deleting object: %r', self)
 
     @property
     def nodes(self) -> Dict[UUID, CfNode]:
@@ -531,6 +543,14 @@ class ICFGWidget(FlowGraphWidget, QObject):
                     (cf_node := self.get_cf_node(self.clicked_node)) is not None and
                     is_group_start_node(cf_node)),
             ),
+            BNAction(
+                'Blaze\\ICFG\\Group',
+                'Expand Group',
+                activate=self.context_menu_action_expand_group,
+                is_valid=lambda ctx: (
+                    self.clicked_node is not None and
+                    (cf_node := self.get_cf_node(self.clicked_node)) is not None and
+                    is_summary_node(cf_node)),
             BNAction(
                 'Blaze\\ICFG\\Misc',
                 'Go to Address',
@@ -635,18 +655,36 @@ class ICFGWidget(FlowGraphWidget, QObject):
             BinjaToServer(
                 tag='BSGroupStart',
                 cfgId=self.blaze_instance.graph.pil_icfg_id,
-                nodeId=start_uuid,
+                startNodeId=start_uuid,
             ))
 
     def select_group_end(self, end_node: CfNode) -> None:
         assert self.blaze_instance.graph
 
+        start_uuid = self.blaze_instance.graph['group_options']['start_node']
         end_uuid = end_node['contents']['uuid']
         self.recenter_node_id = end_uuid
         # Send end node to server
         self.blaze_instance.send(
             BinjaToServer(
                 tag='BSGroupDefine',
+                cfgId=self.blaze_instance.graph.pil_icfg_id,
+                startNodeId=start_uuid,
+                endNodeId=end_uuid
+            ))
+
+    def expand_group(self, summary_node: CfNode) -> None:
+        assert self.blaze_instance.graph
+
+        summary_uuid = summary_node['contents']['uuid']
+        # TODO: How to recenter?
+        # self.recenter_node_id = ???
+        self.blaze_instance.send(
+            BinjaToServer(
+                tag='BSGroupExpand',
+                cfgId=self.blaze_instance.graph.pil_icfg_id,
+                summaryNodeId=summary_uuid
+            ))
 
     def prune(self, from_node: CfNode, to_node: CfNode):
         '''
@@ -674,12 +712,15 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 edge=(from_node, to_node)))
 
     def cancel_grouping(self) -> None:
-        self.mode = ICFGWidget.Mode.STANDARD
         # Get current ICFG
         graph = self.blaze_instance.graph
 
-        # Remove group selection info
+        # Remove group selection info and set mode
         graph.group_options = None
+        self.mode = ICFGWidget.Mode.STANDARD
+
+        # Reformat graph
+        graph.format()
 
         assert isinstance(self.parent, ICFGDockWidget)
         self.parent.set_graph(graph)
@@ -948,6 +989,13 @@ class ICFGWidget(FlowGraphWidget, QObject):
         # Send start_node to server
         self.select_group_start(start_node)
 
+    def context_menu_action_expand_group(self, context: UIActionContext):
+        log.debug('Expand Group')
+
+        summary_node = self.get_cf_node(self.clicked_node)
+        assert summary_node is not None
+
+        self.expand_group(summary_node)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
@@ -1152,7 +1200,7 @@ class ICFGToolbarWidget(QWidget):
                 ))
 
     def cancel(self) -> None:
-        log.debug('Users cancelled grouping')
+        log.debug('User cancelled grouping')
         if not self.blaze_instance.graph:
             log.warn('There is no graph associated with Blaze.')
         else:
@@ -1235,7 +1283,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
                 )
 
         if self.mode == ICFGWidget.Mode.GROUP_SELECT:
-            pass
+            self.icfg_toolbar_widget.cancel_button.setVisible(True)
 
         self.icfg_widget.setGraph(graph)
 
