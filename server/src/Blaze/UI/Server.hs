@@ -755,9 +755,10 @@ insertStmt cfg cid nid stmtIndex stmt = do
   pure $ Cfg.setNodeData stmts' node' cfg
 
 getGroupOptions :: Cfg [a] -> CfNode [a] -> EventLoop (Maybe GroupOptions)
-getGroupOptions cfg startNode =
+getGroupOptions cfg startNode = do
+  let startId = Cfg.getNodeUUID startNode
   -- endNodes <- _
-  return $ Just (GroupOptions startNode [])
+  return $ Just (GroupOptions startId [])
 
 -- TODO: Should we check if persisting a node index would improve performance?
 getNode ::
