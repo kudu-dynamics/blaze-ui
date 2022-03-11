@@ -521,8 +521,7 @@ handleBinjaEvent = \case
               cfg
             CfgUI.addCfg cid cfg
             sendLatestSnapshots
-            poiSearch <- getPoiSearchResults bhash cfg
-            sendToBinja . SBCfg cid bhash poiSearch Nothing Nothing . convertPilCfg $ cfg
+            sendCfgWithCallRatings bhash cfg cid Nothing
         debug "Created new branch and added auto-cfg."
 
   BSCfgExpandCall cid callNode targetAddr -> do
