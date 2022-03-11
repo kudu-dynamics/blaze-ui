@@ -401,6 +401,7 @@ class ICFGFlowGraph(FlowGraph):
 
     def format(self):
         nodes: Dict[UUID, FlowGraphNode] = {}
+        self.node_mapping = {}
 
         # Root node MUST be added to the FlowGraph first, otherwise weird FlowGraphWidget
         # layout issues may ensue
@@ -721,18 +722,21 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 edge=(from_node, to_node)))
 
     def cancel_grouping(self) -> None:
-        # Get current ICFG
-        graph = self.blaze_instance.graph
+        # Create a similar graph but without group_options
+        # TODO: Do we need to update all other related instances too?
+        graph = ICFGFlowGraph(self.blaze_instance.graph.bv,
+                              self.blaze_instance.graph.pil_icfg,
+                              self.blaze_instance.graph.pil_icfg_id,
+                              self.blaze_instance.graph.poi_search_results,
+                              self.blaze_instance.graph.pending_changes,
+                              None)
 
-        # Remove group selection info and set mode
-        graph.group_options = None
+        # Set mode
         self.mode = ICFGWidget.Mode.STANDARD
 
-        # Reformat graph
-        graph.format()
-
-        assert isinstance(self.parent, ICFGDockWidget)
-        self.parent.set_graph(graph)
+        assert self.blaze_instance._icfg_dock_widget
+        # TODO: Find a less hacky approach to accomplish this?
+        self.blaze_instance._icfg_dock_widget.set_graph(graph)
 
     def customEvent(self, event: QEvent) -> None:
         FlowGraphWidget.customEvent(self, event)
@@ -1261,6 +1265,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         )
         self.icfg_toolbar_widget.accept_button.hide()
         self.icfg_toolbar_widget.reject_button.hide()
+        self.icfg_toolbar_widget.cancel_button.hide()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(self.icfg_toolbar_widget)
@@ -1284,6 +1289,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         if self.mode == ICFGWidget.Mode.DIFF:
             self.icfg_toolbar_widget.accept_button.setVisible(True)
             self.icfg_toolbar_widget.reject_button.setVisible(True)
+            self.icfg_toolbar_widget.cancel_button.setVisible(False)
 
             self.icfg_toolbar_widget.update_stats(
                 nodes=len(graph.pil_icfg['nodes']),
@@ -1293,6 +1299,8 @@ class ICFGDockWidget(QWidget, DockContextHandler):
                 )
 
         if self.mode == ICFGWidget.Mode.GROUP_SELECT:
+            self.icfg_toolbar_widget.accept_button.setVisible(False)
+            self.icfg_toolbar_widget.reject_button.setVisible(False)
             self.icfg_toolbar_widget.cancel_button.setVisible(True)
 
         if self.mode == ICFGWidget.Mode.STANDARD:
