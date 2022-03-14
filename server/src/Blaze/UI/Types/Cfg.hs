@@ -7,7 +7,7 @@ import Blaze.Types.Cfg ( CfNode, CfEdge(CfEdge), Cfg )
 import qualified Blaze.Types.Cfg as Cfg
 import qualified Blaze.Graph as G
 import qualified Data.HashMap.Strict as HashMap
-import Blaze.Pretty (Token, tokenize)
+import Blaze.Pretty (Token, mkTokenizerCtx, runTokenize)
 import Blaze.Cfg.Interprocedural (
   InterCfg,
   unInterCfg,
@@ -40,7 +40,9 @@ convertInterCfg :: InterCfg -> CfgTransport [[Token]]
 convertInterCfg = convertPilCfg . unInterCfg
 
 convertPilCfg :: Cfg [Stmt] -> CfgTransport [[Token]]
-convertPilCfg = toTransport $ fmap tokenize
+convertPilCfg cfg = toTransport (fmap (runTokenize tokenizerCtx)) cfg
+  where
+    tokenizerCtx = mkTokenizerCtx cfg
 
 toTransport :: forall a b. (a -> b) -> Cfg a -> CfgTransport b
 toTransport f pcfg = CfgTransport
