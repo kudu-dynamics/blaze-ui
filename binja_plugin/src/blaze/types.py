@@ -147,11 +147,18 @@ class LeaveFuncNode(TypedDict):
     nodeData: List[List[Token]]
 
 
-CfNodeUnion = Union[BasicBlockNode, CallNode, EnterFuncNode, LeaveFuncNode]
+class GroupingNode(TypedDict):
+    uuid: UUID
+    termNode: 'CfNode'
+    grouping: 'ServerCfg'
+    nodeData: List[List[Token]]
+
+
+CfNodeUnion = Union[BasicBlockNode, CallNode, EnterFuncNode, LeaveFuncNode, GroupingNode]
 
 
 class CfNode(TypedDict):
-    tag: Literal['BasicBlock', 'Call', 'EnterFunc', 'LeaveFunc']
+    tag: Literal['BasicBlock', 'Call', 'EnterFunc', 'LeaveFunc', 'Grouping']
     contents: CfNodeUnion
 
 
@@ -168,9 +175,9 @@ class Cfg(TypedDict):
 
 
 class ServerCfg(TypedDict):
-    edges: List[CfEdge]
-    root: CfNode
-    nodes: List[Tuple[CfNode, CfNode]]
+    transportEdges: List[CfEdge]
+    transportRoot: CfNode
+    transportNodes: List[Tuple[CfNode, CfNode]]
 
 
 class SnapshotInfo(TypedDict):

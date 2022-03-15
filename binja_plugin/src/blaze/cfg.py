@@ -98,13 +98,13 @@ POI_REACHABLE_GOOD_COLOR_BASE = HighlightStandardColor.RedHighlightColor
 
 
 def cfg_from_server(cfg: ServerCfg) -> Cfg:
-    nodes = {k['contents']['uuid']: v for k, v in cfg['nodes']}
-    return Cfg(nodes=nodes, edges=cfg['edges'], root=cfg['root']['contents']['uuid'])
+    nodes = {k['contents']['uuid']: v for k, v in cfg['transportNodes']}
+    return Cfg(nodes=nodes, edges=cfg['transportEdges'], root=cfg['transportRoot']['contents']['uuid'])
 
 
 def cfg_to_server(cfg: Cfg) -> ServerCfg:
     nodes = [(cfg['nodes'][k], v) for k, v in cfg['nodes'].items()]
-    return ServerCfg(nodes=nodes, edges=cfg['edges'], root=cfg['nodes'][cfg['root']])
+    return ServerCfg(transportNodes=nodes, transportEdges=cfg['edges'], transportRoot=cfg['nodes'][cfg['root']])
 
 
 def get_edge_style(
