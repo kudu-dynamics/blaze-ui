@@ -17,8 +17,10 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
 import qualified Blaze.Import.Source.BinaryNinja.Cfg as BnCfg
-import qualified Blaze.Types.Cfg as Cfg
-import Blaze.Types.Cfg (Cfg, PilCfg, CfNode)
+import qualified Blaze.Types.Cfg.Grouping as Cfg
+import qualified Blaze.Types.Cfg as OgCfg
+import qualified Blaze.Cfg as OgCfg
+import Blaze.Types.Cfg.Grouping (Cfg, PilCfg, CfNode)
 import qualified Blaze.Cfg.Analysis as CfgA
 import qualified Blaze.Pil.Analysis as PilA
 import qualified Blaze.UI.Cfg as CfgUI
@@ -53,6 +55,8 @@ import qualified Blaze.Types.Pil as Pil
 import Blaze.Types.Pil (Stmt)
 import qualified Blaze.Cfg.Solver.BranchContext as GSolver
 
+
+type OgCfg = OgCfg.Cfg
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -342,12 +346,20 @@ broadcastGlobalPois st binHash = do
   pois <- flip runReaderT st $ GlobalPoiDb.getPoisOfBinary binHash
   sendToAllWithBinary st binHash . SBPoi . Poi.GlobalPoisOfBinary $ pois
 
+-- | Converts grouped CFG into original CFG
+updateCfgM :: (Eq a, Hashable a, Monad m) => (OgCfg a -> m (OgCfg b)) -> Cfg a -> m (Cfg b)
+updateCfgM f cfg = do
+  let (ogCfg, _groupStructure) = Cfg.unfoldGroups cfg
+  cfg' <- f ogCfg
+  -- TODO: use foldGroups (when it's done...)
+  return $ Cfg.fromCfg cfg'
+
 -- | Simplifies the CFG by autopruning impossible edges and various passes on
 -- the PIL statements, like copy propagation and phi var reduction.
 -- It first tries the BranchContext pruner; if this fails, which happens
 -- often due to type inference errors, it calls a non-SMT simplify which uses
 -- constant propagation and can only prune constraints with constants on either side.
-simplify :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
+simplify :: OgCfg [Pil.Stmt] -> EventLoop (OgCfg [Pil.Stmt])
 simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
   Left err -> do
     case err of
@@ -363,8 +375,20 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
     return cfg'
   Right cfg' -> return cfg'
 
+simplify_ :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
+simplify_ = updateCfgM simplify
+
 ------------------------------------------
 --- main event handler
+
+getTermUUID :: CfNode a -> UUID
+getTermUUID (Cfg.Grouping n) = getTermUUID $ n ^. #termNode
+getTermUUID n = Cfg.getNodeUUID n
+
+getStartUUID :: CfNode a -> UUID
+getStartUUID (Cfg.Grouping n) = getStartUUID $ n ^. #grouping . #root
+getStartUUID n = Cfg.getNodeUUID n
+
 
 -- | log error sends error to binja, prints to server log, and halts eventloop
 -- (maybe should be named something more than "log...")
@@ -449,12 +473,13 @@ getPoiSearchResults bhash pcfg = do
       -- TODO: cache the cnrCtx
       cnrCtx <- liftIO . CC.calc bhash (ctx ^. #callNodeRatingCtx)
         . CfgA.getCallNodeRatingCtx . BNImporter $ bv
-      let ratings = CfgA.getCallNodeRatings cnrCtx tgt pcfg
+      let (ogCfg, _) = Cfg.unfoldGroups pcfg
+          ratings = CfgA.getCallNodeRatings cnrCtx tgt ogCfg
           ratings' = fmap (over _1 $ view #uuid) . HashMap.toList $ ratings
 
           -- Should do we care about the Target function? or just the addr here?
           present = fmap Cfg.getNodeUUID . HashSet.toList
-                    $ CfgA.getNodesContainingAddress (tgt ^. #address) pcfg
+                    $ Cfg.getNodesContainingAddress (tgt ^. #address) pcfg
       return . Just $ PoiSearchResults ratings' present
 
 -- | Handles messages incoming from the Binja client.
@@ -511,7 +536,7 @@ handleBinjaEvent = \case
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
             ctx <- ask
-            cfg <- simplify $ r ^. #result
+            cfg <- fmap Cfg.fromCfg . simplify $ r ^. #result
             (_bid, cid, _snapBranch) <- Db.saveNewCfgAndBranch
               (ctx ^. #clientId)
               (ctx ^. #hostBinaryPath)
@@ -527,42 +552,49 @@ handleBinjaEvent = \case
   BSCfgExpandCall cid callNode targetAddr -> do
     (bv, bhash) <- getCfgBinaryView cid
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
-    cfg <- getCfg cid
-    case Cfg.getFullNodeMay cfg (Cfg.Call callNode) of
-      Nothing ->
-        sendToBinja . SBLogError $ "Could not find call node in CFG"
+    gcfg <- getCfg cid
+    simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
+      case OgCfg.getFullNodeMay cfg (OgCfg.Call callNode) of
+        Nothing ->
+          logError "Could not find call node in CFG"
           -- TODO: fix issue #160 so we can just send `CallNode ()` to expandCall
-      Just (Cfg.Call fullCallNode) -> do
-        let bs = ICfg.mkBuilderState (BNImporter bv)
-        targetFunc <- getTargetFunc bv (fromIntegral targetAddr)
-        mCfg' <- liftIO . ICfg.build bs $
-          ICfg.expandCall (InterCfg cfg) fullCallNode targetFunc
+        Just (OgCfg.Call fullCallNode) -> do
+          let bs = ICfg.mkBuilderState (BNImporter bv)
+          targetFunc <- getTargetFunc bv (fromIntegral targetAddr)
+        
+          mCfg' <- liftIO . ICfg.build bs $
+            ICfg.expandCall (InterCfg cfg) fullCallNode targetFunc
 
-        case mCfg' of
-          Left err ->
-            -- TODO: more specific error
-            sendToBinja . SBLogError . show $ err
-          Right (InterCfg cfg') -> do
-            simplifiedCfg <- simplify cfg'
-            printSimplifyStats cfg' simplifiedCfg
-            autosaveCfg cid simplifiedCfg
-              >>= sendCfgAndSnapshots bhash simplifiedCfg cid
-      Just _ -> do
-        sendToBinja . SBLogError $ "Node must be a CallNode"
+          case mCfg' of
+            Left err ->
+              -- TODO: more specific error
+              logError $ show err
+            Right (InterCfg cfg') -> do
+              simplifiedCfg <- simplify cfg'
+              printSimplifyStats cfg' simplifiedCfg
+              return simplifiedCfg
+        Just _ -> do
+          logError "Node must be a CallNode"
+    autosaveCfg cid simplifiedCfg
+      >>= sendCfgAndSnapshots bhash simplifiedCfg cid
+
 
   BSCfgRemoveBranch cid (node1, node2) -> do
+    let startUUID = getStartUUID node1
+        endUUID = getTermUUID node2          
     debug "Binja remove branch"
     -- TODO: just get the bhash since bv isn't used
     bhash <- getCfgBndbHash cid
-    cfg <- getCfg cid
-    case (,) <$> Cfg.getFullNodeMay cfg node1 <*> Cfg.getFullNodeMay cfg node2 of
-      Nothing -> sendToBinja
-        . SBLogError $ "Node or nodes don't exist in CFG"
-      Just (fullNode1, fullNode2) -> do
-        let InterCfg cfg' = CfgA.prune (G.Edge fullNode1 fullNode2) $ InterCfg cfg
-        simplifiedCfg <- simplify cfg'
-        printSimplifyStats cfg simplifiedCfg
-        sendDiffCfg bhash cid cfg simplifiedCfg
+    gcfg <- getCfg cid
+    simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do      
+      case (,) <$> OgCfg.findNodeByUUID startUUID cfg <*> OgCfg.findNodeByUUID endUUID cfg of
+        Nothing -> logError "Node or nodes don't exist in CFG"
+        Just (fullNode1, fullNode2) -> do
+          let InterCfg cfg' = CfgA.prune_ (G.Edge fullNode1 fullNode2) $ InterCfg cfg
+          simplifiedCfg <- simplify cfg'
+          printSimplifyStats cfg simplifiedCfg
+          return simplifiedCfg
+    sendDiffCfg bhash cid gcfg simplifiedCfg
 
   BSCfgRemoveNode cid node' -> do
     debug "Binja remove node"
@@ -575,23 +607,29 @@ handleBinjaEvent = \case
         then sendToBinja $ SBLogError "Cannot remove root node"
         else do
           let cfg' = G.removeNode fullNode cfg
-          simplifiedCfg <- simplify cfg'
-          printSimplifyStats cfg' simplifiedCfg
+          simplifiedCfg <- flip updateCfgM cfg' $ \cfg'' -> do
+            simplifiedCfg <- simplify cfg''
+            printSimplifyStats cfg'' simplifiedCfg
+            return simplifiedCfg
           sendDiffCfg bhash cid cfg simplifiedCfg
 
   BSCfgFocus cid node' -> do
     debug "Binja Focus"
     bhash <- getCfgBndbHash cid
-    cfg <- getCfg cid
-    case Cfg.getFullNodeMay cfg node' of
-      Nothing -> sendToBinja
-        . SBLogError $ "Node doesn't exist in CFG"
-      Just fullNode -> if fullNode == cfg ^. #root
-        then sendToBinja $ SBLogError "Cannot remove root node"
-        else do
-          let InterCfg cfg' = CfgA.focus fullNode $ InterCfg cfg
-          printSimplifyStats cfg cfg'
-          sendDiffCfg bhash cid cfg cfg'
+    gcfg <- getCfg cid
+
+    simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
+      case OgCfg.findNodeByUUID (getStartUUID node') cfg of
+        Nothing -> logError "Node doesn't exist in CFG"
+        Just fullNode -> if fullNode == cfg ^. #root
+          then logError "Cannot remove root node"
+          else do
+            let InterCfg cfg' = CfgA.focus_ fullNode $ InterCfg cfg
+            simplifiedCfg <- simplify cfg'
+            printSimplifyStats cfg cfg'
+            return simplifiedCfg
+
+    sendDiffCfg bhash cid gcfg simplifiedCfg
 
   BSCfgConfirmChanges cid ->
     CfgUI.getCfg cid >>= \case
@@ -703,7 +741,7 @@ handleBinjaEvent = \case
           logWarn $ "Parse Error:\n" <> err
         Right expr -> do
           cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Constraint . Pil.ConstraintOp $ expr)
-          simplifiedCfg <- simplify cfg'
+          simplifiedCfg <- simplify_ cfg'
           bhash <- getCfgBndbHash cid
           sendDiffCfg bhash cid cfg' simplifiedCfg
 
@@ -749,9 +787,11 @@ insertStmt ::
   EventLoop (Cfg [a])
 insertStmt cfg cid nid stmtIndex stmt = do
   node' <- getNode cfg cid nid
-  (stmtsA, stmtsB) <- getStmtsAround node' stmtIndex
-  let stmts' = stmtsA <> [stmt] <> stmtsB
-  pure $ Cfg.setNodeData stmts' node' cfg
+  getStmtsAround node' stmtIndex >>= \case
+    Nothing -> logError "Could not get statements for node."
+    Just (stmtsA, stmtsB) -> do
+      let stmts' = stmtsA <> [stmt] <> stmtsB
+      pure $ Cfg.setNodeData stmts' node' cfg
 
 getGroupOptions :: Cfg [a] -> CfNode [a] -> EventLoop (Maybe GroupOptions)
 getGroupOptions cfg startNode = do
@@ -791,17 +831,18 @@ getNode cfg cid nid = do
 getStmtsAround ::
   CfNode [a] ->
   Word64 ->
-  EventLoop ([a], [a])
-getStmtsAround node' stmtIndex = do
-  let stmts = Cfg.getNodeData node'
-  when (fromIntegral stmtIndex >= length stmts) $ do
-    logWarn $
-      "getStmtsAround: requested statement index (" <> show stmtIndex <> ")"
-      <> " exceeds node's maximum statemtent index (" <> show (length stmts - 1) <> "). "
-      <> "Adding to end."
-  pure $ splitAt (fromIntegral stmtIndex) stmts
+  EventLoop (Maybe ([a], [a]))
+getStmtsAround node' stmtIndex = case Cfg.getNodeData node' of
+  Nothing -> return Nothing
+  Just stmts -> do
+    when (fromIntegral stmtIndex >= length stmts) $ do
+      logWarn $
+        "getStmtsAround: requested statement index (" <> show stmtIndex <> ")"
+        <> " exceeds node's maximum statemtent index (" <> show (length stmts - 1) <> "). "
+        <> "Adding to end."
+    pure . Just $ splitAt (fromIntegral stmtIndex) stmts
 
-printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
+printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => OgCfg a -> OgCfg a -> m ()
 printSimplifyStats a b = do
   putText "------------- Simplify -----------"
   putText $ "Before: " <> show (HashSet.size $ G.nodes a) <> " nodes, "

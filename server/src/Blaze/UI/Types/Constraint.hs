@@ -10,12 +10,12 @@ data ConstraintError
   | InvalidOperator Text
   | ParseError Text
   deriving stock (Eq, Ord, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON, FromJSON, Hashable)
 
 newtype ServerToBinja
   = SBInvalidConstraint { parseError :: ConstraintError }
   deriving stock (Eq, Ord, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON, FromJSON, Hashable)
 
 data BinjaToServer
   = AddConstraint { cfgId :: CfgId
@@ -24,7 +24,7 @@ data BinjaToServer
                   , exprText :: Text
                   }
   deriving stock (Eq, Ord, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON, FromJSON, Hashable)
 
 
 dummyParse :: Text -> Either ConstraintError Pil.Stmt

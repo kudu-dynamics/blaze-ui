@@ -4,6 +4,7 @@ import Blaze.Prelude hiding (Symbol)
 
 import System.Random (Random)
 import Data.Time.Clock (UTCTime)
+import Data.Hashable.Time ()
 import Database.Selda (SqlRow, Table, primary, Attr((:-)), table)
 import Database.Selda.SqlType ( Lit(LCustom)
                               , SqlTypeRep(TBlob)
@@ -32,7 +33,7 @@ data ServerToBinja
   = PoisOfBinary { pois :: [Poi] }
   | GlobalPoisOfBinary { globalPois :: [Poi] }
   deriving (Eq, Ord, Show, Generic)
-  deriving anyclass (ToJSON, FromJSON)
+  deriving anyclass (ToJSON, FromJSON, Hashable)
 
 data BinjaToServer
   = GetPoisOfBinary
@@ -59,7 +60,7 @@ data BinjaToServer
 
   | DeactivatePoiSearch { activeCfg :: Maybe CfgId }
 
-  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
+  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, Hashable)
 
 
 data Poi = Poi
@@ -73,7 +74,7 @@ data Poi = Poi
   , name :: Maybe Text
   , description :: Maybe Text
   , isGlobalPoi :: Bool
-  } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, SqlRow)
+  } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, Hashable, SqlRow)
 
 poiTable :: Table Poi
 poiTable = table "poi" [#poiId :- primary]

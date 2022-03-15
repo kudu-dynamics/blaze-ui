@@ -42,7 +42,9 @@ import qualified Data.Aeson.Types as Aeson
 import Blaze.Function (Function)
 import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
 import qualified Blaze.UI.Types.Constraint as C
-import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
+import Blaze.Types.Cfg (CallNode)
+import qualified Blaze.Types.Cfg as Cfg
+import Blaze.Types.Cfg.Grouping (Cfg, CfNode)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Poi as Poi
 import Blaze.UI.Types.Poi (Poi)
@@ -66,28 +68,28 @@ data BinjaMessage a = BinjaMessage
   , hostBinaryPath :: HostBinaryPath
   , binaryHash :: BinaryHash
   , action :: a
-  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Hashable)
 
 -- | When an ICFG action, such as prune or focus, is requested, we show the user
 -- the nodes and edges that will be removed if the action is performed.
 data PendingChanges = PendingChanges
   { removedNodes :: [UUID]
   , removedEdges :: [(UUID, UUID)]
-  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Hashable)
 
 -- | The ranked results of a POI search, showing the call nodes that will most
 -- quickly reach the POI.
 data PoiSearchResults = PoiSearchResults
   { callNodeRatings :: [(UUID, CallNodeRating)]
   , presentTargetNodes :: [UUID]
-  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Hashable)
 
 -- | Candidate group end nodes that will be shown to the user. The user may
 -- select one of these to finish defining a group.
 data GroupOptions = GroupOptions
   { startNode :: UUID
   , endNodes :: [UUID]
-  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Hashable)
 
 -- | Messages from the server to the BinaryNinja Blaze plugin
 data ServerToBinja = SBLogInfo { message :: Text }
@@ -101,7 +103,7 @@ data ServerToBinja = SBLogInfo { message :: Text }
                            , pendingChanges :: Maybe PendingChanges
                            , groupOptions :: Maybe GroupOptions
                            -- TODO: send cfg with text
-                           , cfg :: CfgTransport [[Token]]
+                           , cfg :: Cfg [[Token]]
                            }
 
                    | SBSnapshot { snapshotMsg :: Snapshot.ServerToBinja }
@@ -111,7 +113,7 @@ data ServerToBinja = SBLogInfo { message :: Text }
                    | SBConstraint { constraintMsg :: C.ServerToBinja }
 
                    | SBNoop
-                   deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+                   deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Hashable)
 
 -- | Messages from the Binaryninja Blaze plugin to the server.
 data BinjaToServer = BSConnect

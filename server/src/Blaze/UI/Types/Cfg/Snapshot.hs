@@ -14,6 +14,7 @@ import qualified Database.Selda.SqlType as Sql
 import Blaze.UI.Types.Graph (GraphTransport)
 import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
+import Data.Hashable.Time
 
 newtype BranchId = BranchId UUID
   deriving (Eq, Ord, Show, Generic)
@@ -42,7 +43,7 @@ data ServerToBinja
     }
   | BranchesOfClient
     { branchesOfClient :: [(HostBinaryPath, [(BranchId, Branch BranchTransport)])] }
-  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
+  deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, Hashable)
 
 
 data BinjaToServer
@@ -72,7 +73,7 @@ data BinjaToServer
 data SnapshotType
   = Autosave
   | Immutable
-  deriving (Eq, Ord, Read, Show, Generic, Enum, Bounded, ToJSON, FromJSON, SqlType)
+  deriving (Eq, Ord, Read, Show, Generic, Enum, Bounded, ToJSON, FromJSON, Hashable, SqlType)
 
 
 data SnapshotInfo = SnapshotInfo
@@ -80,7 +81,7 @@ data SnapshotInfo = SnapshotInfo
   , created :: UTCTime
   , modified :: UTCTime
   , snapshotType :: SnapshotType
-  } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
+  } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, Hashable)
 
 type BranchTree = AlgaGraph () () CfgId
 
@@ -95,5 +96,5 @@ data Branch a = Branch
   , rootNode :: CfgId
   , snapshotInfo :: HashMap CfgId SnapshotInfo
   , tree :: a
-  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Functor, Foldable, Traversable)
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON,Hashable, Functor, Foldable, Traversable)
 
