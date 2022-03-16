@@ -54,6 +54,7 @@ from .types import (
     ConstraintBinjaToServer,
     EnterFuncNode,
     Function,
+    GroupingNode,
     GroupOptions,
     LeaveFuncNode,
     PendingChanges,
@@ -138,6 +139,8 @@ def is_basic_node(node: CfNode) -> bool:
 def is_summary_node(node: CfNode) -> bool:
     return node['tag'] == 'Summary'
 
+def is_grouping_node(node: CfNode) -> bool:
+    return node['tag'] == 'Grouping'
 
 def is_call_node(node: CfNode) -> bool:
     return node['tag'] == 'Call'
@@ -181,7 +184,13 @@ def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
 def is_group_start_node(node: CfNode) -> bool:
     return (is_call_node(node) or
             is_basic_node(node) or
-            is_summary_node(node))
+            is_summary_node(node) or
+            is_grouping_node(node))
+
+
+def is_group_end_node(node: CfNode) -> bool:
+    return is_group_start_node(node)
+
 
 def get_target_address(call_dest: CallDest) -> Optional[Address]:
     dest_tag = call_dest['tag']
@@ -312,6 +321,16 @@ def format_block_header(node: CfNode) -> DisassemblyTextLine:
             ),
         ]
 
+    elif node_tag == 'Grouping':
+        node_contents = cast(GroupingNode, node['contents'])
+        tokens = [
+            InstructionTextToken(
+                InstructionTextTokenType.TextToken,
+                'group',
+            ),
+        ]
+
+
     else:
         assert False, f'Inexaustive match on CFNode? tag={node["tag"]}'
 
@@ -417,8 +436,9 @@ class ICFGFlowGraph(FlowGraph):
             self.node_mapping[fg_node] = node
 
             fg_node.lines = [format_block_header(node)]
-            tokenized_lines = node['contents']['nodeData']
-            fg_node.lines += [tokens_from_server(line) for line in tokenized_lines]
+            if node['contents'].get('nodeData'):
+                tokenized_lines = node['contents']['nodeData']
+                fg_node.lines += [tokens_from_server(line) for line in tokenized_lines]
 
             if node['contents']['uuid'] in self.pending_changes.removed_nodes:
                 fg_node.highlight = HighlightStandardColor.RedHighlightColor
@@ -559,7 +579,16 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 is_valid=lambda ctx: (
                     self.clicked_node is not None and
                     (cf_node := self.get_cf_node(self.clicked_node)) is not None and
-                    is_summary_node(cf_node)),
+                    is_grouping_node(cf_node)),
+            ),
+            BNAction(
+                'Blaze\\ICFG\\Group',
+                'Select Group End',
+                activate=self.context_menu_action_select_group_end,
+                is_valid=lambda ctx: (
+                    self.clicked_node is not None and
+                    (cf_node := self.get_cf_node(self.clicked_node)) is not None and
+                    is_group_end_node(cf_node)),
             ),
             BNAction(
                 'Blaze\\ICFG\\Misc',
@@ -683,17 +712,17 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 endNodeId=end_uuid
             ))
 
-    def expand_group(self, summary_node: CfNode) -> None:
+    def expand_group(self, grouping_node: CfNode) -> None:
         assert self.blaze_instance.graph
 
-        summary_uuid = summary_node['contents']['uuid']
+        grouping_uuid = grouping_node['contents']['uuid']
         # TODO: How to recenter?
         # self.recenter_node_id = ???
         self.blaze_instance.send(
             BinjaToServer(
                 tag='BSGroupExpand',
                 cfgId=self.blaze_instance.graph.pil_icfg_id,
-                summaryNodeId=summary_uuid
+                groupingNodeId=grouping_uuid
             ))
 
     def prune(self, from_node: CfNode, to_node: CfNode):
@@ -1010,6 +1039,16 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         self.expand_group(summary_node)
 
+    def context_menu_action_select_group_end(self, context: UIActionContext):
+        log.debug('Select Group End')
+
+        end_node = self.get_cf_node(self.clicked_node)
+        assert end_node is not None
+
+        # Send start_node to server
+        self.select_group_end(end_node)
+
+        
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any

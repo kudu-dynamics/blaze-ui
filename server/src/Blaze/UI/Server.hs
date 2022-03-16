@@ -766,7 +766,7 @@ handleBinjaEvent = \case
     -- group <- createGroup cfg startNode endNode
     -- summaryNode <- createSummaryNode cfg group
     -- cfg' <- substituteGroup cfg group summaryNode
-    cfg' <- undefined
+    let cfg' = Cfg.makeGrouping startNode endNode cfg
     sendCfgWithCallRatings bhash cfg' cid Nothing
 
   BSGroupExpand cid summaryId -> do
