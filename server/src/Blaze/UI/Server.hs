@@ -347,9 +347,10 @@ broadcastGlobalPois st binHash = do
   sendToAllWithBinary st binHash . SBPoi . Poi.GlobalPoisOfBinary $ pois
 
 -- | Converts grouped CFG into original CFG
-updateCfgM :: (Eq a, Eq b, Hashable a, Hashable b, Monad m) => (OgCfg a -> m (OgCfg b)) -> Cfg a -> m (Cfg b)
+updateCfgM :: (MonadIO m, Eq a, Eq b, Hashable a, Hashable b, Monad m) => (OgCfg a -> m (OgCfg b)) -> Cfg a -> m (Cfg b)
 updateCfgM f cfg = do
   let (ogCfg, groupStructure) = Cfg.unfoldGroups cfg
+  liftIO $ pprint groupStructure
   cfg' <- f ogCfg
   return $ Cfg.foldGroups cfg' groupStructure
 
@@ -617,6 +618,8 @@ handleBinjaEvent = \case
     bhash <- getCfgBndbHash cid
     gcfg <- getCfg cid
 
+    prettyPrint gcfg
+
     simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
       case OgCfg.findNodeByUUID (getStartUUID node') cfg of
         Nothing -> logError "Node doesn't exist in CFG"
@@ -766,17 +769,21 @@ handleBinjaEvent = \case
     -- summaryNode <- createSummaryNode cfg group
     -- cfg' <- substituteGroup cfg group summaryNode
     let cfg' = Cfg.makeGrouping startNode endNode cfg
-    sendCfgWithCallRatings bhash cfg' cid Nothing
+    autosaveCfg cid cfg'
+      >>= sendCfgAndSnapshots bhash cfg' cid
+
+    -- sendCfgWithCallRatings bhash cfg' cid Nothing
 
   BSGroupExpand cid groupNodeId -> do
-    logError "Group expand not yet implemented."
-    -- bhash <- getCfgBndbHash cid
-    -- cfg <- getCfg cid
-    -- getNode cfg cid groupNodeId >>= \case
-    --   Cfg.Grouping gnode -> do
-    --     let cfg' = Cfg.unfoldOneGroup gnode cfg
-    --     sendCfgWithCallRatings bhash cfg' cid Nothing
-    --   _ -> logError "Cannot expand non-Grouping node"
+    -- logError "Group expand not yet implemented."
+    bhash <- getCfgBndbHash cid
+    cfg <- getCfg cid
+    getNode cfg cid groupNodeId >>= \case
+      Cfg.Grouping gnode -> do
+        let cfg' = Cfg.expandGroupingNode gnode cfg
+        autosaveCfg cid cfg'
+          >>= sendCfgAndSnapshots bhash cfg' cid
+      _ -> logError "Cannot expand non-Grouping node"
 
 insertStmt ::
   (Eq a, Hashable a) =>

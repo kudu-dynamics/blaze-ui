@@ -632,6 +632,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         source = self.get_cf_node(cast(FlowGraphNode, fg_edge.source))
         dest = self.get_cf_node(cast(FlowGraphNode, fg_edge.target))
+        log.info(f"IS_CONDITION_EDGE: {fg_edge.source.lines} {fg_edge.target.lines}")
+        log.info(f"{self.blaze_instance.graph.node_mapping}")
+
         assert source and dest
         if not (edge := self.blaze_instance.graph.get_edge(
                 source['contents']['uuid'],
@@ -1257,7 +1260,13 @@ class ICFGToolbarWidget(QWidget):
         if not self.blaze_instance.graph:
             log.warn('There is no graph associated with Blaze.')
         else:
-            self.icfg_widget.cancel_grouping()
+            self.blaze_instance.send(
+                BinjaToServer(
+                    tag='BSCfgRevertChanges',
+                    cfgId=self.blaze_instance.graph.pil_icfg_id,
+                ))
+
+            # self.icfg_widget.cancel_grouping()
 
     def update_stats(
         self,

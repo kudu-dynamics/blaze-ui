@@ -174,7 +174,7 @@ data BinjaToServer = BSConnect
                      }
                    | BSGroupExpand
                      { cfgId :: CfgId
-                     , summaryNodeId :: UUID
+                     , groupingNodeId :: UUID
                      }
 
                    | BSNoop
