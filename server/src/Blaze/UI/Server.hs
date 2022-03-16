@@ -347,12 +347,11 @@ broadcastGlobalPois st binHash = do
   sendToAllWithBinary st binHash . SBPoi . Poi.GlobalPoisOfBinary $ pois
 
 -- | Converts grouped CFG into original CFG
-updateCfgM :: (Eq a, Hashable a, Monad m) => (OgCfg a -> m (OgCfg b)) -> Cfg a -> m (Cfg b)
+updateCfgM :: (Eq a, Eq b, Hashable a, Hashable b, Monad m) => (OgCfg a -> m (OgCfg b)) -> Cfg a -> m (Cfg b)
 updateCfgM f cfg = do
-  let (ogCfg, _groupStructure) = Cfg.unfoldGroups cfg
+  let (ogCfg, groupStructure) = Cfg.unfoldGroups cfg
   cfg' <- f ogCfg
-  -- TODO: use foldGroups (when it's done...)
-  return $ Cfg.fromCfg cfg'
+  return $ Cfg.foldGroups cfg' groupStructure
 
 -- | Simplifies the CFG by autopruning impossible edges and various passes on
 -- the PIL statements, like copy propagation and phi var reduction.
@@ -769,13 +768,15 @@ handleBinjaEvent = \case
     let cfg' = Cfg.makeGrouping startNode endNode cfg
     sendCfgWithCallRatings bhash cfg' cid Nothing
 
-  BSGroupExpand cid summaryId -> do
-    bhash <- getCfgBndbHash cid
-    cfg <- getCfg cid
-    -- summaryNode <- getNode cfg summaryId
-    -- cfg' <- expandGroup cfg summaryNode
-    cfg' <- undefined
-    sendCfgWithCallRatings bhash cfg' cid Nothing
+  BSGroupExpand cid groupNodeId -> do
+    logError "Group expand not yet implemented."
+    -- bhash <- getCfgBndbHash cid
+    -- cfg <- getCfg cid
+    -- getNode cfg cid groupNodeId >>= \case
+    --   Cfg.Grouping gnode -> do
+    --     let cfg' = Cfg.unfoldOneGroup gnode cfg
+    --     sendCfgWithCallRatings bhash cfg' cid Nothing
+    --   _ -> logError "Cannot expand non-Grouping node"
 
 insertStmt ::
   (Eq a, Hashable a) =>
