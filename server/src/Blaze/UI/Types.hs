@@ -226,7 +226,8 @@ forkEventLoop_ :: EventLoop () -> EventLoop ()
 forkEventLoop_ = void . forkEventLoop
 
 debug :: Text -> EventLoop ()
-debug =  putText
+debug = logLocalDebug
+{-# INLINE debug #-}
 
 type BinjaConns = HashMap ConnId WS.Connection
 
@@ -349,7 +350,7 @@ cleanupClosedConn cid st = do
                       $ ss ^. #eventHandlerWorkerThreads
                     return $ maybeToList mEventThread <> workers
   mapM_ killThread threads
-  putText $ "Killed " <> show (length threads) <> " thread(s)."
+  logLocalInfo $ "Killed " <> show (length threads) <> " thread(s)."
 
 initAppState :: ServerConfig -> Db.Conn -> IO AppState
 initAppState cfg' conn = AppState cfg'

@@ -85,10 +85,10 @@ uploadBinary st = do
         . CC.setCalc h (ss ^. #callNodeRatingCtx)
         $ do
             r <- CfgA.getCallNodeRatingCtx $ BNImporter bv
-            putText "Calculated CallNodeRatingCtx."
+            logLocalInfo "Calculated CallNodeRatingCtx."
             return r
       json h
-      putText $ "New bndb uploaded: "
+      logLocalInfo $ "New bndb uploaded: "
         <> HBP.toText hostBinaryPath'
         <> " (" <> BndbHash.toText h <> ")"
     saveBndb _ _ _ _ = return ()
@@ -113,7 +113,7 @@ showErrorPage = do
 
 run :: AppState -> IO ()
 run st = do
-  putText $ "Starting http server at http://" <> serverHost cfg <> ":"
+  logLocalInfo $ "Starting http server at http://" <> serverHost cfg <> ":"
     <> show (serverHttpPort cfg)
   scotty (serverHttpPort cfg) $ server st
   where

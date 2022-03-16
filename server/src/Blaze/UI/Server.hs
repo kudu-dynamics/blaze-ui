@@ -1,5 +1,6 @@
 {- HLINT ignore "Use if" -}
 {- HLINT ignore "Reduce duplication" -}
+{-# OPTIONS_GHC -Wno-deferred-out-of-scope-variables #-}
 
 module Blaze.UI.Server where
 
@@ -25,7 +26,7 @@ import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
 import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
 import qualified Blaze.Cfg.Interprocedural as ICfg
-import Blaze.Pretty (mkTokenizerCtx, prettyIndexedStmts, prettyPrint', prettyIndexedStmts', pretty', showHex)
+import Blaze.Pretty (PIndexedStmts (..), mkTokenizerCtx, prettyIndexedStmts', pretty', showHex, pretty)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.UI.Types.Constraint as C
@@ -105,7 +106,7 @@ binjaApp st connId conn = do
   er <- receiveJSON conn :: IO (Either Text (BinjaMessage BinjaToServer))
   case er of
     Left err -> do
-      putText $ "Error parsing JSON: " <> show err
+      logLocalError $ "Error parsing JSON: " <> show err
     Right x -> do
       let cid = x ^. #clientId
           hpath = x ^. #hostBinaryPath
@@ -114,7 +115,7 @@ binjaApp st connId conn = do
           reply = sendJSON conn . BinjaMessage cid hpath bhash
           logInfo' txt = do
             reply . SBLogInfo $ txt
-            putText txt
+            logLocalInfo txt
       ss <- getSessionState sid bhash st
       let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
             . BinjaEvent
@@ -134,7 +135,7 @@ spawnEventHandler :: SessionState -> IO ()
 spawnEventHandler ss = do
   b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
   case b of
-    False -> putText "Warning: spawnEventHandler -- event handler already spawned"
+    False -> logLocalWarning "spawnEventHandler -- event handler already spawned"
     True -> do
       -- spawns event handler workers for new messages
       eventTid <- forkIO . forever $ do
@@ -152,7 +153,7 @@ app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case splitPath of
   ["binja"] -> WS.acceptRequest pconn >>= runBinjaApp
   _ -> do
-    putText $ "Rejected request to invalid path: " <> cs path
+    logLocalWarning $ "Rejected request to invalid path: " <> cs path
     WS.rejectRequest pconn $ "Invalid path: " <> path
   where
     path = WS.requestPath $ WS.pendingRequest pconn
@@ -163,7 +164,7 @@ app st pconn = case splitPath of
         $ catch (binjaApp st connId conn) (catchConnectionException connId)
     catchConnectionException :: ConnId -> WS.ConnectionException -> IO ()
     catchConnectionException connId e = do
-      print e
+      logLocalError (show e)
       cleanupClosedConn connId st
 
 sendToAllWithBinary :: AppState -> BinaryHash -> ServerToBinja -> IO ()
@@ -177,7 +178,7 @@ sendToAllWithBinary st bh msg = do
       
 run :: AppState -> IO ()
 run st = do
-  putText $ "Starting Blaze UI Server at "
+  logLocalInfo $ "Starting Blaze UI Server at "
     <> serverHost cfg
     <> ":"
     <> show (serverWsPort cfg)
@@ -337,13 +338,16 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
   Left err -> do
     case err of
       GSolver.SolverError tr _ -> liftIO $ do
-        putText "\n------------------------Type Checking Cfg-------------------------"
-        putText ""
-        pprint ("errors" :: Text, tr ^. #errors)
-        putText ""
-        prettyIndexedStmts (mkTokenizerCtx cfg) $ tr ^. #symTypeStmts
-        putText "-----------------------------------------------------------------------"
-      _ -> putText . show $ err
+        logLocalInfo . unlines $
+          [ ""
+          , "------------------------Type Checking Cfg-------------------------"
+          , ""
+          , cs $ pshow ("errors" :: Text, tr ^. #errors)
+          , ""
+          , pretty (mkTokenizerCtx cfg) . PIndexedStmts $ tr ^. #symTypeStmts
+          , "-----------------------------------------------------------------------"
+          ]
+      _ -> logLocalError . show $ err
     let (InterCfg cfg') = CfgA.simplify . InterCfg $ cfg
     return cfg'
   Right cfg' -> return cfg'
@@ -356,18 +360,18 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
 logError :: Text -> EventLoop a
 logError errMsg = do
   sendToBinja . SBLogError $ errMsg
-  putText $ "ERROR: " <> errMsg
+  logLocalError errMsg
   throwError $ EventLoopError errMsg
 
 logWarn :: Text -> EventLoop ()
 logWarn warnMsg = do
   sendToBinja . SBLogWarn $ warnMsg
-  putText $ "WARNING: " <> warnMsg
+  logLocalWarning warnMsg
 
 logInfo :: Text -> EventLoop ()
 logInfo infoMsg = do
   sendToBinja . SBLogInfo $ infoMsg
-  putText infoMsg
+  logLocalInfo infoMsg
 
 getCfgBinaryView :: CfgId -> EventLoop (BNBinaryView, BndbHash)
 getCfgBinaryView cid = Db.getCfgBndbHash cid >>= \case
@@ -458,7 +462,7 @@ handleBinjaEvent = \case
 
     -- demo forking
     forkEventLoop_ $ do
-      liftIO $ threadDelay 5000000 >> putText "calculating integer"
+      liftIO $ threadDelay 5000000 >> logLocalInfo "calculating integer"
       n <- liftIO randomIO :: EventLoop Int
       sendToBinja . SBLogInfo
         $ "Here is your important integer: " <> show n
@@ -481,9 +485,9 @@ handleBinjaEvent = \case
   -- where the root node is the auto-cfg
   -- Sends back two messages: one auto-cfg, one new snapshot tree
   BSCfgNew bhash funcAddr -> do
-    putText "Getting BV"
+    logLocalDebug "Getting BV"
     bv <- getBinaryView bhash
-    putText "Got BV"
+    logLocalDebug "Got BV"
     mfunc <- liftIO $ CG.getFunction bv (fromIntegral funcAddr)
     case mfunc of
       Nothing -> sendToBinja
@@ -687,7 +691,7 @@ handleBinjaEvent = \case
       cfg <- getCfg cid
       case Parse.runParserEof (Parse.mkParserCtx cfg) Parse.parseExpr exprText of
         Left err -> do
-          putText $ "Error parsing user constraint: " <> err
+          logLocalError $ "Error parsing user constraint: " <> err
           sendToBinja . SBConstraint . C.SBInvalidConstraint . C.ParseError $ err
           -- TODO: handle above message directly in binja, maybe remove below
           logWarn $ "Parse Error:\n" <> err
@@ -760,23 +764,29 @@ getStmtsAround node' stmtIndex = do
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do
-  putText "------------- Simplify -----------"
-  putText $ "Before: " <> show (HashSet.size $ G.nodes a) <> " nodes, "
-    <> show (length $ G.edges a) <> " edges"
-  putText $ "After: " <> show (HashSet.size $ G.nodes b) <> " nodes, "
-    <> show (length $ G.edges b) <> " edges"
+  logLocalInfo . unlines $
+    [ ""
+    , "------------- Simplify -----------"
+    , "Before: " <> show (HashSet.size $ G.nodes a) <> " nodes, "
+        <> show (length $ G.edges a) <> " edges"
+    , "After: " <> show (HashSet.size $ G.nodes b) <> " nodes, "
+        <> show (length $ G.edges b) <> " edges"
+    ]
 
 
 printTypeReportToConsole :: MonadIO m => BNFunc.Function -> Ch.TypeReport -> m ()
 printTypeReportToConsole fn tr = liftIO $ do
-  putText "\n------------------------Type Checking Function-------------------------"
-  pprint fn
-  putText ""
-  pprint ("errors" :: Text, tr ^. #errors)
-  prettyPrint' $ tr ^. #errorConstraints
-  putText ""
-  prettyIndexedStmts' $ tr ^. #symTypeStmts
-  putText "-----------------------------------------------------------------------"
+  logLocalInfo . unlines $
+    [ ""
+    , "------------------------Type Checking Function-------------------------"
+    , cs $ pshow fn
+    , ""
+    , cs $ pshow ("errors" :: Text, tr ^. #errors)
+    , pretty' $ tr ^. #errorConstraints
+    , ""
+    , pretty' . PIndexedStmts $ tr ^. #symTypeStmts
+    , "-----------------------------------------------------------------------"
+    ]
 
 -- | Use on indexed statements after you've run analysis that might delete some stmts,
 -- but that will leave the non-deleted stmts unchanged.
