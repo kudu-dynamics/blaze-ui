@@ -705,7 +705,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         start_uuid = self.blaze_instance.graph.group_options.start_node
         end_uuid = end_node['contents']['uuid']
-        self.recenter_node_id = end_uuid
+        self.recenter_node_id = start_uuid
         # Send end node to server
         self.blaze_instance.send(
             BinjaToServer(
@@ -719,8 +719,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         assert self.blaze_instance.graph
 
         grouping_uuid = grouping_node['contents']['uuid']
-        # TODO: How to recenter?
-        # self.recenter_node_id = ???
+        self.recenter_node_id = grouping_uuid
         self.blaze_instance.send(
             BinjaToServer(
                 tag='BSGroupExpand',
@@ -1051,7 +1050,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         # Send start_node to server
         self.select_group_end(end_node)
 
-        
+
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any
