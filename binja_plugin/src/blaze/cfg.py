@@ -440,12 +440,21 @@ class ICFGFlowGraph(FlowGraph):
                 tokenized_lines = node['contents']['nodeData']
                 fg_node.lines += [tokens_from_server(line) for line in tokenized_lines]
 
+            # TODO: Make use of view "modes" to detangle this complex if-else-if chain
+            #       that is checking conditions of individual nodes as well as modes
+            #       through the presence of non-None attribute values.
             if node['contents']['uuid'] in self.pending_changes.removed_nodes:
                 fg_node.highlight = HighlightStandardColor.RedHighlightColor
             elif (self.poi_search_results and
                   (node['contents']['uuid']
                    in self.poi_search_results['presentTargetNodes'])):
                 fg_node.highlight = POI_PRESENT_TARGET_COLOR
+            elif (self.group_options and
+                  node['contents']['uuid'] in self.group_options.end_nodes):
+                fg_node.highlight = HighlightColor(HighlightStandardColor.BlueHighlightColor)
+            elif self.group_options:
+                # Don't color any nodes other than group end nodes
+                pass
             elif node['tag'] == 'Call':
                 call_node = cast(CallNode, node['contents'])
                 if is_expandable_call_node(self.bv, call_node):
@@ -468,9 +477,8 @@ class ICFGFlowGraph(FlowGraph):
                 opacity = 0.8 if self.poi_search_results else 1.0
                 fg_node.highlight = muted_color(opacity,
                                                 HighlightStandardColor.BlueHighlightColor)
-            elif (self.group_options and
-                  node['contents']['uuid'] in self.group_options.end_nodes):
-                fg_node.highlight = HighlightColor(HighlightStandardColor.BlueHighlightColor)
+            elif node['tag'] == 'Grouping':
+                fg_node.highlight = HighlightColor(HighlightStandardColor.MagentaHighlightColor)
             nodes[node_id] = fg_node
             self.append(fg_node)
 
