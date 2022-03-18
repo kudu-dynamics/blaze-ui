@@ -359,8 +359,8 @@ def pending_changes_from_server(p: ServerPendingChanges) -> PendingChanges:
 
 
 class ServerGroupOptions(TypedDict, total=True):
-    start_node: UUID
-    end_nodes: List[UUID]
+    startNode: UUID
+    endNodes: List[UUID]
 
 
 @dataclass
@@ -371,7 +371,7 @@ class GroupOptions:
 
 def group_options_from_server(g: ServerGroupOptions) -> GroupOptions:
     return GroupOptions(start_node=g['startNode'],
-                        end_nodes=g['endNodes'])
+                        end_nodes=set(g['endNodes']))
 
 
 class ServerToBinjaTotal(TypedDict, total=True):
@@ -409,6 +409,9 @@ class BinjaToServer(BinjaToServerTotal, total=False):
     snapshotMsg: SnapshotBinjaToServer
     node: CfNode
     nodeId: UUID
+    startNodeId: UUID
+    endNodeId: UUID
+    groupingNodeId: UUID
     stmtIndex: Word64
     targetAddress: Word64
     poiMsg: PoiBinjaToServer

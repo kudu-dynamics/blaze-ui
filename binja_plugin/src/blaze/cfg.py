@@ -589,15 +589,16 @@ class ICFGWidget(FlowGraphWidget, QObject):
                     (cf_node := self.get_cf_node(self.clicked_node)) is not None and
                     is_grouping_node(cf_node)),
             ),
-            BNAction(
-                'Blaze\\ICFG\\Group',
-                'Select Group End',
-                activate=self.context_menu_action_select_group_end,
-                is_valid=lambda ctx: (
-                    self.clicked_node is not None and
-                    (cf_node := self.get_cf_node(self.clicked_node)) is not None and
-                    is_group_end_node(cf_node)),
-            ),
+            # TODO: Add back but only activate when in grouping mode.
+            # BNAction(
+            #     'Blaze\\ICFG\\Group',
+            #     'Select Group End',
+            #     activate=self.context_menu_action_select_group_end,
+            #     is_valid=lambda ctx: (
+            #         self.clicked_node is not None and
+            #         (cf_node := self.get_cf_node(self.clicked_node)) is not None and
+            #         is_group_end_node(cf_node)),
+            # ),
             BNAction(
                 'Blaze\\ICFG\\Misc',
                 'Go to Address',
@@ -640,8 +641,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         source = self.get_cf_node(cast(FlowGraphNode, fg_edge.source))
         dest = self.get_cf_node(cast(FlowGraphNode, fg_edge.target))
-        log.info(f"IS_CONDITION_EDGE: {fg_edge.source.lines} {fg_edge.target.lines}")
-        log.info(f"{self.blaze_instance.graph.node_mapping}")
 
         assert source and dest
         if not (edge := self.blaze_instance.graph.get_edge(
@@ -709,19 +708,20 @@ class ICFGWidget(FlowGraphWidget, QObject):
             ))
 
     def select_group_end(self, end_node: CfNode) -> None:
-        assert self.blaze_instance.graph
+        assert self.blaze_instance.graph is not None
 
-        start_uuid = self.blaze_instance.graph.group_options.start_node
-        end_uuid = end_node['contents']['uuid']
-        self.recenter_node_id = start_uuid
-        # Send end node to server
-        self.blaze_instance.send(
-            BinjaToServer(
-                tag='BSGroupDefine',
-                cfgId=self.blaze_instance.graph.pil_icfg_id,
-                startNodeId=start_uuid,
-                endNodeId=end_uuid
-            ))
+        if self.blaze_instance.graph.group_options:
+            start_uuid = self.blaze_instance.graph.group_options.start_node
+            end_uuid = end_node['contents']['uuid']
+            self.recenter_node_id = start_uuid
+            # Send end node to server
+            self.blaze_instance.send(
+                BinjaToServer(
+                    tag='BSGroupDefine',
+                    cfgId=self.blaze_instance.graph.pil_icfg_id,
+                    startNodeId=start_uuid,
+                    endNodeId=end_uuid
+                ))
 
     def expand_group(self, grouping_node: CfNode) -> None:
         assert self.blaze_instance.graph
@@ -760,7 +760,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 cfgId=self.blaze_instance.graph.pil_icfg_id,
                 edge=(from_node, to_node)))
 
+
     def cancel_grouping(self) -> None:
+        assert self.blaze_instance.graph is not None
         # Create a similar graph but without group_options
         # TODO: Do we need to update all other related instances too?
         graph = ICFGFlowGraph(self.blaze_instance.graph.bv,
@@ -1035,6 +1037,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
     def context_menu_action_select_group_start(self, context: UIActionContext):
         log.debug('Select Group Start')
 
+        assert self.clicked_node is not None
         start_node = self.get_cf_node(self.clicked_node)
         assert start_node is not None
 
@@ -1044,6 +1047,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
     def context_menu_action_expand_group(self, context: UIActionContext):
         log.debug('Expand Group')
 
+        assert self.clicked_node is not None
         summary_node = self.get_cf_node(self.clicked_node)
         assert summary_node is not None
 
@@ -1052,6 +1056,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
     def context_menu_action_select_group_end(self, context: UIActionContext):
         log.debug('Select Group End')
 
+        assert self.clicked_node is not None
         end_node = self.get_cf_node(self.clicked_node)
         assert end_node is not None
 
@@ -1074,6 +1079,10 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
             if not node:
                 log.error('Couldn\'t find node_mapping[%r]', fg_node)
+                return
+
+            if is_group_end_node(node):
+                self.select_group_end(node)
                 return
 
             if not is_call_node(node):
@@ -1162,11 +1171,11 @@ class ICFGWidget(FlowGraphWidget, QObject):
         pass
 
     def get_cf_node(self, node: FlowGraphNode) -> Optional[CfNode]:
-        assert self.blaze_instance.graph
+        assert self.blaze_instance.graph is not None
         return self.blaze_instance.graph.node_mapping.get(node)
 
     def get_fg_node(self, node: CfNode) -> Optional[FlowGraphNode]:
-        assert self.blaze_instance.graph
+        assert self.blaze_instance.graph is not None
         for fg_node, cf_node in self.blaze_instance.graph.node_mapping.items():
             if cf_node == node:
                 return fg_node
