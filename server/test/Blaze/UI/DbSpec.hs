@@ -17,7 +17,7 @@ import qualified Data.HashMap.Strict as HashMap
 import System.Directory (removeFile)
 import System.IO.Temp (emptySystemTempFile)
 import qualified Blaze.UI.Types.CachedCalc as CC
-import Blaze.Types.Cfg as Cfg
+import Blaze.Types.Graph as G
 import qualified Data.HashSet as HashSet
 import Blaze.Util.Spec (mkUuid1)
 import qualified Blaze.UI.Types.BinaryManager as BM
@@ -26,6 +26,7 @@ import Test.Hspec
 import qualified Data.UUID as UUID
 import qualified Data.Text as Text
 import qualified Blaze.UI.Types.BinaryHash as BinaryHash
+import qualified Blaze.Types.Cfg.Grouping as GCfg
 
 diveBin :: FilePath
 diveBin = "res/test_bins/Dive_Logger/Dive_Logger.bndb"
@@ -72,20 +73,24 @@ spec = describe "Blaze.UI.Db" $ do
     let imp = BNImporter bv
     selectDive <- runIO $ fromJust <$> CG.getFunction imp 0x804e080
     (ImportResult _ originalCfg _) <- runIO $ fromJust <$> getCfg imp selectDive
+    let originalCfg' = GCfg.foldGroups originalCfg []
     mRetrievedCfg <- runIO . mockEventLoop $ do
-      Db.saveNewCfg_ bid cid originalCfg Snapshot.Immutable
+      Db.saveNewCfg_ bid cid originalCfg' Snapshot.Immutable
       Db.getCfg cid
 
     it "Should save and retrieve a pil cfg" $ do
-      mRetrievedCfg `shouldBe` Just originalCfg
+      mRetrievedCfg `shouldBe` Just originalCfg'
 
     mRetrievedCfg2 <- runIO . mockEventLoop $ do
-      let firstCfg = Cfg.removeEdges
-            (HashSet.toList $ Cfg.succEdges (originalCfg ^. #root) originalCfg)
-            originalCfg
+      let firstCfg = G.removeEdges
+            (fmap (\(GCfg.CfEdge src' dst' _) -> G.Edge src' dst')
+               . HashSet.toList
+               . GCfg.succEdges (originalCfg' ^. #root)
+               $ originalCfg')
+            originalCfg'
       Db.saveNewCfg_ bid cid firstCfg Snapshot.Immutable
-      Db.setCfg cid originalCfg
+      Db.setCfg cid originalCfg'
       Db.getCfg cid
 
     it "Should overwrite first cfg using setCfg" $ do
-      mRetrievedCfg2 `shouldBe` Just originalCfg
+      mRetrievedCfg2 `shouldBe` Just originalCfg'
