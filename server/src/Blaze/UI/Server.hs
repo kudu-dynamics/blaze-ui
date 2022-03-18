@@ -811,8 +811,10 @@ getGroupOptions
 getGroupOptions cfg startNode = do
   let startId = Cfg.getNodeUUID startNode
       terms = HashSet.toList $ Cfg.getPossibleGroupTerms startNode cfg
-  putText $ "Found " <> show (length terms) <> " possible term nodes for group."
-  return . Just . GroupOptions startId . fmap Cfg.getNodeUUID $ terms
+  logInfo $ "Found " <> show (length terms) <> " possible term nodes for group."
+  if null terms
+    then return Nothing
+    else return . Just . GroupOptions startId . fmap Cfg.getNodeUUID $ terms
 
 -- TODO: Should we check if persisting a node index would improve performance?
 getNode ::
