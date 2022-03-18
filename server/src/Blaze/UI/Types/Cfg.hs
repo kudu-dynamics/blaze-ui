@@ -7,7 +7,11 @@ import Blaze.Types.Cfg.Grouping ( CfNode, CfEdge(CfEdge), Cfg )
 import qualified Blaze.Types.Cfg.Grouping as Cfg
 import qualified Blaze.Graph as G
 import qualified Data.HashMap.Strict as HashMap
-import Blaze.Pretty (Token, tokenize)
+import Blaze.Pretty (Token, mkTokenizerCtx, runTokenize, tokenize)
+import Blaze.Cfg.Interprocedural (
+  InterCfg,
+  unInterCfg,
+ )
 import System.Random (Random)
 import Database.Selda.SqlType ( Lit(LCustom)
                               , SqlTypeRep(TBlob)
@@ -35,8 +39,14 @@ data CfgTransport a = CfgTransport
 -- convertInterCfg :: InterCfg -> CfgTransport [[Token]]
 -- convertInterCfg = convertPilCfg . unInterCfg
 
-convertPilCfg :: Cfg [Stmt] -> Cfg [[Token]]
-convertPilCfg = fmap $ fmap tokenize
+-- TODO: Confirm this definition can be removed
+-- convertPilCfg :: Cfg [Stmt] -> Cfg [[Token]]
+-- convertPilCfg = fmap $ fmap tokenize
+
+convertPilCfg :: Cfg [Stmt] -> CfgTransport [[Token]]
+convertPilCfg cfg = toTransport (fmap (runTokenize tokenizerCtx)) cfg
+  where
+    tokenizerCtx = mkTokenizerCtx cfg
 
 toTransport :: forall a b. (a -> b) -> Cfg a -> CfgTransport b
 toTransport f pcfg = CfgTransport

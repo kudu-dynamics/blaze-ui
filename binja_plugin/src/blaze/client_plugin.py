@@ -33,6 +33,7 @@ from binaryninja.interaction import (
     MessageBoxIcon,
     TextLineField,
     get_form_input,
+    get_save_filename_input,
     show_message_box,
 )
 from binaryninja.mainthread import execute_on_main_thread_and_wait
@@ -79,9 +80,13 @@ from .util import (
 )
 
 BLAZE_WS_SHUTDOWN = 'SHUTDOWN'
+SEND_FAIL_LOG_MSG = "failed to send analysis database because it is not yet saved"
 
 log = _logging.getLogger(__name__)
 
+
+def has_bndb_extension(filename: str) -> bool:
+    return filename.endswith('.bndb')
 
 class BlazeInstance():
     def __init__(self, bv: BinaryView, blaze: 'BlazePlugin'):
@@ -340,8 +345,12 @@ class BlazePlugin():
             )
 
     def upload_bndb(self, bv: BinaryView, binaryHash: BinaryHash, callback: Callable[[BinaryHash], None]) -> None:
-        if (not bv.file.filename.endswith('.bndb')):
-            bndb_filename: str = bv.file.filename + '.bndb'
+        if (not has_bndb_extension(bv.file.filename) or
+            (has_bndb_extension(bv.file.filename) and
+             not os.path.isfile(bv.file.filename))):
+
+            # Possible existing BNDB
+            bndb_filename = f"{bv.file.filename}.bndb"
             if (os.path.isfile(bndb_filename)):
                 msg = f"This action will overwrite the existing analysis database {bndb_filename}. If you prefer to use your existing BNDB, please open it and try again.\n\nContinue with ICFG creation?"
             else:
@@ -355,21 +364,34 @@ class BlazePlugin():
                     icon=MessageBoxIcon.WarningIcon))
 
             if to_save == MessageBoxButtonResult.NoButton:
-                log.error("failed to send analysis database because it is not yet saved")
+                log.error(SEND_FAIL_LOG_MSG)
                 return
             else:
-                bv.create_database(bndb_filename)
+                bndb_filename : Optional[str] = get_save_filename_input("Choose database filename", "bndb", bndb_filename)
+                if bndb_filename:
+                    old_key = bv_key(bv)
+                    new_key = bv_key(bndb_filename)
+                    inst: Optional[BlazeInstance] = self.ensure_instance(bv)
+
+                    self.move_instance(inst, old_key, new_key)
+
+                    bv.create_database(bndb_filename)
+
+                    self.ensure_instance(bv)
+                else:
+                    log.error(SEND_FAIL_LOG_MSG)
+                    return
 
         # by now, bv is saved as bndb and bv.file.filename is bndb
-        og_filename: str = bv.file.filename
+        bv_filename: str = bv.file.filename
 
         if bv.file.analysis_changed:
-            bv.create_database(og_filename)
+            bv.create_database(bv_filename)
 
-        with open(og_filename, 'rb') as f:
+        with open(bv_filename, 'rb') as f:
             files = {'bndb': f}
             post_data = {
-                'hostBinaryPath': og_filename,
+                'hostBinaryPath': bv_filename,
                 'clientId': self.settings.client_id,
                 'binaryHash': binaryHash,
             }
@@ -397,6 +419,14 @@ class BlazePlugin():
             that was created
         '''
 
+        # TODO: This commented code should work, but it appears the
+        #       _instance_by_bv is updated without the _instances_by_key being
+        #       updated.
+        #       NB: If the key is not being updated, then this implies we have
+        #       a space leak.
+        # if ((self._instance_by_bv.get(bv) is not None) and
+        #     (bv in self._instances_by_key.get(bv_key(bv)))):
+        #     return self._instance_by_bv.get(bv)
         if (instance := self._instance_by_bv.get(bv)) is not None:
             return instance
 
@@ -406,6 +436,39 @@ class BlazePlugin():
         self._instances_by_key[bv_key(bv)].add(instance)
 
         return instance
+
+    def move_instance(self, moving_inst: BlazeInstance, old_key: str, new_key: str) -> bool:
+        '''
+        Move all instances to another key. This is useful when a `BinaryView` is about
+        to be modified/replaced with, e.g.,  a call to `create_database`.
+        '''
+        log.debug(f'Moving instances from old key {old_key} to new key {new_key}.')
+
+        found = False
+
+        if old_key == new_key:
+            # Do nothing
+            log.debug(f'Matching keys: {old_key}')
+            return found
+
+        insts: Set[BlazeInstance] = self._instances_by_key[old_key]
+
+        if moving_inst not in insts:
+            log.debug(f'Instance for {old_key} not found.')
+            return found
+        else:
+            found = True
+
+        insts.remove(moving_inst)
+        if not insts:
+            # Remove entry if the set of instances is now empty
+            del self._instances_by_key[old_key]
+
+        self._instances_by_key[new_key].add(moving_inst)
+
+        moving_inst.bndbHash = None
+
+        return found
 
     def send(self, bv: BinaryView, msg: BinjaToServer) -> None:
         self._init_thread()
@@ -620,7 +683,9 @@ class BlazeNotificationListener(UIContextNotification):
         del self.blaze_plugin._instance_by_bv[bv]
         self.blaze_plugin._instances_by_key[bv_key(bv)].discard(instance)
 
-    def OnBeforeSaveFile(self, context: UIContext, file: FileContext, frame: ViewFrame) -> bool:
+    def OnBeforeSaveFile(self, _context: UIContext, file: FileContext, frame: ViewFrame) -> bool:
+        log.info("OnBeforeSaveFile called.")
+
         bv = frame.getCurrentViewInterface().getData()
 
         old_key = bv_key(file.getFilename())
@@ -637,16 +702,7 @@ class BlazeNotificationListener(UIContextNotification):
             })
 
         instance = self.blaze_plugin._instance_by_bv[bv]
-
-        if old_key != new_key:
-            s = self.blaze_plugin._instances_by_key[old_key]
-            s.remove(instance)
-            if not s:
-                del self.blaze_plugin._instances_by_key[old_key]
-
-            self.blaze_plugin._instances_by_key[new_key].add(instance)
-
-            instance.bndbHash = None
+        self.blaze_plugin.move_instance(instance, old_key, new_key)
 
         return True
 
