@@ -10,9 +10,9 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import Blaze.Types.Pil (Stmt)
 import Blaze.UI.Types.Cfg (CfgId)
-import Blaze.Types.Cfg (Cfg, CfNode, CfEdge)
+import Blaze.Types.Cfg.Grouping (Cfg, CfNode, CfEdge)
 import qualified Blaze.Types.Graph as G
-import qualified Blaze.Types.Cfg as Cfg
+import qualified Blaze.Types.Cfg.Grouping as Cfg
 
 
 -- | Changes CfgId key in graph cache.

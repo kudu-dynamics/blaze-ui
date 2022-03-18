@@ -22,7 +22,6 @@ import Control.Concurrent.STM.TVar as Exports
 import Control.Concurrent.STM.TMVar as Exports
 import Data.String.Conversions as Exports (ConvertibleStrings)
 import Data.Aeson as Exports (ToJSONKey, FromJSONKey)
-import Control.Monad.Extra as Exports (whenJust)
 import Web.Scotty (Parsable(parseParam))
 import qualified Data.Text as Text
 import Data.Time (getCurrentTime)

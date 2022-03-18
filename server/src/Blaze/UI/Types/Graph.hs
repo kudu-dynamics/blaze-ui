@@ -10,7 +10,7 @@ import qualified Data.HashSet as HashSet
 data GraphTransport e attr n = GraphTransport
   { edges :: [(e, (n, n))]
   , nodes :: [(n, Maybe attr)]
-  } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, Functor)
+  } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, Functor, Hashable)
 
 graphToTransport :: Graph e attr n g => g -> GraphTransport e attr n
 graphToTransport g = GraphTransport edges' nodes'

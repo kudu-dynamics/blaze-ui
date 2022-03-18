@@ -147,11 +147,18 @@ class LeaveFuncNode(TypedDict):
     nodeData: List[List[Token]]
 
 
-CfNodeUnion = Union[BasicBlockNode, CallNode, EnterFuncNode, LeaveFuncNode]
+class GroupingNode(TypedDict):
+    uuid: UUID
+    termNode: 'CfNode'
+    grouping: 'ServerCfg'
+    nodeData: List[List[Token]]
+
+
+CfNodeUnion = Union[BasicBlockNode, CallNode, EnterFuncNode, LeaveFuncNode, GroupingNode]
 
 
 class CfNode(TypedDict):
-    tag: Literal['BasicBlock', 'Call', 'EnterFunc', 'LeaveFunc']
+    tag: Literal['BasicBlock', 'Call', 'EnterFunc', 'LeaveFunc', 'Grouping']
     contents: CfNodeUnion
 
 
@@ -168,9 +175,9 @@ class Cfg(TypedDict):
 
 
 class ServerCfg(TypedDict):
-    edges: List[CfEdge]
-    root: CfNode
-    nodes: List[Tuple[CfNode, CfNode]]
+    transportEdges: List[CfEdge]
+    transportRoot: CfNode
+    transportNodes: List[Tuple[CfNode, CfNode]]
 
 
 class SnapshotInfo(TypedDict):
@@ -351,6 +358,22 @@ def pending_changes_from_server(p: ServerPendingChanges) -> PendingChanges:
     )
 
 
+class ServerGroupOptions(TypedDict, total=True):
+    startNode: UUID
+    endNodes: List[UUID]
+
+
+@dataclass
+class GroupOptions:
+    start_node: UUID
+    end_nodes: Set[UUID]
+
+
+def group_options_from_server(g: ServerGroupOptions) -> GroupOptions:
+    return GroupOptions(start_node=g['startNode'],
+                        end_nodes=set(g['endNodes']))
+
+
 class ServerToBinjaTotal(TypedDict, total=True):
     tag: Literal['SBLogInfo', 'SBLogWarn', 'SBLogError', 'SBCfg', 'SBNoop', 'SBSnapshot', 'SBPoi']
 
@@ -367,9 +390,11 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
 
 
 class BinjaToServerTotal(TypedDict, total=True):
-    tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew', 'BSCfgExpandCall',
-                 'BSCfgRemoveBranch', 'BSCfgRemoveNode', 'BSSnapshot', 'BSNoop', 'BSCfgFocus',
-                 'BSCfgConfirmChanges', 'BSCfgRevertChanges', 'BSPoi', 'BSConstraint', 'BSComment']
+    tag: Literal['BSConnect', 'BSTextMessage', 'BSTypeCheckFunction', 'BSCfgNew',
+                 'BSCfgExpandCall', 'BSCfgRemoveBranch', 'BSCfgRemoveNode',
+                 'BSSnapshot', 'BSNoop', 'BSCfgFocus', 'BSCfgConfirmChanges',
+                 'BSCfgRevertChanges', 'BSPoi', 'BSConstraint', 'BSComment',
+                 'BSGroupStart', 'BSGroupDefine', 'BSGroupExpand']
 
 
 class BinjaToServer(BinjaToServerTotal, total=False):
@@ -384,6 +409,9 @@ class BinjaToServer(BinjaToServerTotal, total=False):
     snapshotMsg: SnapshotBinjaToServer
     node: CfNode
     nodeId: UUID
+    startNodeId: UUID
+    endNodeId: UUID
+    groupingNodeId: UUID
     stmtIndex: Word64
     targetAddress: Word64
     poiMsg: PoiBinjaToServer

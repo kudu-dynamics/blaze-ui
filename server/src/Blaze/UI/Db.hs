@@ -9,7 +9,7 @@ import qualified Prelude as P
 import Blaze.UI.Types.Db as Exports hiding (cfg)
 import Database.Selda
 import Blaze.UI.Types.Cfg (CfgId)
-import Blaze.Types.Cfg (PilCfg)
+import Blaze.Types.Cfg.Grouping (PilCfg)
 import qualified Blaze.UI.Types.Cfg as Cfg
 import Data.Time.Clock (getCurrentTime)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
@@ -26,7 +26,6 @@ import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import qualified Data.HashMap.Strict as HashMap
 import Blaze.UI.Types.Poi (poiTable)
-
 
 
 init :: FilePath -> IO Conn

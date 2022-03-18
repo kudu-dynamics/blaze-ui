@@ -1,23 +1,24 @@
 {- HLINT ignore "Use if" -}
 {-# LANGUAGE DataKinds #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Blaze.UI.Types
 -- Copyright   :  (c) Kudu Dynamics, 2022
--- License     :  
+-- License     :
 --
--- Maintainer  :  
+-- Maintainer  :
 -- Stability   :  experimental
--- Portability :  
+-- Portability :
 --
 -- The Blaze UI server manages websocket connections from BinaryNinja Plugin clients
 -- and runs analysis using Blaze. There is also a webserver used to POST binary data
 -- and submit POIs.
--- 
+--
 -- Each `SessionId` corresponds to a bndb path and clientId combo. There exists
 -- one `SessionState` for each `SessionId`.
--- 
+--
 -- A client can open multiple connections to the same bndb using multiple tabs or
 -- instances of BinaryNinja, but they will share the same `SessionState`
 -- and any actions performed in one window will affect the state, such as the
@@ -39,9 +40,10 @@ import Blaze.Types.Pil (Stmt)
 import qualified Binja.Function as BNFunc
 import qualified Data.Aeson.Types as Aeson
 import Blaze.Function (Function)
-import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
+import Blaze.UI.Types.Cfg (CfgId)
 import qualified Blaze.UI.Types.Constraint as C
-import Blaze.Types.Cfg (CfNode, CallNode, Cfg)
+import Blaze.Types.Cfg (CallNode)
+import Blaze.Types.Cfg.Grouping (Cfg, CfNode)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Poi as Poi
 import Blaze.UI.Types.Poi (Poi)
@@ -65,21 +67,28 @@ data BinjaMessage a = BinjaMessage
   , hostBinaryPath :: HostBinaryPath
   , binaryHash :: BinaryHash
   , action :: a
-  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Hashable)
 
 -- | When an ICFG action, such as prune or focus, is requested, we show the user
 -- the nodes and edges that will be removed if the action is performed.
 data PendingChanges = PendingChanges
   { removedNodes :: [UUID]
   , removedEdges :: [(UUID, UUID)]
-  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Hashable)
 
 -- | The ranked results of a POI search, showing the call nodes that will most
 -- quickly reach the POI.
 data PoiSearchResults = PoiSearchResults
   { callNodeRatings :: [(UUID, CallNodeRating)]
   , presentTargetNodes :: [UUID]
-  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Hashable)
+
+-- | Candidate group end nodes that will be shown to the user. The user may
+-- select one of these to finish defining a group.
+data GroupOptions = GroupOptions
+  { startNode :: UUID
+  , endNodes :: [UUID]
+  } deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Hashable)
 
 -- | Messages from the server to the BinaryNinja Blaze plugin
 data ServerToBinja = SBLogInfo { message :: Text }
@@ -89,10 +98,11 @@ data ServerToBinja = SBLogInfo { message :: Text }
                    | SBCfg { cfgId :: CfgId
                            -- So plugin can easily warn if it's out of date
                            , bndbHash :: BndbHash
-                           , poiSearchResults :: Maybe PoiSearchResults 
+                           , poiSearchResults :: Maybe PoiSearchResults
                            , pendingChanges :: Maybe PendingChanges
+                           , groupOptions :: Maybe GroupOptions
                            -- TODO: send cfg with text
-                           , cfg :: CfgTransport [[Token]]
+                           , cfg :: Cfg [[Token]]
                            }
 
                    | SBSnapshot { snapshotMsg :: Snapshot.ServerToBinja }
@@ -102,7 +112,7 @@ data ServerToBinja = SBLogInfo { message :: Text }
                    | SBConstraint { constraintMsg :: C.ServerToBinja }
 
                    | SBNoop
-                   deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON)
+                   deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Hashable)
 
 -- | Messages from the Binaryninja Blaze plugin to the server.
 data BinjaToServer = BSConnect
@@ -150,6 +160,20 @@ data BinjaToServer = BSConnect
                      , nodeId :: UUID
                      , stmtIndex :: Word64
                      , comment :: Text
+                     }
+
+                   | BSGroupStart
+                     { cfgId :: CfgId
+                     , startNodeId :: UUID
+                     }
+                   | BSGroupDefine
+                     { cfgId :: CfgId
+                     , startNodeId :: UUID
+                     , endNodeId :: UUID
+                     }
+                   | BSGroupExpand
+                     { cfgId :: CfgId
+                     , groupingNodeId :: UUID
                      }
 
                    | BSNoop

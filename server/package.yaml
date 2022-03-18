@@ -36,6 +36,7 @@ dependencies:
   - extra
   - generic-lens
   - hashable
+  - hashable-time
   - hashids
   - http-types
   - lens
