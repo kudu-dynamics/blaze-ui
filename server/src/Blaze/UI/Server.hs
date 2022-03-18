@@ -28,7 +28,7 @@ import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
 import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
 import qualified Blaze.Cfg.Interprocedural as ICfg
-import Blaze.Pretty (prettyIndexedStmts, showHex, prettyPrint, pretty)
+import Blaze.Pretty (prettyIndexedStmts, showHex, prettyPrint, pretty, Tokenizable)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.UI.Types.Constraint as C
@@ -54,7 +54,7 @@ import qualified Blaze.Pil.Parse as Parse
 import qualified Blaze.Types.Pil as Pil
 import Blaze.Types.Pil (Stmt)
 import qualified Blaze.Cfg.Solver.BranchContext as GSolver
-
+import qualified Data.IntMap as IntMap
 
 type OgCfg = OgCfg.Cfg
 
@@ -801,8 +801,10 @@ insertStmt cfg cid nid stmtIndex stmt = do
       let stmts' = stmtsA <> [stmt] <> stmtsB
       pure $ Cfg.setNodeData stmts' node' cfg
 
+
+
 getGroupOptions
-  :: (Eq a, Hashable a)
+  :: (Show a, Eq a, Hashable a, Tokenizable a)
   => Cfg [a]
   -> CfNode [a]
   -> EventLoop (Maybe GroupOptions)
