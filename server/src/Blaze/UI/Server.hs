@@ -621,7 +621,7 @@ handleBinjaEvent = \case
     bhash <- getCfgBndbHash cid
     gcfg <- getCfg cid
 
-    prettyPrint gcfg
+    -- prettyPrint gcfg
 
     simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
       case OgCfg.findNodeByUUID (getStartUUID node') cfg of
@@ -738,7 +738,7 @@ handleBinjaEvent = \case
   BSConstraint constraintMsg' -> case constraintMsg' of
     C.AddConstraint cid nid stmtIndex exprText -> do
       cfg <- getCfg cid
-      case Parse.runParserEof (Parse.mkParserCtx cfg) Parse.parseExpr exprText of
+      case Parse.runParserEof (Parse.mkParserCtx (fst $ Cfg.unfoldGroups cfg)) Parse.parseExpr exprText of
         Left err -> do
           logLocalError $ "Error parsing user constraint: " <> err
           sendToBinja . SBConstraint . C.SBInvalidConstraint . C.ParseError $ err

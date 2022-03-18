@@ -43,10 +43,10 @@ data CfgTransport a = CfgTransport
 -- convertPilCfg :: Cfg [Stmt] -> Cfg [[Token]]
 -- convertPilCfg = fmap $ fmap tokenize
 
-convertPilCfg :: Cfg [Stmt] -> CfgTransport [[Token]]
-convertPilCfg cfg = toTransport (fmap (runTokenize tokenizerCtx)) cfg
+convertPilCfg :: Cfg [Stmt] -> Cfg [[Token]]
+convertPilCfg cfg = fmap (fmap (runTokenize tokenizerCtx)) cfg
   where
-    tokenizerCtx = mkTokenizerCtx cfg
+    tokenizerCtx = mkTokenizerCtx (fst $ Cfg.unfoldGroups cfg)
 
 toTransport :: forall a b. (a -> b) -> Cfg a -> CfgTransport b
 toTransport f pcfg = CfgTransport
