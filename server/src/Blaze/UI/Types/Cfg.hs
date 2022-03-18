@@ -8,10 +8,6 @@ import qualified Blaze.Types.Cfg.Grouping as Cfg
 import qualified Blaze.Graph as G
 import qualified Data.HashMap.Strict as HashMap
 import Blaze.Pretty (Token, tokenize)
-import Blaze.Cfg.Interprocedural (
-  InterCfg,
-  unInterCfg,
- )
 import System.Random (Random)
 import Database.Selda.SqlType ( Lit(LCustom)
                               , SqlTypeRep(TBlob)

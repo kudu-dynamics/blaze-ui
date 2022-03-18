@@ -40,10 +40,9 @@ import Blaze.Types.Pil (Stmt)
 import qualified Binja.Function as BNFunc
 import qualified Data.Aeson.Types as Aeson
 import Blaze.Function (Function)
-import Blaze.UI.Types.Cfg (CfgTransport, CfgId)
+import Blaze.UI.Types.Cfg (CfgId)
 import qualified Blaze.UI.Types.Constraint as C
 import Blaze.Types.Cfg (CallNode)
-import qualified Blaze.Types.Cfg as Cfg
 import Blaze.Types.Cfg.Grouping (Cfg, CfNode)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Poi as Poi

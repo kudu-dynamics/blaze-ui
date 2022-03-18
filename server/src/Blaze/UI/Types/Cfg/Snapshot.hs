@@ -14,7 +14,7 @@ import qualified Database.Selda.SqlType as Sql
 import Blaze.UI.Types.Graph (GraphTransport)
 import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
-import Data.Hashable.Time
+import Data.Hashable.Time ()
 
 newtype BranchId = BranchId UUID
   deriving (Eq, Ord, Show, Generic)

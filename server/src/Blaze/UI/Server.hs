@@ -12,7 +12,7 @@ import qualified Data.ByteString.Char8 as BSC
 import Binja.Core (BNBinaryView)
 import qualified Binja.Function as BNFunc
 import Blaze.UI.Types hiding ( cfg, callNode, stmtIndex,
-                               startNode, endNode, groupOptions )
+                               startNode, groupOptions )
 import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
@@ -28,7 +28,7 @@ import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
 import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
 import qualified Blaze.Cfg.Interprocedural as ICfg
-import Blaze.Pretty (prettyIndexedStmts, showHex, prettyPrint, pretty, Tokenizable)
+import Blaze.Pretty (prettyIndexedStmts, showHex, prettyPrint, pretty)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import qualified Blaze.UI.Types.Constraint as C
@@ -54,7 +54,7 @@ import qualified Blaze.Pil.Parse as Parse
 import qualified Blaze.Types.Pil as Pil
 import Blaze.Types.Pil (Stmt)
 import qualified Blaze.Cfg.Solver.BranchContext as GSolver
-import qualified Data.IntMap as IntMap
+
 
 type OgCfg = OgCfg.Cfg
 
@@ -347,10 +347,9 @@ broadcastGlobalPois st binHash = do
   sendToAllWithBinary st binHash . SBPoi . Poi.GlobalPoisOfBinary $ pois
 
 -- | Converts grouped CFG into original CFG
-updateCfgM :: (MonadIO m, Eq a, Eq b, Hashable a, Hashable b, Monad m) => (OgCfg a -> m (OgCfg b)) -> Cfg a -> m (Cfg b)
+updateCfgM :: (Eq a, Eq b, Hashable a, Hashable b, Monad m) => (OgCfg a -> m (OgCfg b)) -> Cfg a -> m (Cfg b)
 updateCfgM f cfg = do
   let (ogCfg, groupStructure) = Cfg.unfoldGroups cfg
-  liftIO $ pprint groupStructure
   cfg' <- f ogCfg
   return $ Cfg.foldGroups cfg' groupStructure
 
@@ -801,10 +800,8 @@ insertStmt cfg cid nid stmtIndex stmt = do
       let stmts' = stmtsA <> [stmt] <> stmtsB
       pure $ Cfg.setNodeData stmts' node' cfg
 
-
-
 getGroupOptions
-  :: (Show a, Eq a, Hashable a, Tokenizable a)
+  :: (Eq a, Hashable a)
   => Cfg [a]
   -> CfNode [a]
   -> EventLoop (Maybe GroupOptions)
