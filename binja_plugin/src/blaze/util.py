@@ -105,7 +105,11 @@ def try_debug(log: _logging.Logger, msg: str, *args: Any, **kwargs: Any) -> None
 
 
 def bv_key(bv_or_path: Union[BinaryView, str, Path]) -> str:
-    path: str = bv_or_path.file.filename if isinstance(bv_or_path, BinaryView) else str(bv_or_path)
+    if isinstance(bv_or_path, BinaryView):
+        bv: BinaryView = bv_or_path
+        path: str = bv.file.filename
+    else:
+        path: str = str(bv_or_path)
     return path if path.endswith('.bndb') else path + '.bndb'
 
 
