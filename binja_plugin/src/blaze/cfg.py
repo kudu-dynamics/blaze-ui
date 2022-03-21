@@ -135,10 +135,6 @@ def get_edge_style(
 def is_basic_node(node: CfNode) -> bool:
     return node['tag'] == 'BasicBlock'
 
-
-def is_summary_node(node: CfNode) -> bool:
-    return node['tag'] == 'Summary'
-
 def is_grouping_node(node: CfNode) -> bool:
     return node['tag'] == 'Grouping'
 
@@ -184,7 +180,6 @@ def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
 def is_group_start_node(node: CfNode) -> bool:
     return (is_call_node(node) or
             is_basic_node(node) or
-            is_summary_node(node) or
             is_grouping_node(node))
 
 
@@ -772,9 +767,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
                               self.blaze_instance.graph.pending_changes,
                               None)
 
-        # Set mode
-        self.mode = ICFGWidget.Mode.STANDARD
-
         assert self.blaze_instance._icfg_dock_widget
         # TODO: Find a less hacky approach to accomplish this?
         self.blaze_instance._icfg_dock_widget.set_graph(graph)
@@ -1319,6 +1311,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
 
         self._view_frame: ViewFrame = view_frame
         self.blaze_instance: 'BlazeInstance' = blaze_instance
+        self.mode = ICFGWidget.Mode.STANDARD
 
         layout = QVBoxLayout()
         self.icfg_widget: ICFGWidget = ICFGWidget(self, view_frame, self.blaze_instance)
