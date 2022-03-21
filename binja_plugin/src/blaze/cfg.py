@@ -1081,7 +1081,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 log.error('Couldn\'t find node_mapping[%r]', fg_node)
                 return
 
-            if is_group_end_node(node):
+            if (self.blaze_instance.graph.group_options and
+                node['contents']['uuid'] in self.blaze_instance.graph.group_options.end_nodes):
                 self.select_group_end(node)
                 return
 
