@@ -1081,16 +1081,14 @@ class ICFGWidget(FlowGraphWidget, QObject):
             if not is_call_node(node):
                 log.warning('Did not double-click on a call node')
                 return
-
-            if not (is_expandable_call_node(self.blaze_instance.bv, cast(CallNode,
+            elif not (is_expandable_call_node(self.blaze_instance.bv, cast(CallNode,
                                                                          node['contents']))):
                 log.warning('Call node not expandable')
                 return
-
-            self.recenter_node_id = node['contents']['uuid']
-
-            call_node = cast(CallNode, node['contents'])
-            self.expand_call(call_node)
+            else:
+                self.recenter_node_id = node['contents']['uuid']
+                call_node = cast(CallNode, node['contents'])
+                self.expand_call(call_node)
 
     def contextMenuEvent(self, event: QContextMenuEvent) -> None:
         '''
