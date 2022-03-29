@@ -169,7 +169,7 @@ test:
     GIT_CLEAN_FLAGS: none
   script:
     - cd /blaze/build/blaze-ui/server
-    - STACK_TEST_TIMEOUT=1800 ../.ci/scripts/run_stack_test.py
+    - ../.ci/scripts/run_test.py ~/.local/bin/blaze-server-test
 
 push:latest:
   stage: push
@@ -260,7 +260,7 @@ push:tag:
     - echo -e "section_end:`date +%s`:docker-push-aws\r\e[0K"
 
 pages:
-  extends: .haskell-job
+  extends: .docker-job
   stage: docs
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_MERGE_REQUEST_ID == null
@@ -272,29 +272,16 @@ pages:
     - test
   variables:
     <<: *variables
-    GIT_STRATEGY: none
-    GIT_CLEAN_FLAGS: none
   script:
-    - haddock_flags=(--no-haddock-deps)
-    - pushd /blaze/build/blaze-ui/server
-    - stack haddock "${haddock_flags[@]}"
-    - docs_dir=$(stack path --local-doc-root "${haddock_flags[@]}")
-    - popd
-    - ls -al
-    - ls -al public || true
-    # Why is this next line necessary sometimes?
+    - image=${REPO_DOCKER_REGISTRY}/blaze-ui
+    - docker build --pull .
+      --build-arg "CI_REGISTRY=${CI_REGISTRY}"
+      --build-arg "CI_PROJECT_NAMESPACE=${CI_PROJECT_NAMESPACE}"
+      --target docs
+      -t "${image}/docs:pipeline-${CI_PIPELINE_IID}"
     - rm -rf public
     - mkdir public
-    - |
-      if [ -d "$docs_dir" ]; then
-        (
-          shopt -s nullglob
-          cp -ar "$docs_dir"/{*.html,*.css,*.png,*.js,blaze-*,binaryninja-*,binary-analysis-*} public
-        )
-      else
-        echo '<h1>No haddocks created</h1>' > public/index.html
-      fi
-        
+    - docker run --rm -v $PWD/public:/public "${image}/docs:pipeline-${CI_PIPELINE_IID}" tar -cvC server/docs . | tar -xvC public --no-same-owner
   artifacts:
     paths:
       - public

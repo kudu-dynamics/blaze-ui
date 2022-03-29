@@ -1,3 +1,4 @@
+server/docs/
 *.cabal
 dist
 dist-*
