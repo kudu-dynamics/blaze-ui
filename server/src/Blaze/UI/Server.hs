@@ -694,6 +694,12 @@ handleBinjaEvent = \case
       logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
       sendLatestSnapshots
 
+    Snapshot.DeleteSnapshot cid -> do
+      Db.setCfgName cid name'
+      logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
+      sendLatestSnapshots
+
+
   BSPoi poiMsg' -> case poiMsg' of
     Poi.GetPoisOfBinary -> do
       sendLatestSessionPois

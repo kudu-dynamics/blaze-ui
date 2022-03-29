@@ -7,11 +7,7 @@ import Blaze.Types.Cfg.Grouping ( CfNode, CfEdge(CfEdge), Cfg )
 import qualified Blaze.Types.Cfg.Grouping as Cfg
 import qualified Blaze.Graph as G
 import qualified Data.HashMap.Strict as HashMap
-import Blaze.Pretty (Token, mkTokenizerCtx, runTokenize, tokenize)
-import Blaze.Cfg.Interprocedural (
-  InterCfg,
-  unInterCfg,
- )
+import Blaze.Pretty (Token, mkTokenizerCtx, runTokenize)
 import System.Random (Random)
 import Database.Selda.SqlType ( Lit(LCustom)
                               , SqlTypeRep(TBlob)
