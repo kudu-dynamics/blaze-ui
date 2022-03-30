@@ -694,9 +694,20 @@ handleBinjaEvent = \case
       logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
       sendLatestSnapshots
 
-    Snapshot.DeleteSnapshot cid -> do
-      Db.setCfgName cid name'
-      logInfo $ "Named " <> show cid <> ": \"" <> name' <> "\""
+    Snapshot.PreviewDeleteSnapshot cid -> Db.previewDeleteSnapshot cid >>= \case
+      Nothing -> logError "Could not find snapshot in database"
+      Just p -> do
+        sendToBinja . SBSnapshot $ Snapshot.DeleteSnapshotConfirmationRequest
+          { snapshotRequestedForDeletion = cid
+          , deletedNodes = HashSet.toList $ p ^. #deletedNodes
+          , willWholeBranchBeDeleted = HashSet.member (p ^. #branchTreeRoot)
+                                       $ p ^. #deletedNodes
+          }
+
+    Snapshot.ConfirmDeleteSnapshot cid -> do
+      deletedCfgIds <- Db.deleteSnapshot cid
+      logInfo $ "Deleted " <> show (HashSet.size deletedCfgIds) <> " snapshots."
+      mapM_ CfgUI.removeCfg . HashSet.toList $ deletedCfgIds
       sendLatestSnapshots
 
 

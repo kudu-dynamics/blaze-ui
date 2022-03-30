@@ -293,9 +293,9 @@ deleteCfgs xs = withDb . deleteFrom_ cfgTable $ \cfg ->
   cfg ! #cfgId `isIn` (literal <$> xs)
 
 -- | Deletes a snapshot and all its children.
-deleteSnapshot :: MonadDb m => CfgId -> m ()
+deleteSnapshot :: MonadDb m => CfgId -> m (HashSet CfgId)
 deleteSnapshot cid = previewDeleteSnapshot cid >>= \case
-  Nothing -> return () -- Can't find branch for cid
+  Nothing -> return HashSet.empty -- Can't find branch for cid
   Just p -> do
     let bid = p ^. #branchId
         nodeList = HashSet.toList $ p ^. #deletedNodes
@@ -303,7 +303,8 @@ deleteSnapshot cid = previewDeleteSnapshot cid >>= \case
       Nothing -> deleteBranch bid
       Just t -> setBranchTree bid t
     deleteCfgs nodeList
-    
+    return $ p ^. #deletedNodes
+
 deleteBranch :: MonadDb m => BranchId -> m ()
 deleteBranch bid = withDb . deleteFrom_ snapshotBranchTable $ \branch ->
   branch ! #branchId .== literal bid
