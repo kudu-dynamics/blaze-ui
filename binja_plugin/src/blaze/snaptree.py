@@ -430,6 +430,7 @@ class SnapTreeWidget(QTreeWidget):
     def clean_stale_branches(self, server_bids: List[BranchId]):
         # TODO delete all BranchItems that were not received from the server
         tracked_bids = []
+        funcs_to_remove = []
         for f, fitem in self.tracked_funcs.items():
             branches_to_remove = []
             for bid in fitem.tracked_branches:
@@ -439,16 +440,17 @@ class SnapTreeWidget(QTreeWidget):
                     pass
             
             for bid in branches_to_remove:
-                # self.takeTopLevelItem(fitem)
-                log.info(f'Comrade1: {fitem.childCount()}')
-                fitem.removeChild(fitem.tracked_branches[bid])
-                log.info(f'Comrade2: {fitem.childCount()}')
-                # self.removeItemWidget(fitem.tracked_branches[bid], 1)
-                # self.removeItemWidget(fitem.tracked_branches[bid], 2)
+                c = fitem.tracked_branches[bid]
+                p = c.parent()
+                p.takeChild(p.indexOfChild(c))
+
                 fitem.tracked_branches.pop(bid)
                 log.info(f'Deleted branch: {bid}')
             if fitem.childCount() == 0:
                 self.takeTopLevelItem(self.indexOfTopLevelItem(fitem))
+                funcs_to_remove.append(f)
+        for faddr in funcs_to_remove:
+            self.tracked_funcs.pop(faddr)
             
     
     def focus_icfg(self, cfg_id: CfgId) -> None:

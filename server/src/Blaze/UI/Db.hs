@@ -273,14 +273,16 @@ previewDeleteSnapshot cid = withDb $ do
           edgeNodeGraph = G.toEdgeGraph btree :: AlgaGraph () () (G.EdgeGraphNode () CfgId)
           reachable = G.reachable (G.NodeNode cid) edgeNodeGraph
           deletedNodes' = HashSet.fromList $ mapMaybe (preview #_NodeNode) reachable
-          deletedEdges = HashSet.fromList $ mapMaybe (preview #_EdgeNode) reachable
+          deletedEdges = HashSet.fromList
+                         $ mapMaybe (preview #_EdgeNode) reachable
+                         <> (fmap (G.LEdge ()) . HashSet.toList $ G.predEdges_ cid btree)
           allEdges = HashSet.fromList . G.edges $ btree
           newTree' = if (HashSet.member (branch ^. #rootNode) deletedNodes')
             then Nothing
             else Just . G.fromEdges
                       . HashSet.toList
                       $ allEdges `HashSet.difference` deletedEdges
-            :: Maybe BranchTree
+                      :: Maybe BranchTree
       return . Just $ DeleteSnapshotPreview
         { deletedNodes = deletedNodes'
         , newTree = newTree'
@@ -308,4 +310,3 @@ deleteSnapshot cid = previewDeleteSnapshot cid >>= \case
 deleteBranch :: MonadDb m => BranchId -> m ()
 deleteBranch bid = withDb . deleteFrom_ snapshotBranchTable $ \branch ->
   branch ! #branchId .== literal bid
-

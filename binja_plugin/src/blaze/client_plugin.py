@@ -657,9 +657,9 @@ class BlazePlugin():
                     elif len(deleted_nodes) == 1:
                         msg = f"Are you sure you want to delete this snapshot?"
                     elif will_whole_branch_be_deleted:
-                        msg = f"Delete the entire branch and its {len(deleted_nodes)} snapshots?"
+                        msg = f"Delete the entire branch and its {len(deleted_nodes) - 1} child snapshots?"
                     elif len(deleted_nodes) > 1:
-                        msg = f"Delete this snapshot and its {len(deleted_nodes) - 1} children snapshots?"
+                        msg = f"Delete this snapshot and its {len(deleted_nodes) - 1} child snapshots?"
 
                     # TODO: add something 
                     confirm_delete_snapshots: Optional[MessageBoxButtonResult] = MessageBoxButtonResult(
