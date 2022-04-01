@@ -277,7 +277,7 @@ previewDeleteSnapshot cid = withDb $ do
                          $ mapMaybe (preview #_EdgeNode) reachable
                          <> (fmap (G.LEdge ()) . HashSet.toList $ G.predEdges_ cid btree)
           allEdges = HashSet.fromList . G.edges $ btree
-          newTree' = if (HashSet.member (branch ^. #rootNode) deletedNodes')
+          newTree' = if HashSet.member (branch ^. #rootNode) deletedNodes'
             then Nothing
             else Just . G.fromEdges
                       . HashSet.toList
