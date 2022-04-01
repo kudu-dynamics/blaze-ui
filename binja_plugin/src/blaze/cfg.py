@@ -1341,7 +1341,13 @@ class ICFGDockWidget(QWidget, DockContextHandler):
     def __del__(self):
         try_debug(log, 'Deleting object: %r', self)
 
-    def set_graph(self, graph: ICFGFlowGraph):
+    
+
+    def set_graph(self, graph: Optional[ICFGFlowGraph]):
+        if graph == None:
+            self.icfg_widget.setGraph(FlowGraph())
+            return
+            
         # Update mode
         if graph.pending_changes.has_changes:
             self.mode = ICFGWidget.Mode.DIFF

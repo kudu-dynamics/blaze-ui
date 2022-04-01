@@ -138,6 +138,9 @@ class BlazeInstance():
     def icfg_dock_widget(self, dw: ICFGDockWidget) -> None:
         self._icfg_dock_widget = dw
 
+    def delete_icfg_dock_widget(self) -> None:
+        self._icfg_dock_widget = None
+        
     @property
     def snaptree_dock_widget(self) -> SnapTreeDockWidget:
         if self._snaptree_dock_widget is None:
@@ -673,6 +676,10 @@ class BlazePlugin():
                         snap_msg = SnapshotBinjaToServer(
                             tag='ConfirmDeleteSnapshot', cfgId=snapshot_request_for_deletion)
                         instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snap_msg))
+
+                        if instance.graph and instance.graph.pil_icfg_id in deleted_nodes:
+                            instance.icfg_dock_widget.set_graph(None)
+                            instance.graph = None
                     else:
                         log.info("Snapshot deletion aborted.")
                         
