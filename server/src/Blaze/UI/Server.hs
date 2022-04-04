@@ -348,7 +348,7 @@ broadcastGlobalPois st binHash = do
   sendToAllWithBinary st binHash . SBPoi . Poi.GlobalPoisOfBinary $ pois
 
 -- | Converts grouped CFG into original CFG
-updateCfgM :: (Eq a, Eq b, Hashable a, Hashable b, Monad m) => (OgCfg a -> m (OgCfg b)) -> Cfg a -> m (Cfg b)
+updateCfgM :: (Ord a, Hashable a, Monad m) => (OgCfg a -> m (OgCfg a)) -> Cfg a -> m (Cfg a)
 updateCfgM f cfg = do
   let (ogCfg, groupStructure) = Cfg.unfoldGroups cfg
   cfg' <- f ogCfg
@@ -564,7 +564,7 @@ handleBinjaEvent = \case
         Just (OgCfg.Call fullCallNode) -> do
           let bs = ICfg.mkBuilderState (BNImporter bv)
           targetFunc <- getTargetFunc bv (fromIntegral targetAddr)
-        
+
           mCfg' <- liftIO . ICfg.build bs $
             ICfg.expandCall (InterCfg cfg) fullCallNode targetFunc
 
@@ -584,12 +584,12 @@ handleBinjaEvent = \case
 
   BSCfgRemoveBranch cid (node1, node2) -> do
     let startUUID = getStartUUID node1
-        endUUID = getTermUUID node2          
+        endUUID = getTermUUID node2
     debug "Binja remove branch"
     -- TODO: just get the bhash since bv isn't used
     bhash <- getCfgBndbHash cid
     gcfg <- getCfg cid
-    simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do      
+    simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
       case (,) <$> OgCfg.findNodeByUUID startUUID cfg <*> OgCfg.findNodeByUUID endUUID cfg of
         Nothing -> logError "Node or nodes don't exist in CFG"
         Just (fullNode1, fullNode2) -> do
@@ -771,7 +771,7 @@ handleBinjaEvent = \case
     -- group <- createGroup cfg startNode endNode
     -- summaryNode <- createSummaryNode cfg group
     -- cfg' <- substituteGroup cfg group summaryNode
-    let cfg' = Cfg.makeGrouping startNode endNode cfg
+    let cfg' = Cfg.makeGrouping startNode endNode cfg []
     autosaveCfg cid cfg'
       >>= sendCfgAndSnapshots bhash cfg' cid
 
@@ -798,11 +798,9 @@ insertStmt ::
   EventLoop (Cfg [a])
 insertStmt cfg cid nid stmtIndex stmt = do
   node' <- getNode cfg cid nid
-  getStmtsAround node' stmtIndex >>= \case
-    Nothing -> logError "Could not get statements for node."
-    Just (stmtsA, stmtsB) -> do
-      let stmts' = stmtsA <> [stmt] <> stmtsB
-      pure $ Cfg.setNodeData stmts' node' cfg
+  (stmtsA, stmtsB) <- getStmtsAround node' stmtIndex
+  let stmts' = stmtsA <> [stmt] <> stmtsB
+  pure $ Cfg.setNodeData stmts' node' cfg
 
 getGroupOptions
   :: (Eq a, Hashable a)
@@ -849,16 +847,15 @@ getNode cfg cid nid = do
 getStmtsAround ::
   CfNode [a] ->
   Word64 ->
-  EventLoop (Maybe ([a], [a]))
-getStmtsAround node' stmtIndex = case Cfg.getNodeData node' of
-  Nothing -> return Nothing
-  Just stmts -> do
+  EventLoop ([a], [a])
+getStmtsAround node' stmtIndex = do
+    let stmts = Cfg.getNodeData node'
     when (fromIntegral stmtIndex >= length stmts) $ do
       logWarn $
         "getStmtsAround: requested statement index (" <> show stmtIndex <> ")"
         <> " exceeds node's maximum statemtent index (" <> show (length stmts - 1) <> "). "
         <> "Adding to end."
-    pure . Just $ splitAt (fromIntegral stmtIndex) stmts
+    pure $ splitAt (fromIntegral stmtIndex) stmts
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => OgCfg a -> OgCfg a -> m ()
 printSimplifyStats a b = do

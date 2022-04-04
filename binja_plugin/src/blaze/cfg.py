@@ -321,7 +321,7 @@ def format_block_header(node: CfNode) -> DisassemblyTextLine:
         tokens = [
             InstructionTextToken(
                 InstructionTextTokenType.TextToken,
-                'group',
+                'Grouping',
             ),
         ]
 
