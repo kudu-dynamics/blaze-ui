@@ -798,11 +798,9 @@ insertStmt ::
   EventLoop (Cfg [a])
 insertStmt cfg cid nid stmtIndex stmt = do
   node' <- getNode cfg cid nid
-  getStmtsAround node' stmtIndex >>= \case
-    Nothing -> logError "Could not get statements for node."
-    Just (stmtsA, stmtsB) -> do
-      let stmts' = stmtsA <> [stmt] <> stmtsB
-      pure $ Cfg.setNodeData stmts' node' cfg
+  (stmtsA, stmtsB) <- getStmtsAround node' stmtIndex
+  let stmts' = stmtsA <> [stmt] <> stmtsB
+  pure $ Cfg.setNodeData stmts' node' cfg
 
 getGroupOptions
   :: (Eq a, Hashable a)
@@ -849,7 +847,7 @@ getNode cfg cid nid = do
 getStmtsAround ::
   CfNode [a] ->
   Word64 ->
-  EventLoop (Maybe ([a], [a]))
+  EventLoop ([a], [a])
 getStmtsAround node' stmtIndex = do
     let stmts = Cfg.getNodeData node'
     when (fromIntegral stmtIndex >= length stmts) $ do
@@ -857,7 +855,7 @@ getStmtsAround node' stmtIndex = do
         "getStmtsAround: requested statement index (" <> show stmtIndex <> ")"
         <> " exceeds node's maximum statemtent index (" <> show (length stmts - 1) <> "). "
         <> "Adding to end."
-    pure . Just $ splitAt (fromIntegral stmtIndex) stmts
+    pure $ splitAt (fromIntegral stmtIndex) stmts
 
 printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => OgCfg a -> OgCfg a -> m ()
 printSimplifyStats a b = do
