@@ -53,7 +53,7 @@ convertPilCfg cfg@(Cfg g rootNode) =
   , root = fmap (runTokenize tokenizerCtx) <$> rootNode
   }
   where
-    tokenizerCtx = mkTokenizerCtx (fst $ Cfg.unfoldGroups [] cfg)
+    tokenizerCtx = mkTokenizerCtx (fst $ Cfg.unfoldGroups cfg)
     tokenizeNode' :: CfNode [Stmt] -> CfNode [[Token]]
     tokenizeNode' = tokenizeNode tokenizerCtx
 

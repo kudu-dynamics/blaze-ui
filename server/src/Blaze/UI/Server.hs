@@ -348,9 +348,9 @@ broadcastGlobalPois st binHash = do
   sendToAllWithBinary st binHash . SBPoi . Poi.GlobalPoisOfBinary $ pois
 
 -- | Converts grouped CFG into original CFG
-updateCfgM :: (Ord a, Hashable a, Monad m) => a -> (OgCfg a -> m (OgCfg a)) -> Cfg a -> m (Cfg a)
-updateCfgM gData f cfg = do
-  let (ogCfg, groupStructure) = Cfg.unfoldGroups gData cfg
+updateCfgM :: (Ord a, Hashable a, Monad m) => (OgCfg a -> m (OgCfg a)) -> Cfg a -> m (Cfg a)
+updateCfgM f cfg = do
+  let (ogCfg, groupStructure) = Cfg.unfoldGroups cfg
   cfg' <- f ogCfg
   return $ Cfg.foldGroups cfg' groupStructure
 
@@ -379,7 +379,7 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
   Right cfg' -> return cfg'
 
 simplify_ :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
-simplify_ = updateCfgM [] simplify
+simplify_ = updateCfgM simplify
 
 ------------------------------------------
 --- main event handler
@@ -476,7 +476,7 @@ getPoiSearchResults bhash pcfg = do
       -- TODO: cache the cnrCtx
       cnrCtx <- liftIO . CC.calc bhash (ctx ^. #callNodeRatingCtx)
         . CfgA.getCallNodeRatingCtx . BNImporter $ bv
-      let (ogCfg, _) = Cfg.unfoldGroups [] pcfg
+      let (ogCfg, _) = Cfg.unfoldGroups pcfg
           ratings = CfgA.getCallNodeRatings cnrCtx tgt ogCfg
           ratings' = fmap (over _1 $ view #uuid) . HashMap.toList $ ratings
 
@@ -556,7 +556,7 @@ handleBinjaEvent = \case
     (bv, bhash) <- getCfgBinaryView cid
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
     gcfg <- getCfg cid
-    simplifiedCfg <- flip (updateCfgM []) gcfg $ \cfg -> do
+    simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
       case OgCfg.getFullNodeMay cfg (OgCfg.Call callNode) of
         Nothing ->
           logError "Could not find call node in CFG"
@@ -589,7 +589,7 @@ handleBinjaEvent = \case
     -- TODO: just get the bhash since bv isn't used
     bhash <- getCfgBndbHash cid
     gcfg <- getCfg cid
-    simplifiedCfg <- flip (updateCfgM []) gcfg $ \cfg -> do
+    simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
       case (,) <$> OgCfg.findNodeByUUID startUUID cfg <*> OgCfg.findNodeByUUID endUUID cfg of
         Nothing -> logError "Node or nodes don't exist in CFG"
         Just (fullNode1, fullNode2) -> do
@@ -610,7 +610,7 @@ handleBinjaEvent = \case
         then sendToBinja $ SBLogError "Cannot remove root node"
         else do
           let cfg' = G.removeNode fullNode cfg
-          simplifiedCfg <- flip (updateCfgM []) cfg' $ \cfg'' -> do
+          simplifiedCfg <- flip updateCfgM cfg' $ \cfg'' -> do
             simplifiedCfg <- simplify cfg''
             printSimplifyStats cfg'' simplifiedCfg
             return simplifiedCfg
@@ -623,7 +623,7 @@ handleBinjaEvent = \case
 
     -- prettyPrint gcfg
 
-    simplifiedCfg <- flip (updateCfgM []) gcfg $ \cfg -> do
+    simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
       case OgCfg.findNodeByUUID (getStartUUID node') cfg of
         Nothing -> logError "Node doesn't exist in CFG"
         Just fullNode -> if fullNode == cfg ^. #root
@@ -738,7 +738,7 @@ handleBinjaEvent = \case
   BSConstraint constraintMsg' -> case constraintMsg' of
     C.AddConstraint cid nid stmtIndex exprText -> do
       cfg <- getCfg cid
-      case Parse.runParserEof (Parse.mkParserCtx (fst $ Cfg.unfoldGroups [] cfg)) Parse.parseExpr exprText of
+      case Parse.runParserEof (Parse.mkParserCtx (fst $ Cfg.unfoldGroups cfg)) Parse.parseExpr exprText of
         Left err -> do
           logLocalError $ "Error parsing user constraint: " <> err
           sendToBinja . SBConstraint . C.SBInvalidConstraint . C.ParseError $ err
