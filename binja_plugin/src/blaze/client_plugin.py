@@ -655,20 +655,21 @@ class BlazePlugin():
                     deleted_nodes = cast(List[CfgId], snap_msg.get('deletedNodes'))
                     will_whole_branch_be_deleted = cast(bool, snap_msg.get('willWholeBranchBeDeleted'))
                     snapshot_request_for_deletion = cast(CfgId, snap_msg.get('snapshotRequestedForDeletion'))
+                    dmsg = ''
                     if len(deleted_nodes) == 0:
                         return
                     elif len(deleted_nodes) == 1:
-                        msg = f"Are you sure you want to delete this snapshot?"
+                        dmsg = f"Are you sure you want to delete this snapshot?"
                     elif will_whole_branch_be_deleted:
-                        msg = f"Delete the entire branch and its {len(deleted_nodes) - 1} child snapshots?"
+                        dmsg = f"Delete the entire branch and its {len(deleted_nodes) - 1} child snapshots?"
                     elif len(deleted_nodes) > 1:
-                        msg = f"Delete this snapshot and its {len(deleted_nodes) - 1} child snapshots?"
+                        dmsg = f"Delete this snapshot and its {len(deleted_nodes) - 1} child snapshots?"
 
                     # TODO: add something 
                     confirm_delete_snapshots: Optional[MessageBoxButtonResult] = MessageBoxButtonResult(
                         show_message_box(
                             "Blaze",
-                            msg,
+                            dmsg,
                             buttons=MessageBoxButtonSet.YesNoButtonSet,
                             icon=MessageBoxIcon.WarningIcon))
 

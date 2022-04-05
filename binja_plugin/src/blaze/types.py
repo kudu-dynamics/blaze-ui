@@ -265,7 +265,7 @@ class SnapshotServerToBinja(SnapshotServerToBinjaTotal, total=False):
 
 class SnapshotBinjaToServerTotal(TypedDict, total=True):
     tag: Literal['GetAllBranchesOfClient', 'GetAllBranchesOfBinary', 'GetBranchesOfFunction',
-                 'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot'
+                 'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot',
                  'PreviewDeleteSnapshot', 'ConfirmDeleteSnapshot']
 
 
