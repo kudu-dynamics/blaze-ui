@@ -34,6 +34,7 @@ RUN shopt -s nullglob && \
         /usr/local/bin/stack \
         /blaze/build \
         /root/.stack \
+        /root/.cabal \
         /usr/share/binaryninja-api
 
 # This is hacky. Maybe we should FROM a more minimal base image?

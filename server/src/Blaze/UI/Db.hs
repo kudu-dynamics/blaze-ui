@@ -278,6 +278,9 @@ previewDeleteSnapshot cid = withDb $ do
                          <> (fmap (G.LEdge ()) . HashSet.toList $ G.predEdges_ cid btree)
           allEdges = HashSet.fromList . G.edges $ btree
           newTree' = if HashSet.member (branch ^. #rootNode) deletedNodes'
+          -- deletedEdges = HashSet.fromList $ mapMaybe (preview #_EdgeNode) reachable
+          -- allEdges = HashSet.fromList . G.edges $ btree
+          -- newTree' = if (HashSet.member (branch ^. #rootNode) deletedNodes')
             then Nothing
             else Just . G.fromEdges
                       . HashSet.toList
@@ -298,6 +301,9 @@ deleteCfgs xs = withDb . deleteFrom_ cfgTable $ \cfg ->
 deleteSnapshot :: MonadDb m => CfgId -> m (HashSet CfgId)
 deleteSnapshot cid = previewDeleteSnapshot cid >>= \case
   Nothing -> return HashSet.empty -- Can't find branch for cid
+-- deleteSnapshot :: MonadDb m => CfgId -> m ()
+-- deleteSnapshot cid = previewDeleteSnapshot cid >>= \case
+--   Nothing -> return () -- Can't find branch for cid
   Just p -> do
     let bid = p ^. #branchId
         nodeList = HashSet.toList $ p ^. #deletedNodes
@@ -310,3 +316,7 @@ deleteSnapshot cid = previewDeleteSnapshot cid >>= \case
 deleteBranch :: MonadDb m => BranchId -> m ()
 deleteBranch bid = withDb . deleteFrom_ snapshotBranchTable $ \branch ->
   branch ! #branchId .== literal bid
+    
+-- deleteBranch :: MonadDb m => BranchId -> m ()
+-- deleteBranch bid = withDb . deleteFrom_ snapshotBranchTable $ \branch ->
+--   branch ! #branchId .== literal bid

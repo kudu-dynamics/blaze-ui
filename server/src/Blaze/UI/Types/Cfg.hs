@@ -2,19 +2,28 @@ module Blaze.UI.Types.Cfg where
 
 import Blaze.UI.Prelude hiding (Symbol)
 
-import Blaze.Types.Pil (Stmt)
-import Blaze.Types.Cfg.Grouping ( CfNode, CfEdge(CfEdge), Cfg )
-import qualified Blaze.Types.Cfg.Grouping as Cfg
 import qualified Blaze.Graph as G
 import qualified Data.HashMap.Strict as HashMap
-import Blaze.Pretty (Token, mkTokenizerCtx, runTokenize)
+import Blaze.Pretty (Token, mkTokenizerCtx, runTokenize, TokenizerCtx)
+import Blaze.Types.Cfg.Grouping (
+  CfEdge (CfEdge),
+  CfNode (
+    Grouping
+  ),
+  Cfg (Cfg),
+  GroupingNode (GroupingNode),
+  PilCfg,
+ )
+import qualified Blaze.Types.Cfg.Grouping as Cfg
+import Blaze.Types.Pil (Stmt)
+import Data.List.Extra (takeEnd)
 import System.Random (Random)
 import Database.Selda.SqlType ( Lit(LCustom)
                               , SqlTypeRep(TBlob)
                               , SqlType
                               )
 import qualified Database.Selda.SqlType as Sql
-
+import qualified Blaze.Types.Pil as Pil
 newtype CfgId = CfgId UUID
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Random)
@@ -35,14 +44,35 @@ data CfgTransport a = CfgTransport
 -- convertInterCfg :: InterCfg -> CfgTransport [[Token]]
 -- convertInterCfg = convertPilCfg . unInterCfg
 
--- TODO: Confirm this definition can be removed
--- convertPilCfg :: Cfg [Stmt] -> Cfg [[Token]]
--- convertPilCfg = fmap $ fmap tokenize
-
-convertPilCfg :: Cfg [Stmt] -> Cfg [[Token]]
-convertPilCfg cfg = fmap (fmap (runTokenize tokenizerCtx)) cfg
+convertPilCfg :: PilCfg -> Cfg [[Token]]
+convertPilCfg cfg@(Cfg g rootNode) =
+  Cfg
+  { graph = G.mapAttrs tokenizeNode' g
+    -- TODO: This is busted if root is a group node
+  , root = fmap (runTokenize tokenizerCtx) <$> rootNode
+  }
   where
     tokenizerCtx = mkTokenizerCtx (fst $ Cfg.unfoldGroups cfg)
+    tokenizeNode' :: CfNode [Stmt] -> CfNode [[Token]]
+    tokenizeNode' = tokenizeNode tokenizerCtx
+
+tokenizeNode :: TokenizerCtx -> CfNode [Stmt] -> CfNode [[Token]]
+tokenizeNode ctx n = case n of
+  Grouping gn@(GroupingNode endNode _ (Cfg _ startNode) _) ->
+    Grouping (GroupingNode
+               (convert $ gn ^. #termNode)
+               (gn ^. #uuid)
+               -- TODO: There's no need to recurse into the inner CFG for tokenization
+               --       This should be tidied up once we have `Cfg a` paramerterized
+               --       on node types rather than node data types.
+               (convertPilCfg $ gn ^. #grouping)
+               (runTokenize ctx <$> startPreview ++ [Pil.Annotation "..."] ++ endPreview))
+   where
+     startPreview = take 2 $ Cfg.getNodeData startNode
+     endPreview = takeEnd 2 $ Cfg.getNodeData endNode
+  _ -> convert n
+ where
+   convert = fmap $ fmap (runTokenize ctx)
 
 toTransport :: forall a b. (a -> b) -> Cfg a -> CfgTransport b
 toTransport f pcfg = CfgTransport
