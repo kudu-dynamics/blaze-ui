@@ -430,9 +430,9 @@ class SnapTreeWidget(QTreeWidget):
     def clean_stale_branches(self, server_bids: List[BranchId]):
         # TODO delete all BranchItems that were not received from the server
         tracked_bids = []
-        funcs_to_remove = []
+        funcs_to_remove = cast(List[Address], [])
         for f, fitem in self.tracked_funcs.items():
-            branches_to_remove = []
+            branches_to_remove = cast(List[BranchId], [])
             for bid in fitem.tracked_branches:
                 if bid not in server_bids:
                     branches_to_remove.append(bid)                    
