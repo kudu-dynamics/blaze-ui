@@ -67,6 +67,10 @@ data BinjaToServer
   -- returns updated snapshot tree containing Cfg
   | RenameSnapshot { cfgId :: CfgId, name :: Text }
 
+  -- Copies current CFG into snapshot tree (new CfgId)
+  -- returns updated snapshot tree
+  | DeleteSnapshot { cfgId :: CfgId }
+
   deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 
 

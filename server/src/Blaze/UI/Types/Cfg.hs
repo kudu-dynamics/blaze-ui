@@ -16,12 +16,13 @@ import Blaze.Types.Cfg.Grouping (
 import qualified Blaze.Types.Cfg.Grouping as Cfg
 import Blaze.Types.Pil (Stmt)
 import qualified Data.HashMap.Strict as HashMap
-import Database.Selda.SqlType (
-  Lit (LCustom),
-  SqlType,
-  SqlTypeRep (TBlob),
- )
 import Data.List.Extra (takeEnd)
+import Blaze.Pretty (Token, mkTokenizerCtx, runTokenize)
+import System.Random (Random)
+import Database.Selda.SqlType ( Lit(LCustom)
+                              , SqlTypeRep(TBlob)
+                              , SqlType
+                              )
 import qualified Database.Selda.SqlType as Sql
 import System.Random (Random)
 import qualified Blaze.Types.Pil as Pil
