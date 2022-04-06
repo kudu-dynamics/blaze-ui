@@ -25,7 +25,7 @@ import Blaze.UI.Types.Db.Address ()
 
 newtype Conn = Conn (TMVar (SeldaConnection SQLite))
 
-newtype Blob a = Blob a
+newtype Blob a = Blob { unBlob :: a }
   deriving (Eq, Ord, Show, Generic, Typeable)
 
 instance (ToJSON a, FromJSON a, Typeable (Blob a)) => SqlType (Blob a) where

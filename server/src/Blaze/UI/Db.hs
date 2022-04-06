@@ -20,13 +20,15 @@ import Blaze.UI.Types.Cfg.Snapshot ( BranchId
                                    )
 import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Graph as Graph
+import qualified Blaze.Types.Graph as G
 import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.Graph (graphFromTransport, graphToTransport)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session (ClientId)
 import qualified Data.HashMap.Strict as HashMap
+import qualified Data.HashSet as HashSet
 import Blaze.UI.Types.Poi (poiTable)
-
+import Blaze.Types.Graph.Alga (AlgaGraph)
 
 init :: FilePath -> IO Conn
 init blazeSqliteFilePath = do
@@ -151,7 +153,6 @@ saveNewBranch_ bid cid hpath h b = withDb $
       $ b ^. #tree
     ]
 
-
 setBranchTree :: MonadDb m => BranchId -> BranchTree -> m ()
 setBranchTree bid branchTree = withDb $ do
   update_ snapshotBranchTable
@@ -247,3 +248,75 @@ getAllBranchesForClient cid = do
     f (bid, branch) = ( branch ^. #hostBinaryPath
                        , [(bid, branch)])
 
+data DeleteSnapshotPreview
+  = DeleteSnapshotPreview
+  { deletedNodes :: HashSet CfgId
+  , newTree :: Maybe BranchTree -- Nothing if root is deleted
+  , branchTreeRoot :: CfgId
+  , branchId :: BranchId
+  } deriving (Eq, Ord, Show, Generic)
+
+-- | Gets preview of what nodes and edges will be deleted by removing a snapshot
+--   and its descendants.
+previewDeleteSnapshot :: MonadDb m => CfgId -> m (Maybe DeleteSnapshotPreview)
+previewDeleteSnapshot cid = withDb $ do
+  mbranch <- fmap onlyOne . query $ do
+    cfg <- select cfgTable
+    restrict (cfg ! #cfgId .== literal cid)
+    snapBranch <- select snapshotBranchTable
+    restrict (cfg ! #branchId .== snapBranch ! #branchId)
+    return snapBranch
+  case mbranch of
+    Nothing -> return Nothing
+    Just branch -> do
+      let btree = graphFromTransport $ branch ^. #tree . #unBlob :: BranchTree
+          edgeNodeGraph = G.toEdgeGraph btree :: AlgaGraph () () (G.EdgeGraphNode () CfgId)
+          reachable = G.reachable (G.NodeNode cid) edgeNodeGraph
+          deletedNodes' = HashSet.fromList $ mapMaybe (preview #_NodeNode) reachable
+          deletedEdges = HashSet.fromList
+                         $ mapMaybe (preview #_EdgeNode) reachable
+                         <> (fmap (G.LEdge ()) . HashSet.toList $ G.predEdges_ cid btree)
+          allEdges = HashSet.fromList . G.edges $ btree
+          newTree' = if HashSet.member (branch ^. #rootNode) deletedNodes'
+          -- deletedEdges = HashSet.fromList $ mapMaybe (preview #_EdgeNode) reachable
+          -- allEdges = HashSet.fromList . G.edges $ btree
+          -- newTree' = if (HashSet.member (branch ^. #rootNode) deletedNodes')
+            then Nothing
+            else Just . G.fromEdges
+                      . HashSet.toList
+                      $ allEdges `HashSet.difference` deletedEdges
+                      :: Maybe BranchTree
+      return . Just $ DeleteSnapshotPreview
+        { deletedNodes = deletedNodes'
+        , newTree = newTree'
+        , branchTreeRoot = branch ^. #rootNode
+        , branchId = branch ^. #branchId
+        }
+
+deleteCfgs :: MonadDb m => [CfgId] -> m ()
+deleteCfgs xs = withDb . deleteFrom_ cfgTable $ \cfg ->
+  cfg ! #cfgId `isIn` (literal <$> xs)
+
+-- | Deletes a snapshot and all its children.
+deleteSnapshot :: MonadDb m => CfgId -> m (HashSet CfgId)
+deleteSnapshot cid = previewDeleteSnapshot cid >>= \case
+  Nothing -> return HashSet.empty -- Can't find branch for cid
+-- deleteSnapshot :: MonadDb m => CfgId -> m ()
+-- deleteSnapshot cid = previewDeleteSnapshot cid >>= \case
+--   Nothing -> return () -- Can't find branch for cid
+  Just p -> do
+    let bid = p ^. #branchId
+        nodeList = HashSet.toList $ p ^. #deletedNodes
+    case p ^. #newTree of
+      Nothing -> deleteBranch bid
+      Just t -> setBranchTree bid t
+    deleteCfgs nodeList
+    return $ p ^. #deletedNodes
+
+deleteBranch :: MonadDb m => BranchId -> m ()
+deleteBranch bid = withDb . deleteFrom_ snapshotBranchTable $ \branch ->
+  branch ! #branchId .== literal bid
+    
+-- deleteBranch :: MonadDb m => BranchId -> m ()
+-- deleteBranch bid = withDb . deleteFrom_ snapshotBranchTable $ \branch ->
+--   branch ! #branchId .== literal bid
