@@ -67,6 +67,7 @@ from .types import (
     ServerCfg,
     ServerPendingChanges,
     ServerToBinja,
+    SnapshotBinjaToServer,
     SnapshotServerToBinja,
     group_options_from_server,
     pending_changes_from_server,
@@ -136,7 +137,7 @@ class BlazeInstance():
     @icfg_dock_widget.setter
     def icfg_dock_widget(self, dw: ICFGDockWidget) -> None:
         self._icfg_dock_widget = dw
-
+        
     @property
     def snaptree_dock_widget(self) -> SnapTreeDockWidget:
         if self._snaptree_dock_widget is None:
@@ -646,6 +647,41 @@ class BlazePlugin():
                     if snap_msg.get('hostBinaryPath') == instance.bv_key:
                         instance.snaptree_dock_widget.snaptree_widget.update_branches_of_binary(
                             cast(List[Tuple[BranchId, ServerBranch]], snap_msg.get('branches')))
+
+                if snap_msg['tag'] == 'DeleteSnapshotConfirmationRequest':
+                    deleted_nodes = cast(List[CfgId], snap_msg.get('deletedNodes'))
+                    will_whole_branch_be_deleted = cast(bool, snap_msg.get('willWholeBranchBeDeleted'))
+                    snapshot_request_for_deletion = cast(CfgId, snap_msg.get('snapshotRequestedForDeletion'))
+                    dmsg = ''
+                    if len(deleted_nodes) == 0:
+                        return
+                    elif len(deleted_nodes) == 1:
+                        dmsg = f"Are you sure you want to delete this snapshot?"
+                    elif will_whole_branch_be_deleted:
+                        dmsg = f"Delete the entire branch and its {len(deleted_nodes) - 1} child snapshots?"
+                    elif len(deleted_nodes) > 1:
+                        dmsg = f"Delete this snapshot and its {len(deleted_nodes) - 1} child snapshots?"
+
+                    # TODO: add something 
+                    confirm_delete_snapshots: Optional[MessageBoxButtonResult] = MessageBoxButtonResult(
+                        show_message_box(
+                            "Blaze",
+                            dmsg,
+                            buttons=MessageBoxButtonSet.YesNoButtonSet,
+                            icon=MessageBoxIcon.WarningIcon))
+
+                    if confirm_delete_snapshots:
+                        snap_msg = SnapshotBinjaToServer(
+                            tag='ConfirmDeleteSnapshot', cfgId=snapshot_request_for_deletion)
+                        instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snap_msg))
+
+                        if instance.graph and instance.graph.pil_icfg_id in deleted_nodes:
+                            instance.icfg_dock_widget.set_graph(None)
+                            instance.graph = None
+                    else:
+                        log.info("Snapshot deletion aborted.")
+                        
+
 
         elif tag == 'SBPoi':
             poi_msg = cast(PoiServerToBinja, msg.get('poiMsg'))

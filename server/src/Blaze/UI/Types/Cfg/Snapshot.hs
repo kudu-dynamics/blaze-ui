@@ -43,6 +43,12 @@ data ServerToBinja
     }
   | BranchesOfClient
     { branchesOfClient :: [(HostBinaryPath, [(BranchId, Branch BranchTransport)])] }
+
+  | DeleteSnapshotConfirmationRequest
+    { snapshotRequestedForDeletion :: CfgId
+    , deletedNodes :: [CfgId]
+    , willWholeBranchBeDeleted :: Bool
+    }
   deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, Hashable)
 
 
@@ -67,6 +73,11 @@ data BinjaToServer
   -- returns updated snapshot tree containing Cfg
   | RenameSnapshot { cfgId :: CfgId, name :: Text }
 
+  -- Copies current CFG into snapshot tree (new CfgId)
+  -- returns updated snapshot tree
+  | PreviewDeleteSnapshot { cfgId :: CfgId }
+  | ConfirmDeleteSnapshot { cfgId :: CfgId }
+  
   deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON)
 
 

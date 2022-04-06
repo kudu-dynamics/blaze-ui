@@ -246,9 +246,9 @@ BranchTreeList = List[BranchTreeListItem]
 
 ServerBranchesOfClient = List[Tuple[HostBinaryPath, List[Tuple[BranchId, ServerBranch]]]]
 
-
+    
 class SnapshotServerToBinjaTotal(TypedDict, total=True):
-    tag: Literal['SnapshotBranch', 'BranchesOfFunction', 'BranchesOfBinary', 'BranchesOfClient']
+    tag: Literal['SnapshotBranch', 'BranchesOfFunction', 'BranchesOfBinary', 'BranchesOfClient', 'DeleteSnapshotConfirmationRequest']
 
 
 class SnapshotServerToBinja(SnapshotServerToBinjaTotal, total=False):
@@ -258,11 +258,15 @@ class SnapshotServerToBinja(SnapshotServerToBinjaTotal, total=False):
     branch: ServerBranch
     branches: List[Tuple[BranchId, ServerBranch]]
     branchesOfClient: ServerBranchesOfClient
-
+    snapshotRequestedForDeletion: CfgId
+    deletedNodes: List[CfgId]
+    willWholeBranchBeDeleted: bool
+    
 
 class SnapshotBinjaToServerTotal(TypedDict, total=True):
     tag: Literal['GetAllBranchesOfClient', 'GetAllBranchesOfBinary', 'GetBranchesOfFunction',
-                 'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot']
+                 'RenameBranch', 'LoadSnapshot', 'SaveSnapshot', 'RenameSnapshot',
+                 'PreviewDeleteSnapshot', 'ConfirmDeleteSnapshot']
 
 
 class SnapshotBinjaToServer(SnapshotBinjaToServerTotal, total=False):

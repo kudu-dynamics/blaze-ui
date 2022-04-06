@@ -79,9 +79,7 @@ def branch_to_list_item(branch: Branch) -> BranchTreeListItem:
     return branchtree_to_branchtreelistitem(
         branch['tree'], branch['snapshotInfo'], branch['rootNode'])
 
-
 # =================================================================================================
-
 
 @enum.unique
 class SnapTreeColumn(enum.Enum):
@@ -263,6 +261,7 @@ class SnapTreeFuncItem(SnapTreeItem):
     def __init__(
         self,
         parent: Union[QTreeWidget, QTreeWidgetItem],
+        branch_id: BranchId,
         func_name: str,
         predecessor: Optional[QTreeWidgetItem] = None,
     ):
@@ -334,6 +333,13 @@ class SnapTreeWidget(QTreeWidget):
                 is_valid=lambda ctx: self.clicked_item is not None and isinstance(
                     self.clicked_item, SnapTreeBranchItemBase),
             ),
+            BNAction(
+                'Blaze',
+                'Delete Snapshot',
+                activate=self.ctx_menu_action_delete_snapshot,
+                is_valid=lambda ctx: self.clicked_item is not None and isinstance(
+                    self.clicked_item, SnapTreeBranchItemBase),
+            ),
         ]
 
         bind_actions(self.action_handler, actions)
@@ -383,7 +389,7 @@ class SnapTreeWidget(QTreeWidget):
         if isinstance(self.clicked_item, SnapTreeBranchItemBase):
             self.rename_snapshot(self.clicked_item)
 
-    def ctx_menu_action_delete(self, context: UIActionContext) -> None:
+    def ctx_menu_action_delete_snapshot(self, context: UIActionContext) -> None:
         if not self.clicked_item:
             return
 
@@ -398,7 +404,7 @@ class SnapTreeWidget(QTreeWidget):
             if func_addr in self.tracked_funcs:
                 item = self.tracked_funcs.get(func_addr)
             else:
-                item = SnapTreeFuncItem(self, data['originFuncName'])
+                item = SnapTreeFuncItem(self, bid, data['originFuncName'])
                 self.tracked_funcs[func_addr] = item
                 self.addTopLevelItem(item)
                 self.expandItem(item)
@@ -415,12 +421,29 @@ class SnapTreeWidget(QTreeWidget):
     def clean_stale_branches(self, server_bids: List[BranchId]):
         # TODO delete all BranchItems that were not received from the server
         tracked_bids = []
+        funcs_to_remove = cast(List[Address], [])
         for f, fitem in self.tracked_funcs.items():
+            branches_to_remove = cast(List[BranchId], [])
             for bid in fitem.tracked_branches:
                 if bid not in server_bids:
+                    branches_to_remove.append(bid)                    
                     # TODO delete fitem.tracked_branches[bid]
                     pass
+            
+            for bid in branches_to_remove:
+                c = fitem.tracked_branches[bid]
+                p = c.parent()
+                p.takeChild(p.indexOfChild(c))
 
+                fitem.tracked_branches.pop(bid)
+                log.info(f'Deleted branch: {bid}')
+            if fitem.childCount() == 0:
+                self.takeTopLevelItem(self.indexOfTopLevelItem(fitem))
+                funcs_to_remove.append(f)
+        for faddr in funcs_to_remove:
+            self.tracked_funcs.pop(faddr)
+            
+    
     def focus_icfg(self, cfg_id: CfgId) -> None:
         self.focused_icfg = cfg_id
         if (item := self.get_item_for_cfg(cfg_id)):
@@ -457,7 +480,9 @@ class SnapTreeWidget(QTreeWidget):
         self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snap_msg))
 
     def delete_snapshot(self, cfg_id: CfgId) -> None:
-        log.error("Fool, there is no getting rid of a snapshot!")
+        snap_msg = SnapshotBinjaToServer(
+            tag='PreviewDeleteSnapshot', cfgId=cfg_id)
+        self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snap_msg))
 
     def notifyOffsetChanged(self, view_frame: ViewFrame, offset: int) -> None:
         pass

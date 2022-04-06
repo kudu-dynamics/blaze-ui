@@ -42,6 +42,11 @@ addCfg cid cfg = do
         writeTVar cfgTMVar cfg
   return ()
 
+removeCfg :: CfgId -> EventLoop ()
+removeCfg cid = do
+  cfgMapTVar <- view #cfgs
+  liftIO . atomically . modifyTVar cfgMapTVar $ HashMap.delete cid
+
 getCfg :: CfgId -> EventLoop (Maybe (Cfg [Stmt]))
 getCfg cid = do
   cfgMapTVar <- view #cfgs <$> ask
