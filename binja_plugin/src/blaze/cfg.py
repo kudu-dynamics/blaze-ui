@@ -447,8 +447,11 @@ class ICFGFlowGraph(FlowGraph):
             elif (self.group_options and
                   node['contents']['uuid'] in self.group_options.end_nodes):
                 fg_node.highlight = HighlightColor(HighlightStandardColor.BlueHighlightColor)
+            elif (self.group_options and
+                  node['contents']['uuid'] == self.group_options.start_node):
+                fg_node.highlight = HighlightColor(HighlightStandardColor.GreenHighlightColor)
             elif self.group_options:
-                # Don't color any nodes other than group end nodes
+                # Don't color any other nodes when selecting a group end node
                 pass
             elif node['tag'] == 'Call':
                 call_node = cast(CallNode, node['contents'])
