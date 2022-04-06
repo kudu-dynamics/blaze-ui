@@ -340,15 +340,6 @@ class SnapTreeWidget(QTreeWidget):
                 is_valid=lambda ctx: self.clicked_item is not None and isinstance(
                     self.clicked_item, SnapTreeBranchItemBase),
             ),
-
-            # BNAction(
-            #     'Blaze',
-            #     'Delete Branch',
-            #     activate=self.ctx_menu_action_delete_branch,
-            #     is_valid=lambda ctx: self.clicked_item is not None and isinstance(
-            #         self.clicked_item, SnapTreeFuncItem),
-            # ),
-
         ]
 
         bind_actions(self.action_handler, actions)
@@ -492,12 +483,6 @@ class SnapTreeWidget(QTreeWidget):
         snap_msg = SnapshotBinjaToServer(
             tag='PreviewDeleteSnapshot', cfgId=cfg_id)
         self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snap_msg))
-
-    # def delete_branch(self, branch_id: BranchId) -> None:
-    #     snap_msg = SnapshotBinjaToServer(
-    #         tag='PreviewDeleteBranch', cfgId=cfg_id)
-    #     self.blaze_instance.send(BinjaToServer(tag='BSSnapshot', snapshotMsg=snap_msg))
-
 
     def notifyOffsetChanged(self, view_frame: ViewFrame, offset: int) -> None:
         pass

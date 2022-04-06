@@ -137,9 +137,6 @@ class BlazeInstance():
     @icfg_dock_widget.setter
     def icfg_dock_widget(self, dw: ICFGDockWidget) -> None:
         self._icfg_dock_widget = dw
-
-    def delete_icfg_dock_widget(self) -> None:
-        self._icfg_dock_widget = None
         
     @property
     def snaptree_dock_widget(self) -> SnapTreeDockWidget:
