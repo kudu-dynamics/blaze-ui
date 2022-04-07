@@ -1290,8 +1290,8 @@ class ICFGToolbarWidget(QWidget):
         self,
         nodes: int,
         edges: int,
-        diff_nodes: int,
-        diff_edges: int,
+        diff_nodes: Optional[int] = None,
+        diff_edges: Optional[int] = None,
     ) -> None:
         s = ''
         if diff_nodes:
@@ -1374,10 +1374,20 @@ class ICFGDockWidget(QWidget, DockContextHandler):
             self.icfg_toolbar_widget.reject_button.setVisible(False)
             self.icfg_toolbar_widget.cancel_button.setVisible(True)
 
+            self.icfg_toolbar_widget.update_stats(
+                nodes=len(graph.pil_icfg['nodes']),
+                edges=len(graph.pil_icfg['edges'])
+                )
+
         if self.mode == ICFGWidget.Mode.STANDARD:
             self.icfg_toolbar_widget.accept_button.setVisible(False)
             self.icfg_toolbar_widget.reject_button.setVisible(False)
             self.icfg_toolbar_widget.cancel_button.setVisible(False)
+
+            self.icfg_toolbar_widget.update_stats(
+                nodes=len(graph.pil_icfg['nodes']),
+                edges=len(graph.pil_icfg['edges'])
+                )
 
         self.icfg_widget.setGraph(graph)
 

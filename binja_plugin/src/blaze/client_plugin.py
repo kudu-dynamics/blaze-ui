@@ -374,15 +374,17 @@ class BlazePlugin():
                 log.error(SEND_FAIL_LOG_MSG)
                 return
             else:
-                bndb_filename : Optional[str] = get_save_filename_input("Choose database filename", "bndb", bndb_filename)
-                if bndb_filename:
+                user_bndb_filename : Optional[str] = get_save_filename_input("Choose database filename",
+                                                                             "bndb",
+                                                                             bndb_filename)
+                if user_bndb_filename:
                     old_key = bv_key(bv)
-                    new_key = bv_key(bndb_filename)
+                    new_key = bv_key(user_bndb_filename)
                     inst: Optional[BlazeInstance] = self.ensure_instance(bv)
 
                     self.move_instance(inst, old_key, new_key)
 
-                    bv.create_database(bndb_filename)
+                    bv.create_database(user_bndb_filename)
 
                     self.ensure_instance(bv)
                 else:
@@ -675,7 +677,7 @@ class BlazePlugin():
                     elif len(deleted_nodes) > 1:
                         dmsg = f"Delete this snapshot and its {len(deleted_nodes) - 1} child snapshots?"
 
-                    # TODO: add something 
+                    # TODO: add something
                     confirm_delete_snapshots: Optional[MessageBoxButtonResult] = MessageBoxButtonResult(
                         show_message_box(
                             "Blaze",
