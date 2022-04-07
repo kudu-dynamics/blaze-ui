@@ -2,7 +2,7 @@ import enum
 import getpass
 import json
 import uuid
-from typing import Any, Callable, List, Literal, OrderedDict, Sequence, Tuple, TypedDict, Union
+from typing import Any, Callable, List, Literal, Optional, OrderedDict, Sequence, Tuple, TypedDict, Union
 
 from binaryninja.settings import Settings
 
@@ -38,6 +38,7 @@ class BlazeSettings:
         HTTP_PORT = 'blaze.server.http_port'
         UPLOAD_ENABLED = 'blaze.upload_enabled'
         CLIENT_ID = 'blaze.client_id'
+        STRING_TRUNCATION_LENGTH = 'blaze.ICFG.string_truncation_length'
 
     # [(group, title), ...]
     _group_config: List[Tuple[str, str]] = [
@@ -101,6 +102,19 @@ class BlazeSettings:
                     default=DEFAULT_CLIENT_ID,
                     optional=False,
                 )),
+            (
+                Key.STRING_TRUNCATION_LENGTH,
+                SettingMetadata(
+                    title='String Constant Maximum Display Length',
+                    description=(
+                        'When displaying string constants, truncate strings longer than this. '
+                        'Use 0 for no trucation'),
+                    type='number',
+                    default=30,
+                    minValue=0,
+                    maxValue=1000,
+                    optional=False,
+                )),
         ])
 
     def __init__(self, settings_factory: Callable[[], Settings] = Settings):
@@ -158,3 +172,11 @@ class BlazeSettings:
     @upload_enabled.setter
     def upload_enabled(self, val: bool) -> bool:
         return self._s().set_bool(self.Key.UPLOAD_ENABLED, val)
+
+    @property
+    def string_truncation_length(self) -> Optional[int]:
+        return self._s().get_integer(self.Key.STRING_TRUNCATION_LENGTH) or None
+
+    @string_truncation_length.setter
+    def string_truncation_length(self, val: Optional[int]) -> bool:
+        return self._s().set_integer(self.Key.STRING_TRUNCATION_LENGTH, val or 0)
