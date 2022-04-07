@@ -102,11 +102,21 @@ class Token(TypedDict):
     address: int
 
 
-def tokens_from_server(ts: List[Token]) -> DisassemblyTextLine:
+def tokens_from_server(ts: List[Token], max_str_length: Optional[int]) -> DisassemblyTextLine:
+    def truncate(t: Token) -> str:
+        if t['tokenType'] != 'StringToken':
+            return t['text']
+
+        if max_str_length is None or len(t['text']) - 2 <= max_str_length:
+            return t['text']
+
+        quote = t['text'][0]
+        return t['text'][:max_str_length + 1] + '…' + quote
+
     tokens = [
         InstructionTextToken(
             type=getattr(InstructionTextTokenType, t['tokenType']),
-            text=t['text'],
+            text=truncate(t),
             value=t['value'],
             size=t['size'],
             operand=t['operand'],
@@ -261,7 +271,7 @@ class SnapshotServerToBinja(SnapshotServerToBinjaTotal, total=False):
     snapshotRequestedForDeletion: CfgId
     deletedNodes: List[CfgId]
     willWholeBranchBeDeleted: bool
-    
+
 
 class SnapshotBinjaToServerTotal(TypedDict, total=True):
     tag: Literal['GetAllBranchesOfClient', 'GetAllBranchesOfBinary', 'GetBranchesOfFunction',
