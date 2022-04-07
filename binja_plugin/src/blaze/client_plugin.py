@@ -89,6 +89,7 @@ log = _logging.getLogger(__name__)
 def has_bndb_extension(filename: str) -> bool:
     return filename.endswith('.bndb')
 
+
 class BlazeInstance():
     def __init__(self, bv: BinaryView, blaze: 'BlazePlugin'):
         self.bv: BinaryView = bv
@@ -118,7 +119,7 @@ class BlazeInstance():
             raise ValueError('BlazeInstance.get_bin_hash cannot open file')
 
         else:
-            f = r.read(0,len(r))
+            f = r.read(0, len(r))
             if f is None:
                 raise ValueError('BlazeInstance.get_bin_hash cannot open file')
             return hashlib.md5(f).hexdigest()
@@ -137,7 +138,7 @@ class BlazeInstance():
     @icfg_dock_widget.setter
     def icfg_dock_widget(self, dw: ICFGDockWidget) -> None:
         self._icfg_dock_widget = dw
-        
+
     @property
     def snaptree_dock_widget(self) -> SnapTreeDockWidget:
         if self._snaptree_dock_widget is None:
@@ -345,7 +346,12 @@ class BlazePlugin():
                 f'Server responded to ping request with {r.content!r}, but we were expecting {data!r}'
             )
 
-    def upload_bndb(self, bv: BinaryView, binaryHash: BinaryHash, callback: Callable[[BinaryHash], None]) -> None:
+    def upload_bndb(
+        self,
+        bv: BinaryView,
+        binaryHash: BinaryHash,
+        callback: Callable[[BinaryHash], None],
+    ) -> None:
         if (not has_bndb_extension(bv.file.filename) or
             (has_bndb_extension(bv.file.filename) and
              not os.path.isfile(bv.file.filename))):
@@ -627,7 +633,14 @@ class BlazePlugin():
 
             for instance in relevant_instances:
                 instance.graph = ICFGFlowGraph(
-                    instance.bv, cfg, cfg_id, poi_search_results, pending_changes, group_options)
+                    bv=instance.bv,
+                    cfg=cfg,
+                    cfg_id=cfg_id,
+                    poi_search_results=poi_search_results,
+                    pending_changes=pending_changes,
+                    group_options=group_options,
+                    max_str_length=self.settings.string_truncation_length,
+                )
                 instance.icfg_dock_widget.set_graph(instance.graph)
                 instance.snaptree_dock_widget.snaptree_widget.focus_icfg(cfg_id)
 
@@ -680,8 +693,6 @@ class BlazePlugin():
                             instance.graph = None
                     else:
                         log.info("Snapshot deletion aborted.")
-                        
-
 
         elif tag == 'SBPoi':
             poi_msg = cast(PoiServerToBinja, msg.get('poiMsg'))

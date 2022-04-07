@@ -132,11 +132,14 @@ def get_edge_style(
 
     return edge_style
 
+
 def is_basic_node(node: CfNode) -> bool:
     return node['tag'] == 'BasicBlock'
 
+
 def is_grouping_node(node: CfNode) -> bool:
     return node['tag'] == 'Grouping'
+
 
 def is_call_node(node: CfNode) -> bool:
     return node['tag'] == 'Call'
@@ -175,6 +178,7 @@ def is_extern_call_node(call_node: CallNode) -> bool:
 def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
     return not is_plt_call_node(bv, call_node) and not is_got_call_node(
         bv, call_node) and not is_extern_call_node(call_node)
+
 
 # TODO: Need to add Summary node
 def is_group_start_node(node: CfNode) -> bool:
@@ -325,7 +329,6 @@ def format_block_header(node: CfNode) -> DisassemblyTextLine:
             ),
         ]
 
-
     else:
         assert False, f'Inexaustive match on CFNode? tag={node["tag"]}'
 
@@ -395,7 +398,8 @@ class ICFGFlowGraph(FlowGraph):
         cfg_id: CfgId,
         poi_search_results: Optional[PoiSearchResults],
         pending_changes: PendingChanges,
-        group_options: Optional[GroupOptions]
+        group_options: Optional[GroupOptions],
+        max_str_length: Optional[int],
     ):
         super().__init__()
         self.bv: BinaryView = bv
@@ -405,6 +409,7 @@ class ICFGFlowGraph(FlowGraph):
         self.poi_search_results: Optional[PoiSearchResults] = poi_search_results
         self.pending_changes: PendingChanges = pending_changes
         self.group_options: Optional[GroupOptions] = group_options
+        self.max_str_length: Optional[int] = max_str_length
 
         self.format()
 
@@ -433,7 +438,9 @@ class ICFGFlowGraph(FlowGraph):
             fg_node.lines = [format_block_header(node)]
             if node['contents'].get('nodeData'):
                 tokenized_lines = node['contents']['nodeData']
-                fg_node.lines += [tokens_from_server(line) for line in tokenized_lines]
+                fg_node.lines += [
+                    tokens_from_server(line, self.max_str_length) for line in tokenized_lines
+                ]
 
             # TODO: Make use of view "modes" to detangle this complex if-else-if chain
             #       that is checking conditions of individual nodes as well as modes
@@ -758,17 +765,19 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 cfgId=self.blaze_instance.graph.pil_icfg_id,
                 edge=(from_node, to_node)))
 
-
     def cancel_grouping(self) -> None:
         assert self.blaze_instance.graph is not None
         # Create a similar graph but without group_options
         # TODO: Do we need to update all other related instances too?
-        graph = ICFGFlowGraph(self.blaze_instance.graph.bv,
-                              self.blaze_instance.graph.pil_icfg,
-                              self.blaze_instance.graph.pil_icfg_id,
-                              self.blaze_instance.graph.poi_search_results,
-                              self.blaze_instance.graph.pending_changes,
-                              None)
+        graph = ICFGFlowGraph(
+            bv=self.blaze_instance.graph.bv,
+            cfg=self.blaze_instance.graph.pil_icfg,
+            cfg_id=self.blaze_instance.graph.pil_icfg_id,
+            poi_search_results=self.blaze_instance.graph.poi_search_results,
+            pending_changes=self.blaze_instance.graph.pending_changes,
+            group_options=None,
+            max_str_length=self.blaze_instance.blaze.settings.string_truncation_length,
+        )
 
         assert self.blaze_instance._icfg_dock_widget
         # TODO: Find a less hacky approach to accomplish this?
@@ -1058,7 +1067,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
         # Send start_node to server
         self.select_group_end(end_node)
 
-
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any
@@ -1336,13 +1344,11 @@ class ICFGDockWidget(QWidget, DockContextHandler):
     def __del__(self):
         try_debug(log, 'Deleting object: %r', self)
 
-    
-
     def set_graph(self, graph: Optional[ICFGFlowGraph]):
         if graph == None:
             self.icfg_widget.setGraph(FlowGraph())
             return
-            
+
         # Update mode
         if graph.pending_changes.has_changes:
             self.mode = ICFGWidget.Mode.DIFF
@@ -1361,7 +1367,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
                 edges=len(graph.pil_icfg['edges']),
                 diff_nodes=-len(graph.pending_changes.removed_nodes),
                 diff_edges=-len(graph.pending_changes.removed_edges),
-                )
+            )
 
         if self.mode == ICFGWidget.Mode.GROUP_SELECT:
             self.icfg_toolbar_widget.accept_button.setVisible(False)
