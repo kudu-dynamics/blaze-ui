@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional, cast
 
 from binaryninja import ( Function )
-from binaryninja.highlight import ( HighlightColor )
 from binaryninjaui import (
     ContextMenuManager,
     DockContextHandler,
@@ -16,6 +15,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 
+from . import colors
 from .types import BinjaToServer, PoiBinjaToServer, PoiId, PoiServerToBinja, Poi
 from .util import (
     BNAction,
@@ -155,7 +155,7 @@ class PoiListWidget(QListWidget):
         if not self.clicked_item:
             return
         bv = self.blaze_instance.bv
-        highlight = HighlightColor(red= 150, green = 90, blue = 90)
+        highlight = colors.POI
         self.clicked_item.func.set_auto_instr_highlight(self.clicked_item.instr_addr, highlight)
         bv.navigate(bv.view, self.clicked_item.instr_addr)
 
