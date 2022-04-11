@@ -7,13 +7,11 @@ from binaryninja import BinaryView
 from binaryninja.enums import (
     BranchType,
     EdgePenStyle,
-    HighlightStandardColor,
     InstructionTextTokenType,
     ThemeColor,
 )
 from binaryninja.flowgraph import EdgeStyle, FlowGraph, FlowGraphEdge, FlowGraphNode
 from binaryninja.function import DisassemblyTextLine, InstructionTextToken
-from binaryninja.highlight import HighlightColor
 from binaryninja.interaction import (
     AddressField,
     MessageBoxButtonResult,
@@ -37,6 +35,7 @@ from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtGui import QContextMenuEvent, QMouseEvent
 from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from . import colors
 from .types import (
     BINARYNINJAUI_CUSTOM_EVENT,
     UUID,
@@ -45,7 +44,6 @@ from .types import (
     BinjaToServer,
     CallDest,
     CallNode,
-    CallNodeRating,
     CfEdge,
     Cfg,
     CfgId,
@@ -80,22 +78,6 @@ if TYPE_CHECKING:
 VERBOSE = False
 
 log = _logging.getLogger(__name__)
-
-
-def muted_color(muteness: float, color: HighlightStandardColor) -> HighlightColor:
-    "Mutes a color. 0.0 muteness is totally black. 1.0 is totally color"
-    return HighlightColor(
-        HighlightStandardColor.BlackHighlightColor,
-        color,
-        mix=int(min(255, max(0, muteness * 255))))
-
-
-REGULAR_CALL_NODE_COLOR = muted_color(0.8, HighlightStandardColor.YellowHighlightColor)
-POI_PRESENT_TARGET_COLOR = HighlightColor(HighlightStandardColor.WhiteHighlightColor)
-POI_NODE_NOT_FOUND_COLOR = muted_color(0.4, HighlightStandardColor.YellowHighlightColor)
-POI_UNREACHABLE_COLOR = HighlightColor(HighlightStandardColor.BlackHighlightColor)
-POI_REACHABLE_MEH_COLOR_BASE = HighlightStandardColor.YellowHighlightColor
-POI_REACHABLE_GOOD_COLOR_BASE = HighlightStandardColor.RedHighlightColor
 
 
 def cfg_from_server(cfg: ServerCfg) -> Cfg:
@@ -218,21 +200,6 @@ def node_contains_addr(node: CfNode, addr: Address) -> bool:
         return False
     else:
         assert False, f'Inexaustive match on CfNode? tag={node["tag"]}'
-
-
-def call_node_rating_color(rating: CallNodeRating) -> HighlightColor:
-    if rating['tag'] == 'Unreachable':
-        return POI_UNREACHABLE_COLOR
-
-    elif rating['tag'] == 'Reachable':
-        score = cast(float, rating.get('score'))
-        return HighlightColor(
-            POI_REACHABLE_MEH_COLOR_BASE,
-            POI_REACHABLE_GOOD_COLOR_BASE,
-            mix=int(min(255, max(0, score * 255))))
-
-    else:
-        assert False, f'Inexaustive match on CallNodeRating? tag={rating["tag"]}'
 
 
 def format_block_header(node: CfNode) -> DisassemblyTextLine:
@@ -449,17 +416,17 @@ class ICFGFlowGraph(FlowGraph):
             #       that is checking conditions of individual nodes as well as modes
             #       through the presence of non-None attribute values.
             if node['contents']['uuid'] in self.pending_changes.removed_nodes:
-                fg_node.highlight = HighlightStandardColor.RedHighlightColor
+                fg_node.highlight = colors.ICFG_CHANGES_REMOVED
             elif (self.poi_search_results and
                   (node['contents']['uuid']
                    in self.poi_search_results['presentTargetNodes'])):
-                fg_node.highlight = POI_PRESENT_TARGET_COLOR
+                fg_node.highlight = colors.POI_PRESENT_TARGET
             elif (self.group_options and
                   node['contents']['uuid'] in self.group_options.end_nodes):
-                fg_node.highlight = HighlightColor(HighlightStandardColor.BlueHighlightColor)
+                fg_node.highlight = colors.GROUP_END_CANDIDATE
             elif (self.group_options and
                   node['contents']['uuid'] == self.group_options.start_node):
-                fg_node.highlight = HighlightColor(HighlightStandardColor.GreenHighlightColor)
+                fg_node.highlight = colors.GROUP_START
             elif self.group_options:
                 # Don't color any other nodes when selecting a group end node
                 pass
@@ -470,23 +437,19 @@ class ICFGFlowGraph(FlowGraph):
                         ratings = self.poi_search_results['callNodeRatings']
                         rating = ratings.get(call_node['uuid'])
                         if rating:
-                            fg_node.highlight = call_node_rating_color(rating)
+                            fg_node.highlight = colors.call_node_rated_color(rating)
                         else:
-                            fg_node.highlight = POI_NODE_NOT_FOUND_COLOR
+                            fg_node.highlight = colors.POI_NODE_NOT_FOUND
                     else:
-                        fg_node.highlight = REGULAR_CALL_NODE_COLOR
+                        fg_node.highlight = colors.REGULAR_CALL_NODE
                 else:
-                    fg_node.highlight = HighlightStandardColor.BlackHighlightColor
+                    fg_node.highlight = colors.UNEXPANDABLE_CALL_NODE
             elif node['tag'] == 'EnterFunc':
-                opacity = 0.8 if self.poi_search_results else 1.0
-                fg_node.highlight = muted_color(opacity,
-                                                HighlightStandardColor.GreenHighlightColor)
+                fg_node.highlight = colors.enter_func_node(self.poi_search_results is not None)
             elif node['tag'] == 'LeaveFunc':
-                opacity = 0.8 if self.poi_search_results else 1.0
-                fg_node.highlight = muted_color(opacity,
-                                                HighlightStandardColor.BlueHighlightColor)
+                fg_node.highlight = colors.leave_func_node(self.poi_search_results is not None)
             elif node['tag'] == 'Grouping':
-                fg_node.highlight = HighlightColor(HighlightStandardColor.MagentaHighlightColor)
+                fg_node.highlight = colors.GROUPING_NODE
             nodes[node_id] = fg_node
             self.append(fg_node)
 
