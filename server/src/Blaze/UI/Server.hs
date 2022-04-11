@@ -376,7 +376,24 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
       _ -> logLocalError . show $ err
     let (InterCfg cfg') = CfgA.simplify . InterCfg $ cfg
     return cfg'
-  Right cfg' -> return cfg'
+  Right (warns, cfg') -> case nonEmptyWarns of
+    [] -> return cfg'
+    xs -> do
+      logLocalInfo "\n\n==================== Solver Errors ======================\n"
+      forM_ xs $ \warn -> do
+        logLocalInfo "\n-------------- type report -----------------\n"
+        let tr = warn ^. #typeReport
+        logLocalInfo . unlines $
+          [ cs $ pshow ("errors" :: Text, tr ^. #errors)
+          , pretty' $ tr ^. #errorConstraints
+          , ""
+          , pretty' . PIndexedStmts $ tr ^. #symTypeStmts
+          ]
+        logLocalInfo "\n-------------- solver errors -----------------\n"
+        logLocalInfo . cs . pshow $ warn ^. #warnings
+      return cfg'
+    where
+      nonEmptyWarns = filter (not . null . view #warnings) warns
 
 simplify_ :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
 simplify_ = updateCfgM simplify
