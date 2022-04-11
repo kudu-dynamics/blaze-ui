@@ -213,6 +213,9 @@ def node_contains_addr(node: CfNode, addr: Address) -> bool:
     elif tag == 'Call':
         call_node = cast(CallNode, node['contents'])
         return call_node['start'] == addr
+    elif tag == 'Grouping':
+        call_node = cast(GroupingNode, node['contents'])
+        return False
     else:
         assert False, f'Inexaustive match on CfNode? tag={node["tag"]}'
 
