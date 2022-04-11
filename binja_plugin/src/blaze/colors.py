@@ -30,7 +30,7 @@ POI_REACHABLE_GOOD_BASE = HighlightStandardColor.RedHighlightColor
 
 REGULAR_CALL_NODE = muted(0.8, HighlightStandardColor.YellowHighlightColor)
 UNEXPANDABLE_CALL_NODE = HighlightStandardColor.BlackHighlightColor
-GROUPING_NODE = HighlightStandardColor.MagentaHighlightColor
+GROUPING_NODE = HighlightColor(red=171, green=102, blue=227)
 GROUP_START = HighlightColor(HighlightStandardColor.GreenHighlightColor)
 GROUP_END_CANDIDATE = HighlightColor(HighlightStandardColor.BlueHighlightColor)
 
