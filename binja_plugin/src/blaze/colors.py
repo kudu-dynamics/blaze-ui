@@ -1,8 +1,25 @@
 from typing import cast
 
-from binaryninja import HighlightColor, HighlightStandardColor
+from binaryninja import HighlightColor, HighlightColorStyle, HighlightStandardColor
 
 from .types import CallNodeRating
+
+
+def lerp(c1: HighlightColor, c2: HighlightColor, amount: float) -> HighlightColor:
+    def _lerp(x: int, y: int, a: float) -> int:
+        return max(0, min(int(x * (1 - a) + y * a), 255))
+
+    if not (c1.style == c2.style == HighlightColorStyle.CustomHighlightColor):
+        raise TypeError(
+            'c1 and c2 must both be CustomHighlightColor, not '
+            f'({c1.style.name}, {c2.style.name})')
+
+    return HighlightColor(
+        red=_lerp(c1.red, c2.red, amount),
+        green=_lerp(c1.green, c2.green, amount),
+        blue=_lerp(c1.blue, c2.blue, amount),
+        alpha=_lerp(c1.alpha, c2.alpha, amount),
+    )
 
 
 def muted(muteness: float, color: HighlightStandardColor) -> HighlightColor:
@@ -21,8 +38,8 @@ POI = HighlightColor(red=150, green=90, blue=90)
 POI_PRESENT_TARGET = HighlightColor(HighlightStandardColor.WhiteHighlightColor)
 POI_NODE_NOT_FOUND = muted(0.4, HighlightStandardColor.YellowHighlightColor)
 POI_UNREACHABLE = HighlightColor(HighlightStandardColor.BlackHighlightColor)
-POI_REACHABLE_MEH_BASE = HighlightStandardColor.YellowHighlightColor
-POI_REACHABLE_GOOD_BASE = HighlightStandardColor.RedHighlightColor
+POI_REACHABLE_MEH_BASE = HighlightColor(red=255, green=255, blue=135)
+POI_REACHABLE_GOOD_BASE = HighlightColor(red=255, green=0, blue=0)
 
 ########
 # ICFG #
@@ -41,8 +58,7 @@ def call_node_rated_color(rating: CallNodeRating) -> HighlightColor:
 
     elif rating['tag'] == 'Reachable':
         score = cast(float, rating.get('score'))
-        return HighlightColor(
-            POI_REACHABLE_MEH_BASE, POI_REACHABLE_GOOD_BASE, mix=int(min(255, max(0, score * 255))))
+        return lerp(POI_REACHABLE_MEH_BASE, POI_REACHABLE_GOOD_BASE, score)
 
     else:
         assert False, f'Inexaustive match on CallNodeRating? tag={rating["tag"]}'
