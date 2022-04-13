@@ -111,6 +111,8 @@ data ServerToBinja = SBLogInfo { message :: Text }
 
                    | SBConstraint { constraintMsg :: C.ServerToBinja }
 
+                   | SBPilType { pilTypeMsg :: PilType.ServerToBinja }
+
                    | SBNoop
                    deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Hashable)
 
@@ -154,6 +156,8 @@ data BinjaToServer = BSConnect
                    | BSPoi { poiMsg :: Poi.BinjaToServer }
 
                    | BSConstraint { constraintMsg :: C.BinjaToServer }
+
+                   | BSChecker { poiMsg :: Checker.BinjaToServer }
 
                    | BSComment
                      { cfgId :: CfgId
