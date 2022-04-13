@@ -1207,12 +1207,15 @@ class ICFGToolbarWidget(QWidget):
         self.simplification_stats_label = QLabel()
         self.update_stats(0, 0, 0, 0)
 
+        self.progress_label = QLabel('Processing...')
+
         layout = QGridLayout()
-        layout.addWidget(self.accept_button, 0, 0, 1, 1)
-        layout.addWidget(self.reject_button, 0, 1, 1, 1)
-        layout.addWidget(self.cancel_button, 0, 2, 1, 1)
+        layout.addWidget(self.progress_label, 0, 0, 1, 1)
+        layout.addWidget(self.accept_button, 0, 1, 1, 1)
+        layout.addWidget(self.reject_button, 0, 2, 1, 1)
+        layout.addWidget(self.cancel_button, 0, 3, 1, 1)
         layout.addWidget(
-            self.simplification_stats_label, 0, 3, 1, 2,
+            self.simplification_stats_label, 0, 4, 1, 2,
             Qt.Alignment(Qt.AlignmentFlag.AlignRight))  # type: ignore
         self.setLayout(layout)
 
@@ -1285,6 +1288,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         DockContextHandler.__init__(self, self, name)
 
         self._view_frame: ViewFrame = view_frame
+
         self.blaze_instance: 'BlazeInstance' = blaze_instance
         self.mode = ICFGWidget.Mode.STANDARD
 
@@ -1296,6 +1300,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
             view_frame,
             self.blaze_instance,
         )
+        self.icfg_toolbar_widget.progress_label.hide()
         self.icfg_toolbar_widget.accept_button.hide()
         self.icfg_toolbar_widget.reject_button.hide()
         self.icfg_toolbar_widget.cancel_button.hide()
@@ -1356,6 +1361,12 @@ class ICFGDockWidget(QWidget, DockContextHandler):
                 )
 
         self.icfg_widget.setGraph(graph)
+
+    def clear_progress_indicator(self):
+        self.icfg_toolbar_widget.progress_label.setVisible(False)
+
+    def show_progress_indicator(self):
+        self.icfg_toolbar_widget.progress_label.setVisible(True)
 
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
         log.debug('ViewFrame changed to %r', view_frame)
