@@ -5,6 +5,11 @@ build: build-server
 build-server:
 	$(MAKE) -C server build
 
+optim: optim-server
+
+optim-server:
+	$(MAKE) -C server optim
+
 test: test-server
 
 test-server:

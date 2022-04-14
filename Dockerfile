@@ -13,6 +13,7 @@ RUN --mount=type=cache,id=blaze-apt,target=/var/cache/apt,sharing=locked \
 COPY \
     server/stack.yaml \
     server/package.yaml \
+    server/Makefile \
     /blaze/build/blaze-ui/server/
 
 WORKDIR /blaze/build/blaze-ui
@@ -24,7 +25,7 @@ RUN --mount=type=cache,id=blaze-stackroot,target=/root/.stack \
     --mount=type=cache,id=blazeui-blaze-stackwork,target=/blaze/build/blaze/.stack-work \
     --mount=type=cache,id=blazeui-blazeui-stackwork,target=/blaze/build/blaze-ui/server/.stack-work \
     cd server && \
-    stack build --only-dependencies --ghc-options -fdiagnostics-color=always
+    STACK_OPTIONS="--only-dependencies --ghc-options=-fdiagnostics-color=always" make
 
 # Copy and build
 COPY server/ /blaze/build/blaze-ui/server
@@ -34,9 +35,7 @@ RUN --mount=type=cache,id=blaze-stackroot,target=/root/.stack \
     --mount=type=cache,id=blazeui-blaze-stackwork,target=/blaze/build/blaze/.stack-work \
     --mount=type=cache,id=blazeui-blazeui-stackwork,target=/blaze/build/blaze-ui/server/.stack-work \
     cd server && \
-    stack build --test --no-run-tests \
-        --copy-bins --local-bin-path /blaze/bin \
-        --ghc-options -fdiagnostics-color=always && \
+    STACK_OPTIONS="--copy-bins --local-bin-path /blaze/bin --ghc-options=-fdiagnostics-color=always" make && \
     cp $(stack path --dist-dir)/build/blaze-server-test/blaze-server-test ~/.local/bin
 
 ENV BLAZE_UI_HOST=localhost
@@ -54,7 +53,7 @@ RUN --mount=type=cache,id=blaze-stackroot,target=/root/.stack \
     --mount=type=cache,id=blazeui-bnhs-stackwork,target=/blaze/build/binaryninja-haskell/.stack-work \
     --mount=type=cache,id=blazeui-blaze-stackwork,target=/blaze/build/blaze/.stack-work \
     --mount=type=cache,id=blazeui-blazeui-stackwork,target=/blaze/build/blaze-ui/server/.stack-work \
-    make docs
+    STACK_OPTIONS="--ghc-options=-fdiagnostics-color=always" make docs
 
 FROM main as minimal
 SHELL ["/bin/bash", "-c"]
