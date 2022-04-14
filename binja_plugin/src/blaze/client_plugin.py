@@ -112,6 +112,11 @@ class BlazeInstance():
     def send(self, msg: BinjaToServer):
         self.blaze.send(self.bv, msg)
 
+        # Show processing indicator for CFG messages
+        if msg['tag'].startswith('BSCfg'):
+            if self._icfg_dock_widget:
+                execute_on_main_thread_and_wait(self._icfg_dock_widget.show_progress_indicator)
+
     def get_bin_hash(self) -> BinaryHash:
         r = self.bv.file.raw
 
@@ -609,6 +614,11 @@ class BlazePlugin():
             log.info("got Noop")
 
         elif tag == 'SBCfg':
+            # Clear processing indicator
+            for instance in relevant_instances:
+                if icfg_dock_widget := instance._icfg_dock_widget:
+                    icfg_dock_widget.clear_progress_indicator()
+
             cfg_id = cast(CfgId, msg.get('cfgId'))
             cfg = cfg_from_server(cast(ServerCfg, msg.get('cfg')))
             server_pending_changes = msg.get('pendingChanges')
