@@ -95,8 +95,8 @@ library:
   - -Wincomplete-record-updates
   - -Wincomplete-uni-patterns
   - -Wredundant-constraints
-  - -j
-  - -O2
+  - -j4
+  - -O0
   source-dirs:
   - src
   exposed-modules:
@@ -125,6 +125,7 @@ executables:
     main: Main.hs
     source-dirs:  app
     ghc-options:
+    - -j4
     - -O2
     - -Wall
     - -threaded
@@ -144,7 +145,8 @@ tests:
     - test
     ghc-options:
     - -Wall
-    - -O2
+    - -j4
+    - -O0
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
