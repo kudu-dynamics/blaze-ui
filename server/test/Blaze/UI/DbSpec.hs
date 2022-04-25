@@ -72,7 +72,7 @@ spec = describe "Blaze.UI.Db" $ do
     runIO $ BN.updateAnalysisAndWait bv
     let imp = BNImporter bv
     selectDive <- runIO $ fromJust <$> CG.getFunction imp 0x804e080
-    (ImportResult _ originalCfg _) <- runIO $ fromJust <$> getCfg imp selectDive
+    (ImportResult _ originalCfg _) <- runIO $ fromJust <$> getCfg imp selectDive 0
     let originalCfg' = GCfg.foldGroups originalCfg []
     mRetrievedCfg <- runIO . mockEventLoop $ do
       Db.saveNewCfg_ bid cid originalCfg' Snapshot.Immutable

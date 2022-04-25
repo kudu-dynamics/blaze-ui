@@ -549,7 +549,7 @@ handleBinjaEvent = \case
       Nothing -> sendToBinja
         . SBLogError $ "Couldn't find function at " <> showHex funcAddr
       Just func -> do
-        mr <- liftIO $ BnCfg.getCfg (BNImporter bv) bv func
+        mr <- liftIO $ BnCfg.getCfg (BNImporter bv) bv func 0
 
         case mr of
           Nothing -> sendToBinja
@@ -937,7 +937,7 @@ getFunctionTypeReport bv addr = liftIO $ do
     Nothing -> return . Left $ "Couldn't find function at: " <> show addr
     Just func -> do
       cgFunc <- CG.convertFunction bv func
-      indexedStmts <- Pil.getFuncStatementsIndexed bv cgFunc
+      indexedStmts <- Pil.getFuncStatementsIndexed bv cgFunc 0
       let indexedStmts' = realignIndexedStmts indexedStmts . PilA.fixedRemoveUnusedPhi $ snd <$> indexedStmts
       -- TODO: this call to `fixedRemoveUnusedPhi` messes up the indexes
           indexedStmts'' = zip (fst <$> indexedStmts')
