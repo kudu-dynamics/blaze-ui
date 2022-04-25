@@ -392,6 +392,7 @@ class ICFGFlowGraph(FlowGraph):
         nodes: Dict[UUID, FlowGraphNode] = {}
         self.node_mapping = {}
 
+
         # Root node MUST be added to the FlowGraph first, otherwise weird FlowGraphWidget
         # layout issues may ensue
         source_nodes: List[Tuple[UUID, CfNode]]
@@ -1018,7 +1019,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         log.debug('Expand Group')
 
         assert self.clicked_node is not None
-        summary_node = self.get_cf_node(self.clicked_node)
+        summary_node = self.get_cf_node(self.clicked_node) 
         assert summary_node is not None
 
         self.expand_group(summary_node)
@@ -1033,6 +1034,13 @@ class ICFGWidget(FlowGraphWidget, QObject):
         # Send start_node to server
         self.select_group_end(end_node)
 
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if (event is not None):
+            if (tok := self.getTokenForMouseEvent(event)):
+                if tok.valid:
+                    # log.info(f"tok: {tok.token}")
+                    self.setToolTip(tok.token.text)
+        
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any
@@ -1042,7 +1050,10 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         if event.button() != Qt.LeftButton or self.blaze_instance.graph is None:
             return super().mousePressEvent(event)
-
+        
+        if (tok := self.getTokenForMouseEvent(event)):
+            log.info(f"got token: {tok.token.address}")
+            
         if (fg_node := self.getNodeForMouseEvent(event)):
             node = self.get_cf_node(fg_node)
 

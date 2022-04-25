@@ -52,6 +52,7 @@ import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.Db (MonadDb(withDb))
 import qualified Blaze.UI.Types.Db as Db
 import Blaze.UI.Types.BinaryManager (BinaryManager, BinaryManagerStorageDir(BinaryManagerStorageDir))
+import qualified Blaze.UI.Types.Checker as Checker
 import Blaze.UI.Types.Session (SessionId, ClientId)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.Pretty (Token)
@@ -111,7 +112,7 @@ data ServerToBinja = SBLogInfo { message :: Text }
 
                    | SBConstraint { constraintMsg :: C.ServerToBinja }
 
-                   | SBPilType { pilTypeMsg :: PilType.ServerToBinja }
+                   -- | SBPilType { pilTypeMsg :: PilType.ServerToBinja }
 
                    | SBNoop
                    deriving (Eq, Ord, Show, Generic, FromJSON, ToJSON, Hashable)
@@ -157,7 +158,7 @@ data BinjaToServer = BSConnect
 
                    | BSConstraint { constraintMsg :: C.BinjaToServer }
 
-                   | BSChecker { poiMsg :: Checker.BinjaToServer }
+                   | BSChecker { checkerMsg :: Checker.BinjaToServer }
 
                    | BSComment
                      { cfgId :: CfgId
