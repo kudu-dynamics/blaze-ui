@@ -47,12 +47,9 @@ class Function(TypedDict):
     params: List[FuncParamInfo]
 
 
-CtxIndex = int
-
-
 class Ctx(TypedDict):
     func: Function
-    ctxIndex: CtxIndex
+    ctxId: CtxId
 
 
 PilExpr = object
