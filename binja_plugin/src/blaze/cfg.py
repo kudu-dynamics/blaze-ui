@@ -1039,7 +1039,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             if (tok := self.getTokenForMouseEvent(event)):
                 if tok.valid:
                     # log.info(f"tok: {tok.token}")
-                    self.setToolTip(tok.token.text)
+                    self.setToolTip(str(tok.token.tokenIndex))
         
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
