@@ -183,6 +183,7 @@ class Cfg(TypedDict):
     edges: List[CfEdge]
     root: UUID
     nodes: Dict[UUID, CfNode]
+    nextCtxIndex: CtxId
 
 
 class ServerCfg(TypedDict):
