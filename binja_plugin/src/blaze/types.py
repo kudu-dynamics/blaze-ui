@@ -18,6 +18,7 @@ PoiId = UUID
 BinaryHash = str
 BndbHash = str
 HostBinaryPath = str
+CtxId = int
 
 # What Aeson encodes the unit value `()` as
 # TODO: This used to be a Literal[[]] type, but that is actually an invalid Literal.
@@ -46,12 +47,9 @@ class Function(TypedDict):
     params: List[FuncParamInfo]
 
 
-CtxIndex = int
-
-
 class Ctx(TypedDict):
     func: Function
-    ctxIndex: CtxIndex
+    ctxId: CtxId
 
 
 PilExpr = object
@@ -182,12 +180,14 @@ class Cfg(TypedDict):
     edges: List[CfEdge]
     root: UUID
     nodes: Dict[UUID, CfNode]
+    nextCtxIndex: CtxId
 
 
 class ServerCfg(TypedDict):
     transportEdges: List[CfEdge]
     transportRoot: CfNode
     transportNodes: List[Tuple[CfNode, CfNode]]
+    transportNextCtxIndex: CtxId
 
 
 class SnapshotInfo(TypedDict):

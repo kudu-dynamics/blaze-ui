@@ -3,10 +3,8 @@ module Blaze.UI.Types.Cfg where
 import Blaze.UI.Prelude hiding (Symbol)
 
 import qualified Blaze.Graph as G
-import qualified Data.HashMap.Strict as HashMap
 import Blaze.Pretty (Token, mkTokenizerCtx, runTokenize, TokenizerCtx)
 import Blaze.Types.Cfg.Grouping (
-  CfEdge (CfEdge),
   CfNode (
     Grouping
   ),
@@ -35,21 +33,13 @@ instance SqlType CfgId where
    fromSql x = CfgId $ Sql.fromSql x
    defaultValue = LCustom TBlob (Sql.defaultValue :: Lit UUID)
 
-data CfgTransport a = CfgTransport
-  { edges :: [CfEdge ()]
-  , root :: CfNode ()
-  , nodes :: [(CfNode (), CfNode a)]
-  } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, Functor)
-
--- convertInterCfg :: InterCfg -> CfgTransport [[Token]]
--- convertInterCfg = convertPilCfg . unInterCfg
-
 convertPilCfg :: PilCfg -> Cfg [[Token]]
-convertPilCfg cfg@(Cfg g rootNode) =
+convertPilCfg cfg@(Cfg g rootNode nextCtxIndex) =
   Cfg
   { graph = G.mapAttrs tokenizeNode' g
     -- TODO: This is busted if root is a group node
   , root = fmap (runTokenize tokenizerCtx) <$> rootNode
+  , nextCtxIndex = nextCtxIndex
   }
   where
     tokenizerCtx = mkTokenizerCtx (fst $ Cfg.unfoldGroups cfg)
@@ -58,7 +48,7 @@ convertPilCfg cfg@(Cfg g rootNode) =
 
 tokenizeNode :: TokenizerCtx -> CfNode [Stmt] -> CfNode [[Token]]
 tokenizeNode ctx n = case n of
-  Grouping gn@(GroupingNode endNode _ (Cfg _ startNode) _) ->
+  Grouping gn@(GroupingNode endNode _ (Cfg _ startNode _) _) ->
     Grouping (GroupingNode
                (convert $ gn ^. #termNode)
                (gn ^. #uuid)
@@ -73,44 +63,3 @@ tokenizeNode ctx n = case n of
   _ -> convert n
  where
    convert = fmap $ fmap (runTokenize ctx)
-
-toTransport :: forall a b. (a -> b) -> Cfg a -> CfgTransport b
-toTransport f pcfg = CfgTransport
-  { edges =  edges'
-  , root = root'
-  , nodes = textNodes'
-  }
-  where
-    root' = void $ pcfg ^. #root
-
-    nodes' :: [(CfNode (), CfNode a)]
-    nodes' = HashMap.toList $ pcfg ^. #graph . #nodeAttrMap
-
-    textNodes' :: [(CfNode (), CfNode b)]
-    textNodes' = fmap g nodes'
-      where
-        g :: (CfNode (), CfNode a) -> (CfNode (), CfNode b)
-        g (a, b) = (a, f <$> b)
-
-    edges' :: [CfEdge ()]
-    edges' = fmap Cfg.fromLEdge . G.edges $ pcfg ^. #graph
-
-
-fromTransport :: (Eq a, Hashable a) => CfgTransport a -> Cfg a
-fromTransport t = Cfg.mkCfg root' nodes' edges'
-  where
-    nodeMap = HashMap.fromList $ t ^. #nodes
-
-    fullNode = fromJust . flip HashMap.lookup nodeMap
-
-    fullEdge e = CfEdge
-      { src = fullNode $ e ^. #src
-      , dst = fullNode $ e ^. #dst
-      , branchType = e ^. #branchType
-      }
-
-    root' = fullNode $ t ^. #root
-
-    nodes' = snd <$> t ^. #nodes
-
-    edges' = fullEdge <$> t ^. #edges
