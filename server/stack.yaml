@@ -8,9 +8,5 @@ extra-deps:
   - ../../blaze
   - ../../binaryninja-haskell
   - ../../binary-analysis
-  - git: https://github.com/mpdairy/purescript-bridge
-    commit: a55ece4e5a5d1a3cde5302ef449e3c9f2963d9a7
-  - git: https://github.com/LeventErkok/sbv.git
-    commit: c7bd569e28c8b035f9e4fba2e6504803d8a1a43a
   - git: https://github.com/protolude/protolude
     commit: 3e249724fd0ead27370c8c297b1ecd38f92cbd5b
