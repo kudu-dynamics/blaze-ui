@@ -19,7 +19,7 @@ instance SqlType Address where
 
    sqlType _ = TText
 
-   fromSql (SqlString s) = case readMaybe (cs s) of
+   fromSql (SqlString s) = case readMaybe s of
      Nothing -> P.error $ "Cannot convert " <> cs s <> " to Address"
      Just n -> Address . Bytes $ n
    fromSql x = P.error $ "Unexpected sql field type: " <> show x

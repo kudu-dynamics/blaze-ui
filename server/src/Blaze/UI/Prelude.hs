@@ -33,7 +33,7 @@ writeManyTQueue :: TQueue a -> [a] -> STM ()
 writeManyTQueue q = mapM_ $ writeTQueue q
 
 instance Parsable Bytes where
-  parseParam s = case readMaybe (cs s) of
+  parseParam s = case readMaybe s of
     Nothing -> Left $ "Not a number: " <> s
     Just n -> Right $ Bytes n
 
