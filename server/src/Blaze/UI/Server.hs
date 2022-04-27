@@ -27,7 +27,6 @@ import qualified Blaze.Pil.Analysis as PilA
 import qualified Blaze.UI.Cfg as CfgUI
 import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
-import Blaze.Types.Cfg.Interprocedural (InterCfg(InterCfg))
 import qualified Blaze.Cfg.Interprocedural as ICfg
 import Blaze.Pretty (PIndexedStmts (..), mkTokenizerCtx, prettyIndexedStmts', pretty', showHex, pretty)
 import qualified Blaze.Types.Pil.Checker as Ch
@@ -374,7 +373,7 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
           , "-----------------------------------------------------------------------"
           ]
       _ -> logLocalError . show $ err
-    let (InterCfg cfg') = CfgA.simplify . InterCfg $ cfg
+    let cfg' = CfgA.simplify cfg
     return cfg'
   Right (warns, cfg') -> case nonEmptyWarns of
     [] -> return cfg'
@@ -583,13 +582,13 @@ handleBinjaEvent = \case
           targetFunc <- getTargetFunc bv (fromIntegral targetAddr)
 
           mCfg' <- liftIO . ICfg.build bs $
-            ICfg.expandCall (InterCfg cfg) fullCallNode targetFunc
+            ICfg.expandCall cfg fullCallNode targetFunc
 
           case mCfg' of
             Left err ->
               -- TODO: more specific error
               logError $ show err
-            Right (InterCfg cfg') -> do
+            Right cfg' -> do
               simplifiedCfg <- simplify cfg'
               printSimplifyStats cfg' simplifiedCfg
               return simplifiedCfg
@@ -610,7 +609,7 @@ handleBinjaEvent = \case
       case (,) <$> OgCfg.findNodeByUUID startUUID cfg <*> OgCfg.findNodeByUUID endUUID cfg of
         Nothing -> logError "Node or nodes don't exist in CFG"
         Just (fullNode1, fullNode2) -> do
-          let InterCfg cfg' = CfgA.prune_ (G.Edge fullNode1 fullNode2) $ InterCfg cfg
+          let cfg' = CfgA.prune (G.Edge fullNode1 fullNode2) cfg
           simplifiedCfg <- simplify cfg'
           printSimplifyStats cfg simplifiedCfg
           return simplifiedCfg
@@ -646,7 +645,7 @@ handleBinjaEvent = \case
         Just fullNode -> if fullNode == cfg ^. #root
           then logError "Cannot remove root node"
           else do
-            let InterCfg cfg' = CfgA.focus_ fullNode $ InterCfg cfg
+            let cfg' = CfgA.focus_ fullNode cfg
             simplifiedCfg <- simplify cfg'
             printSimplifyStats cfg cfg'
             return simplifiedCfg
