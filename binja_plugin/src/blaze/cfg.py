@@ -1039,8 +1039,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
             if (tok := self.getTokenForMouseEvent(event)):
                 if tok.valid:
                     # log.info(f"tok: {tok.token}")
-                    self.setToolTip(str(tok.token.tokenIndex))
-        
+                    self.setToolTip(str(tok.token.text))
+
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any
