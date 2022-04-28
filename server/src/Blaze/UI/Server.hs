@@ -820,7 +820,7 @@ handleBinjaEvent = \case
       _ -> logError "Cannot expand non-Grouping node"
 
 insertStmt ::
-  (Eq a, Hashable a) =>
+  Hashable a =>
   Cfg [a] ->
   CfgId ->
   UUID ->
@@ -834,7 +834,7 @@ insertStmt cfg cid nid stmtIndex stmt = do
   pure $ Cfg.setNodeData stmts' node' cfg
 
 getGroupOptions
-  :: (Eq a, Hashable a)
+  :: Hashable a
   => Cfg [a]
   -> CfNode [a]
   -> EventLoop (Maybe GroupOptions)
@@ -848,7 +848,7 @@ getGroupOptions cfg startNode = do
 
 -- TODO: Should we check if persisting a node index would improve performance?
 getNode ::
-  (Eq a, Hashable a) =>
+  Hashable a =>
   Cfg a ->
   CfgId ->
   UUID ->
@@ -888,7 +888,7 @@ getStmtsAround node' stmtIndex = do
         <> "Adding to end."
     pure $ splitAt (fromIntegral stmtIndex) stmts
 
-printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
+printSimplifyStats :: (Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do
   logLocalInfo . unlines $
     [ ""

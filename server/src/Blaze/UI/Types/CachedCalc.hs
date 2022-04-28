@@ -16,7 +16,7 @@ create = fmap CachedCalc . newTVar $ HashMap.empty
 -- then inserts new v into TMVar.
 -- The empty TMVar is created separately so things can start waiting on it
 -- before calculation finishes.
-setCalc :: (Eq k, Hashable k) => k -> CachedCalc k v -> IO v -> IO (TMVar v)
+setCalc :: Hashable k => k -> CachedCalc k v -> IO v -> IO (TMVar v)
 setCalc k (CachedCalc cc) action = do
   tmvar <- atomically $ do
     m <- readTVar cc
@@ -33,14 +33,14 @@ setCalc k (CachedCalc cc) action = do
 
 -- | Retrieves the cached calc. Returns Nothing if the key cannot be found.
 -- Otherwise, it waits until v is available.
-getCalc :: (Hashable k, Eq k) => k -> CachedCalc k v -> IO (Maybe v)
+getCalc :: Hashable k => k -> CachedCalc k v -> IO (Maybe v)
 getCalc k (CachedCalc cc) = do
   m <- readTVarIO cc
   traverse (atomically . readTMVar) $ HashMap.lookup k m
 
 -- | Retrieves the cached calc or computes it and caches it.
 -- Blocks thread until return.
-calc :: (Hashable k, Eq k) => k -> CachedCalc k v -> IO v -> IO v
+calc :: Hashable k => k -> CachedCalc k v -> IO v -> IO v
 calc k cc action = getCalc k cc >>= \case
   Just v -> return v
   Nothing -> setCalc k cc action >>= atomically . readTMVar
