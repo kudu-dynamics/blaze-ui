@@ -26,7 +26,8 @@ import Test.Hspec
 import qualified Data.UUID as UUID
 import qualified Data.Text as Text
 import qualified Blaze.UI.Types.BinaryHash as BinaryHash
-import qualified Blaze.Types.Cfg.Grouping as GCfg
+import qualified Blaze.Types.Cfg as Cfg
+import qualified Blaze.Types.Cfg.Grouping as Grp
 
 diveBin :: FilePath
 diveBin = "res/test_bins/Dive_Logger/Dive_Logger.bndb"
@@ -61,7 +62,7 @@ mockEventLoop m = do
   ctx' <- mockSessionState conn
   (Right r) <- runEventLoop m ctx'
   tryRemoveFile dbFile
-  return r 
+  return r
 
 spec :: Spec
 spec = describe "Blaze.UI.Db" $ do
@@ -73,7 +74,7 @@ spec = describe "Blaze.UI.Db" $ do
     let imp = BNImporter bv
     selectDive <- runIO $ fromJust <$> CG.getFunction imp 0x804e080
     (ImportResult _ originalCfg _) <- runIO $ fromJust <$> getCfg imp selectDive 0
-    let originalCfg' = GCfg.foldGroups originalCfg []
+    let originalCfg' = Grp.foldGroups originalCfg []
     mRetrievedCfg <- runIO . mockEventLoop $ do
       Db.saveNewCfg_ bid cid originalCfg' Snapshot.Immutable
       Db.getCfg cid
@@ -83,9 +84,9 @@ spec = describe "Blaze.UI.Db" $ do
 
     mRetrievedCfg2 <- runIO . mockEventLoop $ do
       let firstCfg = G.removeEdges
-            (fmap (\(GCfg.CfEdge src' dst' _) -> G.Edge src' dst')
+            (fmap (\(Cfg.CfEdge src' dst' _) -> G.Edge src' dst')
                . HashSet.toList
-               . GCfg.succEdges (originalCfg' ^. #root)
+               . Cfg.succEdges (originalCfg' ^. #root)
                $ originalCfg')
             originalCfg'
       Db.saveNewCfg_ bid cid firstCfg Snapshot.Immutable

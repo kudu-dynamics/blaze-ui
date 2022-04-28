@@ -4,15 +4,16 @@ import Blaze.UI.Prelude hiding (Symbol)
 
 import qualified Blaze.Graph as G
 import Blaze.Pretty (Token, mkTokenizerCtx, runTokenize, TokenizerCtx)
-import Blaze.Types.Cfg.Grouping (
+import Blaze.Types.Cfg (
   CfNode (
     Grouping
   ),
   Cfg (Cfg),
   GroupingNode (GroupingNode),
-  PilCfg,
+  PilCfg
  )
-import qualified Blaze.Types.Cfg.Grouping as Cfg
+import qualified Blaze.Types.Cfg as Cfg
+import qualified Blaze.Types.Cfg.Grouping as Grp
 import Blaze.Types.Pil (Stmt)
 import Data.List.Extra (takeEnd)
 import System.Random (Random)
@@ -42,7 +43,7 @@ convertPilCfg cfg@(Cfg g rootNode nextCtxIndex) =
   , nextCtxIndex = nextCtxIndex
   }
   where
-    tokenizerCtx = mkTokenizerCtx (fst $ Cfg.unfoldGroups cfg)
+    tokenizerCtx = mkTokenizerCtx (fst $ Grp.unfoldGroups cfg)
     tokenizeNode' :: CfNode [Stmt] -> CfNode [[Token]]
     tokenizeNode' = tokenizeNode tokenizerCtx
 

@@ -9,7 +9,7 @@ import qualified Prelude as P
 import Blaze.UI.Types.Db as Exports hiding (cfg)
 import Database.Selda
 import Blaze.UI.Types.Cfg (CfgId)
-import Blaze.Types.Cfg.Grouping (PilCfg)
+import Blaze.Types.Cfg (PilCfg)
 import Data.Time.Clock (getCurrentTime)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot ( BranchId
@@ -315,7 +315,7 @@ deleteSnapshot cid = previewDeleteSnapshot cid >>= \case
 deleteBranch :: MonadDb m => BranchId -> m ()
 deleteBranch bid = withDb . deleteFrom_ snapshotBranchTable $ \branch ->
   branch ! #branchId .== literal bid
-    
+
 -- deleteBranch :: MonadDb m => BranchId -> m ()
 -- deleteBranch bid = withDb . deleteFrom_ snapshotBranchTable $ \branch ->
 --   branch ! #branchId .== literal bid
