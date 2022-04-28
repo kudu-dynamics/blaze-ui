@@ -36,7 +36,6 @@ dependencies:
   - extra
   - generic-lens
   - hashable
-  - hashable-time
   - hashids
   - http-types
   - lens
@@ -55,6 +54,7 @@ dependencies:
   - temporary
   - text
   - time
+  - time-compat
   - transformers
   - unordered-containers
   - uuid

@@ -4,7 +4,7 @@ import Blaze.Prelude hiding (Symbol)
 
 import System.Random (Random)
 import Data.Time.Clock (UTCTime)
-import Data.Hashable.Time ()
+import Data.Time.Compat ()
 import Database.Selda (SqlRow, Table, primary, Attr((:-)), table)
 import Database.Selda.SqlType ( Lit(LCustom)
                               , SqlTypeRep(TBlob)
