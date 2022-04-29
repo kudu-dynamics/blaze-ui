@@ -38,7 +38,7 @@ import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Blaze.UI.Db as Db
-import Blaze.UI.Types.Cfg (CfgId, convertPilCfg)
+import Blaze.UI.Types.Cfg (CfgId)
 import qualified Blaze.UI.BinaryManager as BM
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session ( SessionId
