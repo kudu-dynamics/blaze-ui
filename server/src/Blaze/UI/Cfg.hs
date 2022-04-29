@@ -1,4 +1,4 @@
-module Blaze.UI.Cfg 
+module Blaze.UI.Cfg
   ( module Blaze.UI.Cfg
   , module Exports
   ) where
@@ -12,7 +12,7 @@ import Blaze.Types.Pil (Stmt)
 import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.Types.Cfg.Grouping (Cfg, CfNode, CfEdge)
 import qualified Blaze.Types.Graph as G
-import qualified Blaze.Types.Cfg.Grouping as Cfg
+import qualified Blaze.Types.Cfg as Cfg
 
 
 -- | Changes CfgId key in graph cache.
@@ -56,13 +56,12 @@ getCfg cid = do
 
 getRemovedNodes :: Cfg a -> Cfg a -> HashSet (CfNode ())
 getRemovedNodes old new =
-  HashSet.difference (G.nodes $ old ^. #graph) (G.nodes $ new ^. #graph) 
+  HashSet.difference (G.nodes $ old ^. #graph) (G.nodes $ new ^. #graph)
 
 getRemovedEdges :: Cfg a -> Cfg a -> HashSet (CfEdge ())
-getRemovedEdges old new = HashSet.difference (f old) (f new) 
+getRemovedEdges old new = HashSet.difference (f old) (f new)
   where
     f = HashSet.fromList . fmap Cfg.fromLEdge . G.edges . view #graph
 
 edgeToUUIDTuple :: CfEdge a -> (UUID, UUID)
 edgeToUUIDTuple e = (Cfg.getNodeUUID $ e ^. #src, Cfg.getNodeUUID $ e ^. #dst)
-                    

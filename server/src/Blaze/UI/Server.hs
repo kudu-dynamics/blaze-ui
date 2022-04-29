@@ -18,10 +18,10 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Blaze.Import.Source.BinaryNinja.CallGraph as CG
 import qualified Blaze.Import.Source.BinaryNinja.Pil as Pil
 import qualified Blaze.Import.Source.BinaryNinja.Cfg as BnCfg
-import qualified Blaze.Types.Cfg.Grouping as Cfg
-import qualified Blaze.Types.Cfg as OgCfg
-import qualified Blaze.Cfg as OgCfg
-import Blaze.Types.Cfg.Grouping (Cfg, PilCfg, CfNode)
+import qualified Blaze.Types.Cfg.Grouping as Grp
+import qualified Blaze.Types.Cfg as Cfg
+import qualified Blaze.Cfg as Cfg
+import Blaze.Types.Cfg (Cfg, PilCfg, CfNode)
 import qualified Blaze.Cfg.Analysis as CfgA
 import qualified Blaze.Pil.Analysis as PilA
 import qualified Blaze.UI.Cfg as CfgUI
@@ -55,8 +55,6 @@ import qualified Blaze.Types.Pil as Pil
 import Blaze.Types.Pil (Stmt)
 import qualified Blaze.Cfg.Solver.BranchContext as GSolver
 
-
-type OgCfg = OgCfg.Cfg
 
 receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -347,18 +345,18 @@ broadcastGlobalPois st binHash = do
   sendToAllWithBinary st binHash . SBPoi . Poi.GlobalPoisOfBinary $ pois
 
 -- | Converts grouped CFG into original CFG
-updateCfgM :: (Ord a, Hashable a, Monad m) => (OgCfg a -> m (OgCfg a)) -> Cfg a -> m (Cfg a)
+updateCfgM :: (Ord a, Hashable a, Monad m) => (Cfg a -> m (Cfg a)) -> Cfg a -> m (Cfg a)
 updateCfgM f cfg = do
-  let (ogCfg, groupStructure) = Cfg.unfoldGroups cfg
+  let (ogCfg, groupStructure) = Grp.unfoldGroups cfg
   cfg' <- f ogCfg
-  return $ Cfg.foldGroups cfg' groupStructure
+  return $ Grp.foldGroups cfg' groupStructure
 
 -- | Simplifies the CFG by autopruning impossible edges and various passes on
 -- the PIL statements, like copy propagation and phi var reduction.
 -- It first tries the BranchContext pruner; if this fails, which happens
 -- often due to type inference errors, it calls a non-SMT simplify which uses
 -- constant propagation and can only prune constraints with constants on either side.
-simplify :: OgCfg [Pil.Stmt] -> EventLoop (OgCfg [Pil.Stmt])
+simplify :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
 simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
   Left err -> do
     case err of
@@ -492,13 +490,13 @@ getPoiSearchResults bhash pcfg = do
       -- TODO: cache the cnrCtx
       cnrCtx <- liftIO . CC.calc bhash (ctx ^. #callNodeRatingCtx)
         . CfgA.getCallNodeRatingCtx . BNImporter $ bv
-      let (ogCfg, _) = Cfg.unfoldGroups pcfg
+      let (ogCfg, _) = Grp.unfoldGroups pcfg
           ratings = CfgA.getCallNodeRatings cnrCtx tgt ogCfg
           ratings' = fmap (over _1 $ view #uuid) . HashMap.toList $ ratings
 
           -- Should do we care about the Target function? or just the addr here?
           present = fmap Cfg.getNodeUUID . HashSet.toList
-                    $ Cfg.getNodesContainingAddress (tgt ^. #address) pcfg
+                    $ Grp.getNodesContainingAddress (tgt ^. #address) pcfg
       return . Just $ PoiSearchResults ratings' present
 
 -- | Handles messages incoming from the Binja client.
@@ -555,7 +553,7 @@ handleBinjaEvent = \case
             . SBLogError $ "Error making CFG for function at " <> showHex funcAddr
           Just r -> do
             ctx <- ask
-            cfg <- fmap Cfg.fromCfg . simplify $ r ^. #result
+            cfg <- simplify $ r ^. #result
             (_bid, cid, _snapBranch) <- Db.saveNewCfgAndBranch
               (ctx ^. #clientId)
               (ctx ^. #hostBinaryPath)
@@ -573,11 +571,11 @@ handleBinjaEvent = \case
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
     gcfg <- getCfg cid
     simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
-      case OgCfg.getFullNodeMay cfg (OgCfg.Call callNode) of
+      case Cfg.getFullNodeMay cfg (Cfg.Call callNode) of
         Nothing ->
           logError "Could not find call node in CFG"
           -- TODO: fix issue #160 so we can just send `CallNode ()` to expandCall
-        Just (OgCfg.Call fullCallNode) -> do
+        Just (Cfg.Call fullCallNode) -> do
           let bs = ICfg.mkBuilderState (BNImporter bv)
           targetFunc <- getTargetFunc bv (fromIntegral targetAddr)
 
@@ -606,7 +604,7 @@ handleBinjaEvent = \case
     bhash <- getCfgBndbHash cid
     gcfg <- getCfg cid
     simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
-      case (,) <$> OgCfg.findNodeByUUID startUUID cfg <*> OgCfg.findNodeByUUID endUUID cfg of
+      case (,) <$> Cfg.findNodeByUUID startUUID cfg <*> Cfg.findNodeByUUID endUUID cfg of
         Nothing -> logError "Node or nodes don't exist in CFG"
         Just (fullNode1, fullNode2) -> do
           let cfg' = CfgA.prune (G.Edge fullNode1 fullNode2) cfg
@@ -640,7 +638,7 @@ handleBinjaEvent = \case
     -- prettyPrint gcfg
 
     simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
-      case OgCfg.findNodeByUUID (getStartUUID node') cfg of
+      case Cfg.findNodeByUUID (getStartUUID node') cfg of
         Nothing -> logError "Node doesn't exist in CFG"
         Just fullNode -> if fullNode == cfg ^. #root
           then logError "Cannot remove root node"
@@ -771,7 +769,7 @@ handleBinjaEvent = \case
   BSConstraint constraintMsg' -> case constraintMsg' of
     C.AddConstraint cid nid stmtIndex exprText -> do
       cfg <- getCfg cid
-      case Parse.runParserEof (Parse.mkParserCtx (fst $ Cfg.unfoldGroups cfg)) Parse.parseExpr exprText of
+      case Parse.runParserEof (Parse.mkParserCtx (fst $ Grp.unfoldGroups cfg)) Parse.parseExpr exprText of
         Left err -> do
           logLocalError $ "Error parsing user constraint: " <> err
           sendToBinja . SBConstraint . C.SBInvalidConstraint . C.ParseError $ err
@@ -804,7 +802,7 @@ handleBinjaEvent = \case
     -- group <- createGroup cfg startNode endNode
     -- summaryNode <- createSummaryNode cfg group
     -- cfg' <- substituteGroup cfg group summaryNode
-    let cfg' = Cfg.makeGrouping startNode endNode cfg []
+    let cfg' = Grp.makeGrouping startNode endNode cfg []
     autosaveCfg cid cfg'
       >>= sendCfgAndSnapshots bhash cfg' cid
 
@@ -816,7 +814,7 @@ handleBinjaEvent = \case
     cfg <- getCfg cid
     getNode cfg cid groupNodeId >>= \case
       Cfg.Grouping gnode -> do
-        let cfg' = Cfg.expandGroupingNode gnode cfg
+        let cfg' = Grp.expandGroupingNode gnode cfg
         autosaveCfg cid cfg'
           >>= sendCfgAndSnapshots bhash cfg' cid
       _ -> logError "Cannot expand non-Grouping node"
@@ -842,7 +840,7 @@ getGroupOptions
   -> EventLoop (Maybe GroupOptions)
 getGroupOptions cfg startNode = do
   let startId = Cfg.getNodeUUID startNode
-      terms = HashSet.toList $ Cfg.getPossibleGroupTerms startNode cfg
+      terms = HashSet.toList $ Grp.getPossibleGroupTerms startNode cfg
   logInfo $ "Found " <> show (length terms) <> " possible term nodes for group."
   if null terms
     then return Nothing
@@ -890,7 +888,7 @@ getStmtsAround node' stmtIndex = do
         <> "Adding to end."
     pure $ splitAt (fromIntegral stmtIndex) stmts
 
-printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => OgCfg a -> OgCfg a -> m ()
+printSimplifyStats :: (Eq a, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do
   logLocalInfo . unlines $
     [ ""
