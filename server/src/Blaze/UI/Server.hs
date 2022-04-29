@@ -346,7 +346,8 @@ broadcastGlobalPois st binHash = do
   pois <- flip runReaderT st $ GlobalPoiDb.getPoisOfBinary binHash
   sendToAllWithBinary st binHash . SBPoi . Poi.GlobalPoisOfBinary $ pois
 
--- | Converts grouped CFG into original CFG
+-- | Converts TypeSymCfg with groups into Cfg without groups, updates with f,
+--   and re-groups into TypeSymCfg
 updateCfgM :: (Ord a, Hashable a, Monad m) => (OgCfg a -> m (OgCfg a)) -> Cfg a -> m (Cfg a)
 updateCfgM f cfg = do
   let (ogCfg, groupStructure) = Cfg.unfoldGroups cfg
