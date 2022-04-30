@@ -1,17 +1,18 @@
 module Blaze.UI.Types.Cfg where
 
-import Blaze.UI.Prelude hiding (Symbol)
+import Blaze.UI.Prelude hiding (Symbol, group)
 
 import qualified Blaze.Graph as G
 import Blaze.Pretty (Token, mkTokenizerCtx, runTokenize, TokenizerCtx, pretty', blankTokenizerCtx)
-import Blaze.Types.Cfg.Grouping (
+import Blaze.Types.Cfg (
   CfNode (
     Grouping
   ),
   Cfg (Cfg),
   GroupingNode (GroupingNode),
  )
-import qualified Blaze.Types.Cfg.Grouping as Cfg
+import qualified Blaze.Types.Cfg as Cfg
+import qualified Blaze.Types.Cfg.Grouping as Grp
 import Data.List.Extra (takeEnd)
 import System.Random (Random)
 import Database.Selda.SqlType ( Lit(LCustom)
@@ -44,11 +45,10 @@ type PilTypeInfo = TypeInfo Sym PilVar DeepSymType
 
 type TokenizedTypeInfo = TypeInfo Int Symbol [Token]
 
-data TypeSymCfg = TypeSymCfg
+data TypedCfg = TypedCfg
   { typeInfo :: PilTypeInfo
-  , cfg :: Cfg [TypeSymStmt]
+  , typeSymCfg :: GroupedCfg [TypeSymStmt]
   } deriving (Generic, ToJSON, FromJSON)
-
 
 instance SqlType CfgId where
    mkLit (CfgId x) = LCustom TBlob $ Sql.mkLit x
@@ -80,8 +80,20 @@ tokenizeTypeInfo t = TypeInfo
   , symTypes = transportSymTypes $ t ^. #symTypes
   }
 
-tokenizeTypeSymCfg :: TypeSymCfg -> Cfg [[Token]]
-tokenizeTypeSymCfg (TypeSymCfg tinfo@(TypeInfo vsMap _ _) (Cfg g rootNode nextCtxIndex)) =
+untypeExpr :: TypeSymExpr -> Pil.Expression
+untypeExpr x = Pil.Expression
+  { size = fromIntegral $ x ^. #info . #size
+  , op = fmap untypeExpr $ x ^. #op
+  }
+
+untypeStmt :: TypeSymStmt -> Pil.Stmt
+untypeStmt = fmap untypeExpr
+
+untypeCfg :: TypedCfg -> GroupedCfg [Pil.Stmt]
+untypeCfg = GroupedCfg . fmap (fmap untypeStmt) . _ungroupGroupedCfg . view #typeSymCfg
+
+tokenizeTypedCfg :: TypedCfg -> Cfg [[Token]]
+tokenizeTypedCfg (TypedCfg tinfo@(TypeInfo vsMap _ _) (GroupedCfg (Cfg g rootNode nextCtxIndex))) =
   Cfg
   { graph = G.mapAttrs tokenizeNode' g
     -- TODO: This is busted if root is a group node
@@ -106,7 +118,7 @@ tokenizeTypeSymNode tinfo ctx n = case n of
                -- TODO: There's no need to recurse into the inner CFG for tokenization
                --       This should be tidied up once we have `Cfg a` paramerterized
                --       on node types rather than node data types.
-               (tokenizeTypeSymCfg . TypeSymCfg tinfo $ gn ^. #grouping)
+               (tokenizeTypedCfg . TypedCfg tinfo . GroupedCfg $ gn ^. #grouping)
                (runTokenize ctx <$> startPreview ++ [Pil.Annotation "..."] ++ endPreview))
    where
      startPreview = take 2 $ Cfg.getNodeData startNode
@@ -114,4 +126,32 @@ tokenizeTypeSymNode tinfo ctx n = case n of
   _ -> convert n
  where
    convert = fmap $ fmap (runTokenize ctx)
+
+
+----------------------
+--- Grouping/Ungrouping
+-- TODO: move something like this to Blaze
+
+newtype GroupedCfg a = GroupedCfg { _ungroupGroupedCfg :: (Cfg a) }
+  deriving (Generic)
+  deriving newtype (ToJSON, FromJSON)
+
+data UngroupedCfg a = UngroupedCfg
+  { groupSpec :: Grp.GroupingTree a
+  , cfg :: Cfg a
+  } deriving (Generic, ToJSON, FromJSON)
+  
+ungroup :: (Hashable a, Ord a) => GroupedCfg a -> UngroupedCfg a
+ungroup = uncurry (flip UngroupedCfg) . Grp.unfoldGroups . _ungroupGroupedCfg
+
+group :: (Hashable a, Ord a) => UngroupedCfg a -> GroupedCfg a
+group (UngroupedCfg spec cfg_) = GroupedCfg $ Grp.foldGroups cfg_ spec
+
+withUngrouped :: (Cfg a -> Cfg a) -> UngroupedCfg a -> UngroupedCfg a
+withUngrouped f (UngroupedCfg spec cfg_) = UngroupedCfg spec $ f cfg_
+
+-- | Converts Grouped to Ungrouped, then regroups
+asUngrouped :: (Hashable a, Ord a) => (Cfg a -> Cfg a) -> GroupedCfg a -> GroupedCfg a
+asUngrouped f = group . withUngrouped f . ungroup
+
 

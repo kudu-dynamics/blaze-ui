@@ -7,7 +7,7 @@ import Blaze.UI.Prelude hiding ((:*:))
 import qualified Prelude as P
 import Database.Selda
 import Database.Selda.SQLite
-import Blaze.UI.Types.Cfg (CfgId, TypeSymCfg)
+import Blaze.UI.Types.Cfg (CfgId, TypedCfg)
 import qualified Data.Aeson as Aeson
 import Database.Selda.SqlType ( Lit(LBlob, LCustom)
                               , SqlTypeRep(TBlob)
@@ -46,7 +46,7 @@ data SavedCfg = SavedCfg
   , created :: UTCTime
   , modified :: UTCTime
   , snapshotType :: SnapshotType
-  , cfg :: Blob TypeSymCfg
+  , cfg :: Blob TypedCfg
   } deriving (Generic, SqlRow)
 
 data SnapshotBranch = SnapshotBranch
