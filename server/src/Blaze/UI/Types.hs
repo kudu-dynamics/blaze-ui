@@ -36,11 +36,10 @@ import System.Envy (fromEnv, FromEnv)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import qualified Blaze.Types.Pil.Checker as Ch
-import Blaze.Types.Pil (Stmt)
 import qualified Binja.Function as BNFunc
 import qualified Data.Aeson.Types as Aeson
 import Blaze.Function (Function)
-import Blaze.UI.Types.Cfg (CfgId)
+import Blaze.UI.Types.Cfg (CfgId, TypedCfg, StmtIndex, TokenizedTypeInfo)
 import qualified Blaze.UI.Types.Constraint as C
 import Blaze.Types.Cfg (CallNode)
 import Blaze.Types.Cfg.Grouping (Cfg, CfNode)
@@ -103,7 +102,8 @@ data ServerToBinja = SBLogInfo { message :: Text }
                            , pendingChanges :: Maybe PendingChanges
                            , groupOptions :: Maybe GroupOptions
                            -- TODO: send cfg with text
-                           , cfg :: Cfg [[Token]]
+                           , typeInfo :: TokenizedTypeInfo
+                           , cfg :: Cfg [(Maybe StmtIndex, [Token])]
                            }
 
                    | SBSnapshot { snapshotMsg :: Snapshot.ServerToBinja }
@@ -137,10 +137,10 @@ data BinjaToServer = BSConnect
                      { cfgId :: CfgId
                      , edge :: (CfNode (), CfNode ())
                      }
-                   | BSCfgRemoveNode
-                     { cfgId :: CfgId
-                     , node :: CfNode ()
-                     }
+                   -- | BSCfgRemoveNode
+                   --   { cfgId :: CfgId
+                   --   , node :: CfNode ()
+                   --   }
                    | BSCfgFocus
                      { cfgId :: CfgId
                      , node :: CfNode ()
@@ -268,7 +268,7 @@ data SessionState = SessionState
   , hostBinaryPath :: HostBinaryPath
   , binaryHash :: BinaryHash
   , binaryManager :: BinaryManager
-  , cfgs :: TVar (HashMap CfgId (TVar (Cfg [Stmt])))
+  , cfgs :: TVar (HashMap CfgId (TVar TypedCfg))
   , binjaConns :: TVar BinjaConns
   , eventHandlerThread :: TMVar ThreadId
   , eventHandlerWorkerThreads :: TVar (HashSet ThreadId)

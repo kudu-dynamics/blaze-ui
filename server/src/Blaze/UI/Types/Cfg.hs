@@ -3,7 +3,7 @@ module Blaze.UI.Types.Cfg where
 import Blaze.UI.Prelude hiding (Symbol, group)
 
 import qualified Blaze.Graph as G
-import Blaze.Pretty (Token, mkTokenizerCtx, runTokenize, TokenizerCtx, pretty', blankTokenizerCtx)
+import Blaze.Pretty (Tokenizable, Token, mkTokenizerCtx, runTokenize, TokenizerCtx, pretty', blankTokenizerCtx)
 import Blaze.Types.Cfg (
   CfNode (
     Grouping
@@ -23,9 +23,11 @@ import qualified Database.Selda.SqlType as Sql
 import qualified Blaze.Types.Pil as Pil
 import Blaze.Types.Pil (PilVar, Symbol)
 import qualified Blaze.Types.Pil.Checker as Ch
-import Blaze.Types.Pil.Checker (Sym(Sym), DeepSymType)
+import Blaze.Types.Pil.Checker (Sym(Sym), DeepSymType, TypeReport, UnifyConstraintsError)
 import qualified Data.HashMap.Strict as HashMap
-import qualified Data.HashSet as HashSet
+
+
+type StmtIndex = Int
 
 newtype CfgId = CfgId UUID
   deriving (Eq, Ord, Show, Generic)
@@ -35,19 +37,28 @@ newtype CfgId = CfgId UUID
 type TypeSymExpr = Ch.InfoExpression Ch.SymInfo
 type TypeSymStmt = Pil.Statement TypeSymExpr
 
-data TypeInfo sym pvar stype = TypeInfo
-  { varSymMap :: HashMap pvar sym
-  , varEqMap :: HashMap sym (HashSet sym)
-  , symTypes :: HashMap sym stype
-  } deriving (Generic, ToJSON, FromJSON)
+data TypeInfo pvar stype = TypeInfo
+  { varSymMap :: HashMap pvar Sym
+  , varEqMap :: HashMap Sym (HashSet Sym)
+  , symTypes :: HashMap Sym stype
+  , typeErrors :: [UnifyConstraintsError stype]
+  } deriving (Eq, Ord, Show, Hashable, Generic, ToJSON, FromJSON)
 
-type PilTypeInfo = TypeInfo Sym PilVar DeepSymType
+type TokenizedTypeInfo = TypeInfo Symbol [Token]
 
-type TokenizedTypeInfo = TypeInfo Int Symbol [Token]
+type PilTypeInfo = TypeInfo PilVar DeepSymType
+
+typeInfoFromTypeReport :: TypeReport -> PilTypeInfo
+typeInfoFromTypeReport tr = TypeInfo
+  { varSymMap = tr ^. #varSymMap
+  , varEqMap = tr ^. #varEqMap
+  , symTypes = tr ^. #solutions
+  , typeErrors = tr ^. #errors
+  }
 
 data TypedCfg = TypedCfg
   { typeInfo :: PilTypeInfo
-  , typeSymCfg :: GroupedCfg [TypeSymStmt]
+  , typeSymCfg :: GroupedCfg [(Maybe StmtIndex, TypeSymStmt)]
   } deriving (Generic, ToJSON, FromJSON)
 
 instance SqlType CfgId where
@@ -62,22 +73,21 @@ symToInt (Sym n) = fromIntegral n
 hashMapBimap :: (Hashable k', Eq k') => (k -> k') -> (a -> a') -> HashMap k a -> HashMap k' a'
 hashMapBimap f g = HashMap.fromList . fmap (bimap f g) . HashMap.toList
 
-transportVarSymMap :: HashMap PilVar Sym -> HashMap Symbol Int
-transportVarSymMap = hashMapBimap pretty' symToInt
+transportVarSymMap :: HashMap PilVar Sym -> HashMap Symbol Sym
+transportVarSymMap = HashMap.mapKeys pretty'
 
-transportVarEqMap :: HashMap Sym (HashSet Sym) -> HashMap Int (HashSet Int)
-transportVarEqMap = hashMapBimap symToInt $ HashSet.map symToInt
+transportSymTypes :: HashMap Sym DeepSymType -> HashMap Sym [Token]
+transportSymTypes = HashMap.map tokenize
 
-transportSymTypes :: HashMap Sym DeepSymType -> HashMap Int [Token]
-transportSymTypes = hashMapBimap symToInt tokenize
-  where
-    tokenize = runTokenize blankTokenizerCtx
-                                            
+tokenize :: Tokenizable a => a -> [Token]
+tokenize = runTokenize blankTokenizerCtx
+
 tokenizeTypeInfo :: PilTypeInfo -> TokenizedTypeInfo
 tokenizeTypeInfo t = TypeInfo
   { varSymMap = transportVarSymMap $ t ^. #varSymMap
-  , varEqMap = transportVarEqMap $ t ^. #varEqMap
+  , varEqMap = t ^. #varEqMap
   , symTypes = transportSymTypes $ t ^. #symTypes
+  , typeErrors = fmap (fmap tokenize) $ t ^. #typeErrors
   }
 
 untypeExpr :: TypeSymExpr -> Pil.Expression
@@ -89,27 +99,33 @@ untypeExpr x = Pil.Expression
 untypeStmt :: TypeSymStmt -> Pil.Stmt
 untypeStmt = fmap untypeExpr
 
-untypeCfg :: TypedCfg -> GroupedCfg [Pil.Stmt]
-untypeCfg = GroupedCfg . fmap (fmap untypeStmt) . _ungroupGroupedCfg . view #typeSymCfg
+untypeCfg :: Cfg [(Maybe StmtIndex, TypeSymStmt)] -> Cfg [Pil.Stmt]
+untypeCfg = fmap (fmap $ untypeStmt . snd)
 
-tokenizeTypedCfg :: TypedCfg -> Cfg [[Token]]
-tokenizeTypedCfg (TypedCfg tinfo@(TypeInfo vsMap _ _) (GroupedCfg (Cfg g rootNode nextCtxIndex))) =
+toUnwrappedGroupedPilCfg :: TypedCfg -> Cfg [Pil.Stmt]
+toUnwrappedGroupedPilCfg = untypeCfg .  _unwrapGroupedCfg . view #typeSymCfg
+
+untypeTypedCfg :: TypedCfg -> GroupedCfg [Pil.Stmt]
+untypeTypedCfg = GroupedCfg . toUnwrappedGroupedPilCfg
+
+tokenizeTypedCfg :: TypedCfg -> Cfg [(Maybe StmtIndex, [Token])]
+tokenizeTypedCfg (TypedCfg tinfo@(TypeInfo vsMap _ _ _) (GroupedCfg (Cfg g rootNode nextCtxIndex))) =
   Cfg
   { graph = G.mapAttrs tokenizeNode' g
     -- TODO: This is busted if root is a group node
-  , root = fmap (runTokenize tokenizerCtx) <$> rootNode
+  , root = tokenizeNode' rootNode
   , nextCtxIndex = nextCtxIndex
   }
   where
     tokenizerCtx = mkTokenizerCtx (Just vsMap)
-    tokenizeNode' :: CfNode [TypeSymStmt] -> CfNode [[Token]]
+    tokenizeNode' :: CfNode [(Maybe StmtIndex, TypeSymStmt)] -> CfNode [(Maybe StmtIndex, [Token])]
     tokenizeNode' = tokenizeTypeSymNode tinfo tokenizerCtx
 
 tokenizeTypeSymNode
   :: PilTypeInfo
   -> TokenizerCtx
-  -> CfNode [TypeSymStmt]
-  -> CfNode [[Token]]
+  -> CfNode [(Maybe StmtIndex, TypeSymStmt)]
+  -> CfNode [(Maybe StmtIndex, [Token])]
 tokenizeTypeSymNode tinfo ctx n = case n of
   Grouping gn@(GroupingNode endNode _ (Cfg _ startNode _) _) ->
     Grouping (GroupingNode
@@ -119,20 +135,22 @@ tokenizeTypeSymNode tinfo ctx n = case n of
                --       This should be tidied up once we have `Cfg a` paramerterized
                --       on node types rather than node data types.
                (tokenizeTypedCfg . TypedCfg tinfo . GroupedCfg $ gn ^. #grouping)
-               (runTokenize ctx <$> startPreview ++ [Pil.Annotation "..."] ++ endPreview))
+               ((fmap $ runTokenize ctx) <$> startPreview ++ [(Nothing, Pil.Annotation "...")] ++ endPreview))
    where
      startPreview = take 2 $ Cfg.getNodeData startNode
      endPreview = takeEnd 2 $ Cfg.getNodeData endNode
   _ -> convert n
  where
-   convert = fmap $ fmap (runTokenize ctx)
+   convert :: CfNode [(Maybe StmtIndex, TypeSymStmt)]
+           -> CfNode [(Maybe StmtIndex, [Token])]
+   convert = fmap . fmap . fmap $ runTokenize ctx -- fmaps: node => list => tuple
 
 
 ----------------------
 --- Grouping/Ungrouping
 -- TODO: move something like this to Blaze
 
-newtype GroupedCfg a = GroupedCfg { _ungroupGroupedCfg :: (Cfg a) }
+newtype GroupedCfg a = GroupedCfg { _unwrapGroupedCfg :: (Cfg a) }
   deriving (Generic)
   deriving newtype (ToJSON, FromJSON)
 
@@ -142,10 +160,13 @@ data UngroupedCfg a = UngroupedCfg
   } deriving (Generic, ToJSON, FromJSON)
   
 ungroup :: (Hashable a, Ord a) => GroupedCfg a -> UngroupedCfg a
-ungroup = uncurry (flip UngroupedCfg) . Grp.unfoldGroups . _ungroupGroupedCfg
+ungroup = uncurry (flip UngroupedCfg) . Grp.unfoldGroups . _unwrapGroupedCfg
+
+group_ :: (Hashable a, Ord a) => Grp.GroupingTree a -> Cfg a -> GroupedCfg a
+group_ spec cfg_ = GroupedCfg $ Grp.foldGroups cfg_ spec
 
 group :: (Hashable a, Ord a) => UngroupedCfg a -> GroupedCfg a
-group (UngroupedCfg spec cfg_) = GroupedCfg $ Grp.foldGroups cfg_ spec
+group (UngroupedCfg spec cfg_) = group_ spec cfg_
 
 withUngrouped :: (Cfg a -> Cfg a) -> UngroupedCfg a -> UngroupedCfg a
 withUngrouped f (UngroupedCfg spec cfg_) = UngroupedCfg spec $ f cfg_

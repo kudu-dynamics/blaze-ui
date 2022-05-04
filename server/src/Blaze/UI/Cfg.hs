@@ -3,17 +3,20 @@ module Blaze.UI.Cfg
   , module Exports
   ) where
 
-import Blaze.UI.Prelude
+import Blaze.UI.Prelude hiding (group)
 import qualified Blaze.UI.Types.Cfg as Exports
+import Blaze.UI.Types.Cfg (TypedCfg(TypedCfg), UngroupedCfg, withUngrouped, group_, typeInfoFromTypeReport)
+import qualified Blaze.UI.Types.Cfg as Cfg
 import Blaze.UI.Types (EventLoop)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
-import Blaze.Types.Pil (Stmt)
 import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.Types.Cfg.Grouping (Cfg, CfNode, CfEdge)
 import qualified Blaze.Types.Graph as G
 import qualified Blaze.Types.Cfg as Cfg
-
+import Blaze.Types.Pil.Checker (ConstraintGenError)
+import Blaze.Types.Pil (Stmt)
+import qualified Blaze.Cfg.Checker as Ch
 
 -- | Changes CfgId key in graph cache.
 -- Used whenever an auto-saved cfg is turned into a snapshot.
@@ -29,7 +32,7 @@ changeCfgId oldCid newCid = do
           . HashMap.insert newCid cfg
           $ HashMap.delete oldCid m
 
-addCfg :: CfgId -> Cfg [Stmt] -> EventLoop ()
+addCfg :: CfgId -> TypedCfg -> EventLoop ()
 addCfg cid cfg = do
   cfgMapTVar <- view #cfgs <$> ask
   liftIO . atomically $ do
@@ -47,21 +50,36 @@ removeCfg cid = do
   cfgMapTVar <- view #cfgs
   liftIO . atomically . modifyTVar cfgMapTVar $ HashMap.delete cid
 
-getCfg :: CfgId -> EventLoop (Maybe (Cfg [Stmt]))
+getCfg :: CfgId -> EventLoop (Maybe TypedCfg)
 getCfg cid = do
   cfgMapTVar <- view #cfgs <$> ask
   liftIO . atomically $ do
     m <- readTVar cfgMapTVar
     maybe (return Nothing) (fmap Just . readTVar) $ HashMap.lookup cid m
 
-getRemovedNodes :: Cfg a -> Cfg a -> HashSet (CfNode ())
+getRemovedNodes :: TypedCfg -> TypedCfg -> HashSet (CfNode ())
 getRemovedNodes old new =
-  HashSet.difference (G.nodes $ old ^. #graph) (G.nodes $ new ^. #graph)
-
-getRemovedEdges :: Cfg a -> Cfg a -> HashSet (CfEdge ())
-getRemovedEdges old new = HashSet.difference (f old) (f new)
+  HashSet.difference (G.nodes $ old' ^. #graph) (G.nodes $ new' ^. #graph)
   where
+    old' = Cfg.toUnwrappedGroupedPilCfg old
+    new' = Cfg.toUnwrappedGroupedPilCfg new
+
+getRemovedEdges :: TypedCfg -> TypedCfg -> HashSet (CfEdge ())
+getRemovedEdges old new = HashSet.difference (f old') (f new')
+  where
+    old' = Cfg.toUnwrappedGroupedPilCfg old
+    new' = Cfg.toUnwrappedGroupedPilCfg new
     f = HashSet.fromList . fmap Cfg.fromLEdge . G.edges . view #graph
 
 edgeToUUIDTuple :: CfEdge a -> (UUID, UUID)
 edgeToUUIDTuple e = (Cfg.getNodeUUID $ e ^. #src, Cfg.getNodeUUID $ e ^. #dst)
+
+
+-- checkCfg :: UngroupedCfg [(Maybe StmtIndex, TypeSymStmt)] -> Either ConstraintGenError TypedCfg
+-- checkCfg ucfg = Ch.checkCfg (ucfg ^. #cfg) >>= \(_, tcfg, tr) ->
+--   let tcfg' = fmap (fmap (bimap Just fst)) $ tcfg :: Cfg [(Maybe Cfg.StmtIndex, Cfg.TypeSymStmt)] in
+--     Right $ TypedCfg
+--     { typeInfo = typeInfoFromTypeReport tr
+--     , typeSymCfg = group_ (ucfg ^. #groupSpec) tcfg'
+--     }
+

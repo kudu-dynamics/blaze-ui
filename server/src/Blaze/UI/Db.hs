@@ -8,8 +8,7 @@ import Blaze.UI.Prelude hiding ((:*:), Selector)
 import qualified Prelude as P
 import Blaze.UI.Types.Db as Exports hiding (cfg)
 import Database.Selda
-import Blaze.UI.Types.Cfg (CfgId, TypeSymCfg)
-import Blaze.Types.Cfg (PilCfg)
+import Blaze.UI.Types.Cfg (CfgId, TypedCfg)
 import Data.Time.Clock (getCurrentTime)
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot ( BranchId
@@ -45,7 +44,7 @@ saveNewCfgAndBranch :: MonadDb m
                     -> BndbHash
                     -> Address
                     -> Text
-                    -> TypeSymCfg
+                    -> TypedCfg
                     -> m ( BranchId
                          , CfgId
                          , Snapshot.Branch BranchTree)
@@ -60,7 +59,7 @@ saveNewCfgAndBranch clientId' hpath bhash originFuncAddr' originFuncName' pcfg =
   return (bid, cid, b)
 
 -- | use `saveNewCfgAndBranch` instead
-saveNewCfg_ :: MonadDb m => BranchId -> CfgId -> TypeSymCfg -> SnapshotType -> m ()
+saveNewCfg_ :: MonadDb m => BranchId -> CfgId -> TypedCfg -> SnapshotType -> m ()
 saveNewCfg_ bid cid cfg snaptype = withDb $ do
   utc <- liftIO getCurrentTime
   insert_ cfgTable
@@ -82,7 +81,7 @@ setCfgName cid = setCfgAttr #name cid . Just
 setCfgSnapshotType :: MonadDb m => CfgId -> SnapshotType -> m ()
 setCfgSnapshotType = setCfgAttr #snapshotType
 
-setCfg :: MonadDb m => CfgId -> TypeSymCfg -> m ()
+setCfg :: MonadDb m => CfgId -> TypedCfg -> m ()
 setCfg cid pcfg = withDb $ do
   utc <- liftIO getCurrentTime
   update_ cfgTable
@@ -98,7 +97,7 @@ getSavedCfg cid = withDb $ do
     restrict (cfg ! #cfgId .== literal cid)
     return cfg
 
-getCfg :: MonadDb m => CfgId -> m (Maybe TypeSymCfg)
+getCfg :: MonadDb m => CfgId -> m (Maybe TypedCfg)
 getCfg cid = fmap (view #cfg) <$> getSavedCfg cid >>= \case
   [] -> return Nothing
   [Blob x] -> return . Just $ x

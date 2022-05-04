@@ -25,12 +25,15 @@ import Blaze.Types.Cfg (Cfg, PilCfg, CfNode)
 import qualified Blaze.Cfg.Analysis as CfgA
 import qualified Blaze.Pil.Analysis as PilA
 import qualified Blaze.UI.Cfg as CfgUI
+import qualified Blaze.UI.Types.Cfg as CfgUI
+import Blaze.UI.Types.Cfg (TypedCfg(TypedCfg), StmtIndex, TypeSymStmt, tokenizeTypeInfo, tokenizeTypedCfg)
 import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
 import qualified Blaze.Cfg.Interprocedural as ICfg
 import Blaze.Pretty (PIndexedStmts (..), mkTokenizerCtx, prettyIndexedStmts', pretty', showHex, pretty)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
+import Blaze.Cfg.Checker (checkCfg)
 import qualified Blaze.UI.Types.Constraint as C
 import qualified Blaze.UI.Types.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.Cfg.Snapshot (BranchId, Branch, BranchTree, SnapshotType)
@@ -38,7 +41,7 @@ import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Blaze.UI.Db as Db
-import Blaze.UI.Types.Cfg (CfgId)
+import Blaze.UI.Types.Cfg (CfgId, TypedCfg, UngroupedCfg, GroupedCfg)
 import qualified Blaze.UI.BinaryManager as BM
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session ( SessionId
@@ -205,37 +208,39 @@ getCfgType cid = Db.getCfgType cid >>= \case
 -- | Saves modified cfg. If CfgId is immutable, it creates autosave
 -- and returns Just new autosave id.
 -- If already autosave, it just saves and returns Nothing
-autosaveCfg :: CfgId -> PilCfg -> EventLoop (Maybe CfgId)
-autosaveCfg cid pcfg = getCfgType cid >>= \case
+autosaveCfg :: CfgId -> TypedCfg -> EventLoop (Maybe CfgId)
+autosaveCfg cid tcfg = getCfgType cid >>= \case
   Snapshot.Autosave -> do
-    setCfg cid pcfg
+    setCfg cid tcfg
     return Nothing
   Snapshot.Immutable -> do
     autoCid <- liftIO randomIO
     bid <- getBranchId cid
     Db.modifyBranchTree bid $ Snapshot.addChild cid autoCid
-    CfgUI.addCfg autoCid pcfg
-    Db.saveNewCfg_ bid autoCid pcfg Snapshot.Autosave
+    CfgUI.addCfg autoCid tcfg
+    Db.saveNewCfg_ bid autoCid tcfg Snapshot.Autosave
     return $ Just autoCid
 
 sendCfg :: BndbHash
-        -> PilCfg
+        -> TypedCfg
         -> CfgId
         -> Maybe PoiSearchResults
         -> Maybe PendingChanges
         -> Maybe GroupOptions
         -> EventLoop ()
-sendCfg bhash cfg cid poiSearch changes groupOptions = do
-  sendToBinja . SBCfg cid bhash poiSearch changes groupOptions . convertPilCfg $ cfg
+sendCfg bhash tcfg cid poiSearch changes groupOptions
+  = sendToBinja
+  . SBCfg cid bhash poiSearch changes groupOptions (tokenizeTypeInfo $ tcfg ^. #typeInfo)
+  $ tokenizeTypedCfg tcfg
 
 sendCfgWithCallRatings :: BndbHash
-                       -> PilCfg
+                       -> TypedCfg
                        -> CfgId
                        -> Maybe GroupOptions
                        -> EventLoop ()
-sendCfgWithCallRatings bhash cfg cid groupOptions = do
-  poiSearch <- getPoiSearchResults bhash cfg
-  sendCfg bhash cfg cid poiSearch Nothing groupOptions
+sendCfgWithCallRatings bhash tcfg cid groupOptions = do
+  poiSearch <- withCfg tcfg $ getPoiSearchResults bhash
+  sendCfg bhash tcfg cid poiSearch Nothing groupOptions
 
 refreshActiveCfg :: CfgId -> EventLoop ()
 refreshActiveCfg cid = do
@@ -245,14 +250,14 @@ refreshActiveCfg cid = do
 
 -- | Used after `autosaveCfg`. If second CfgId is Nothing, just send first.
 -- If second is Just, send new CfgId. In both cases, send new snapshot tree.
-sendCfgAndSnapshots :: BndbHash -> PilCfg -> CfgId -> Maybe CfgId -> EventLoop ()
-sendCfgAndSnapshots bhash pcfg cid newCid = do
-  sendCfgWithCallRatings bhash pcfg (fromMaybe cid newCid) Nothing
+sendCfgAndSnapshots :: BndbHash -> TypedCfg -> CfgId -> Maybe CfgId -> EventLoop ()
+sendCfgAndSnapshots bhash tcfg cid newCid = do
+  sendCfgWithCallRatings bhash tcfg (fromMaybe cid newCid) Nothing
   sendLatestClientSnapshots
 
 -- | Sends the old ICFG with the nodes and edges that will be removed.
 -- This allows a user to confirm or deny changes
-sendDiffCfg :: BndbHash -> CfgId -> PilCfg -> PilCfg -> EventLoop ()
+sendDiffCfg :: BndbHash -> CfgId -> TypedCfg -> TypedCfg -> EventLoop ()
 sendDiffCfg bhash cid old new = do
   CfgUI.addCfg cid new
   if isEmptyChanges changes then
@@ -272,20 +277,20 @@ sendDiffCfg bhash cid old new = do
                     $ CfgUI.getRemovedEdges old new
 
 -- | Stores the Cfg to the cache and database.
-setCfg :: CfgId -> PilCfg -> EventLoop ()
-setCfg cid pcfg = do
-  CfgUI.addCfg cid pcfg
-  Db.setCfg cid pcfg
+setCfg :: CfgId -> TypedCfg -> EventLoop ()
+setCfg cid tcfg = do
+  CfgUI.addCfg cid tcfg
+  Db.setCfg cid tcfg
 
 -- | Tries to getCfg from in-memory state. If that fails, try db.
 -- if db has it, add it to cache
-getCfg :: CfgId -> EventLoop PilCfg
+getCfg :: CfgId -> EventLoop TypedCfg
 getCfg cid = CfgUI.getCfg cid >>= \case
   Just pcfg -> return pcfg
   Nothing -> getStoredCfg cid
 
 -- | Tries to getCfg from db. if db has it, add it to cache
-getStoredCfg :: CfgId -> EventLoop PilCfg
+getStoredCfg :: CfgId -> EventLoop TypedCfg
 getStoredCfg cid = Db.getCfg cid >>= \case
     Nothing -> throwError . EventLoopError $ "Could not find existing CFG with id " <> show cid
     Just pcfg -> do
@@ -344,20 +349,57 @@ broadcastGlobalPois st binHash = do
   pois <- flip runReaderT st $ GlobalPoiDb.getPoisOfBinary binHash
   sendToAllWithBinary st binHash . SBPoi . Poi.GlobalPoisOfBinary $ pois
 
--- | Converts TypeSymCfg with groups into Cfg without groups, updates with f,
---   and re-groups into TypeSymCfg
-updateGroupedCfgM :: (Ord a, Hashable a, Monad m) => (Cfg a -> m (Cfg a)) -> Cfg a-> m (Cfg a)
-updateGroupedCfgM f gcfg = do
-  let (ogCfg, groupStructure) = Grp.unfoldGroups gcfg
-  cfg' <- f ogCfg
-  return $ Grp.foldGroups cfg' groupStructure
+-- -- | Converts TypedCfg with groups into Cfg without groups, updates with f,
+-- --   and re-groups into TypedCfg
+-- updateGroupedCfgM :: (Ord a, Hashable a, Monad m) => (Cfg a -> m (Cfg a)) -> Cfg a-> m (Cfg a)
+-- updateGroupedCfgM f gcfg = do
+--   let (ogCfg, groupStructure) = Grp.unfoldGroups gcfg
+--   cfg' <- f ogCfg
+--   return $ Grp.foldGroups cfg' groupStructure
+
+withCfg :: TypedCfg -> (Cfg [Stmt] -> EventLoop a) -> EventLoop a
+withCfg tcfg f = f cfg
+  where
+    ucfg = CfgUI.ungroup $ tcfg ^. #typeSymCfg
+    cfg = CfgUI.untypeCfg $ ucfg ^. #cfg
+
+mkTypedCfg
+  :: Maybe (Grp.GroupingTree [(Maybe StmtIndex, TypeSymStmt)])
+  -> Cfg [Stmt]
+  -> EventLoop TypedCfg
+mkTypedCfg mgspec cfg = case checkCfg cfg of
+    Left err -> logError $ "Error typechecking cfg: " <> show err
+    Right (_, typeSymedCfg, tr) -> do
+      -- Cfg [(Int, Statement (Ch.InfoExpression (Ch.SymInfo, Maybe Ch.DeepSymType)))]
+      let typeSymedCfg' = fmap (fmap (bimap Just (fmap $ fmap fst))) typeSymedCfg :: Cfg [(Maybe StmtIndex, TypeSymStmt)]
+      return $ TypedCfg
+        { CfgUI.typeInfo = CfgUI.typeInfoFromTypeReport tr
+        , CfgUI.typeSymCfg =  maybe (CfgUI.GroupedCfg typeSymedCfg') (`CfgUI.group_` typeSymedCfg') mgspec
+        }
+
+updateCfg :: TypedCfg -> (Cfg [Stmt] -> EventLoop (Cfg [Stmt])) -> EventLoop TypedCfg
+updateCfg tcfg f = do
+  let ucfg = CfgUI.ungroup $ tcfg ^. #typeSymCfg
+      cfg = CfgUI.untypeCfg $ ucfg ^. #cfg
+  cfg' <- f cfg
+  mkTypedCfg (Just $ ucfg ^. #groupSpec) cfg'
+  -- case checkCfg cfg' of
+  --   Left err -> logError $ "Error typechecking cfg: " <> show err
+  --   Right (_, typeSymedCfg, tr) -> do
+  --     -- Cfg [(Int, Statement (Ch.InfoExpression (Ch.SymInfo, Maybe Ch.DeepSymType)))]
+  --     let typeSymedCfg' = fmap (fmap (bimap Just (fmap $ fmap fst))) typeSymedCfg :: Cfg [(Maybe StmtIndex, TypeSymStmt)]
+  --     return $ TypedCfg
+  --       { CfgUI.typeInfo = CfgUI.typeInfoFromTypeReport tr
+  --       , CfgUI.typeSymCfg = CfgUI.group_ (ucfg ^. #groupSpec) typeSymedCfg'
+  --       }
 
 -- | Simplifies the CFG by autopruning impossible edges and various passes on
 -- the PIL statements, like copy propagation and phi var reduction.
 -- It first tries the BranchContext pruner; if this fails, which happens
 -- often due to type inference errors, it calls a non-SMT simplify which uses
 -- constant propagation and can only prune constraints with constants on either side.
-simplify :: TypeSymCfg -> EventLoop TypeSymCfg
+-- Assumes 'cfg' is ungrouped.
+simplify :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
 simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
   Left err -> do
     case err of
@@ -368,7 +410,7 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
           , ""
           , cs $ pshow ("errors" :: Text, tr ^. #errors)
           , ""
-          , pretty (mkTokenizerCtx cfg) . PIndexedStmts $ tr ^. #symTypeStmts
+          , pretty (mkTokenizerCtx . Just $ tr ^. #varSymMap) . PIndexedStmts $ tr ^. #symTypeStmts
           , "-----------------------------------------------------------------------"
           ]
       _ -> logLocalError . show $ err
@@ -393,8 +435,46 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
     where
       nonEmptyWarns = filter (not . null . view #warnings) warns
 
-simplify_ :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
-simplify_ = updateCfgM simplify
+
+-- simplify :: UngroupedCfg [Stmt] -> EventLoop TypedCfg
+-- simplify ucfg = liftIO (GSolver.simplify $ ucfg ^. #cfg) >>= \case
+--   Left err -> do
+--     case err of
+--       GSolver.SolverError tr _ -> liftIO $ do
+--         logLocalInfo . unlines $
+--           [ ""
+--           , "------------------------Type Checking Cfg-------------------------"
+--           , ""
+--           , cs $ pshow ("errors" :: Text, tr ^. #errors)
+--           , ""
+--           , pretty (mkTokenizerCtx cfg) . PIndexedStmts $ tr ^. #symTypeStmts
+--           , "-----------------------------------------------------------------------"
+--           ]
+--       _ -> logLocalError . show $ err
+--     return $ CfgA.simplify $ ucfg ^. #cfg
+--     case 
+--     return cfg'
+--   Right (warns, cfg') -> case nonEmptyWarns of
+--     [] -> return cfg'
+--     xs -> do
+--       logLocalInfo "\n\n==================== Solver Errors ======================\n"
+--       forM_ xs $ \warn -> do
+--         logLocalInfo "\n-------------- type report -----------------\n"
+--         let tr = warn ^. #typeReport
+--         logLocalInfo . unlines $
+--           [ cs $ pshow ("errors" :: Text, tr ^. #errors)
+--           , pretty' $ tr ^. #errorConstraints
+--           , ""
+--           , pretty' . PIndexedStmts $ tr ^. #symTypeStmts
+--           ]
+--         logLocalInfo "\n-------------- solver errors -----------------\n"
+--         logLocalInfo . cs . pshow $ warn ^. #warnings
+--       return cfg'
+--     where
+--       nonEmptyWarns = filter (not . null . view #warnings) warns
+
+-- simplify_ :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
+-- simplify_ = updateCfgM simplify
 
 ------------------------------------------
 --- main event handler
@@ -555,23 +635,24 @@ handleBinjaEvent = \case
           Just r -> do
             ctx <- ask
             cfg <- simplify $ r ^. #result
+            tcfg <- mkTypedCfg Nothing cfg
             (_bid, cid, _snapBranch) <- Db.saveNewCfgAndBranch
               (ctx ^. #clientId)
               (ctx ^. #hostBinaryPath)
               bhash
               (func ^. #address)
               (func ^. #name)
-              cfg
-            CfgUI.addCfg cid cfg
+              tcfg
+            CfgUI.addCfg cid tcfg
             sendLatestSnapshots
-            sendCfgWithCallRatings bhash cfg cid Nothing
+            sendCfgWithCallRatings bhash tcfg cid Nothing
         debug "Created new branch and added auto-cfg."
 
   BSCfgExpandCall cid callNode targetAddr -> do
     (bv, bhash) <- getCfgBinaryView cid
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
-    gcfg <- getCfg cid
-    simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
+    tcfg <- getCfg cid
+    simplifiedCfg <- updateCfg tcfg $ \cfg -> do
       case Cfg.getFullNodeMay cfg (Cfg.Call callNode) of
         Nothing ->
           logError "Could not find call node in CFG"
@@ -603,8 +684,8 @@ handleBinjaEvent = \case
     debug "Binja remove branch"
     -- TODO: just get the bhash since bv isn't used
     bhash <- getCfgBndbHash cid
-    gcfg <- getCfg cid
-    simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
+    tcfg <- getCfg cid
+    simplifiedCfg <- updateCfg tcfg $ \cfg -> do
       case (,) <$> Cfg.findNodeByUUID startUUID cfg <*> Cfg.findNodeByUUID endUUID cfg of
         Nothing -> logError "Node or nodes don't exist in CFG"
         Just (fullNode1, fullNode2) -> do
@@ -612,33 +693,31 @@ handleBinjaEvent = \case
           simplifiedCfg <- simplify cfg'
           printSimplifyStats cfg simplifiedCfg
           return simplifiedCfg
-    sendDiffCfg bhash cid gcfg simplifiedCfg
+    sendDiffCfg bhash cid tcfg simplifiedCfg
 
-  BSCfgRemoveNode cid node' -> do
-    debug "Binja remove node"
-    bhash <- getCfgBndbHash cid
-    cfg <- getCfg cid
-    case Cfg.getFullNodeMay cfg node' of
-      Nothing -> sendToBinja
-        . SBLogError $ "Node doesn't exist in CFG"
-      Just fullNode -> if fullNode == cfg ^. #root
-        then sendToBinja $ SBLogError "Cannot remove root node"
-        else do
-          let cfg' = G.removeNode fullNode cfg
-          simplifiedCfg <- flip updateCfgM cfg' $ \cfg'' -> do
-            simplifiedCfg <- simplify cfg''
-            printSimplifyStats cfg'' simplifiedCfg
-            return simplifiedCfg
-          sendDiffCfg bhash cid cfg simplifiedCfg
+  -- BSCfgRemoveNode cid node' -> do
+  --   debug "Binja remove node"
+  --   bhash <- getCfgBndbHash cid
+  --   cfg <- getCfg cid
+  --   case Cfg.getFullNodeMay cfg node' of
+  --     Nothing -> sendToBinja
+  --       . SBLogError $ "Node doesn't exist in CFG"
+  --     Just fullNode -> if fullNode == cfg ^. #root
+  --       then sendToBinja $ SBLogError "Cannot remove root node"
+  --       else do
+  --         let cfg' = G.removeNode fullNode cfg
+  --         simplifiedCfg <- flip updateCfgM cfg' $ \cfg'' -> do
+  --           simplifiedCfg <- simplify cfg''
+  --           printSimplifyStats cfg'' simplifiedCfg
+  --           return simplifiedCfg
+  --         sendDiffCfg bhash cid cfg simplifiedCfg
 
   BSCfgFocus cid node' -> do
     debug "Binja Focus"
     bhash <- getCfgBndbHash cid
-    gcfg <- getCfg cid
+    tcfg <- getCfg cid
 
-    -- prettyPrint gcfg
-
-    simplifiedCfg <- flip updateCfgM gcfg $ \cfg -> do
+    simplifiedCfg <- updateCfg tcfg $ \cfg -> do
       case Cfg.findNodeByUUID (getStartUUID node') cfg of
         Nothing -> logError "Node doesn't exist in CFG"
         Just fullNode -> if fullNode == cfg ^. #root
@@ -649,7 +728,7 @@ handleBinjaEvent = \case
             printSimplifyStats cfg cfg'
             return simplifiedCfg
 
-    sendDiffCfg bhash cid gcfg simplifiedCfg
+    sendDiffCfg bhash cid tcfg simplifiedCfg
 
   BSCfgConfirmChanges cid ->
     CfgUI.getCfg cid >>= \case
@@ -769,18 +848,20 @@ handleBinjaEvent = \case
 
   BSConstraint constraintMsg' -> case constraintMsg' of
     C.AddConstraint cid nid stmtIndex exprText -> do
-      cfg <- getCfg cid
-      case Parse.runParserEof (Parse.mkParserCtx (fst $ Grp.unfoldGroups cfg)) Parse.parseExpr exprText of
-        Left err -> do
-          logLocalError $ "Error parsing user constraint: " <> err
-          sendToBinja . SBConstraint . C.SBInvalidConstraint . C.ParseError $ err
-          -- TODO: handle above message directly in binja, maybe remove below
-          logWarn $ "Parse Error:\n" <> err
-        Right expr -> do
-          cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Constraint . Pil.ConstraintOp $ expr)
-          simplifiedCfg <- simplify_ cfg'
-          bhash <- getCfgBndbHash cid
-          sendDiffCfg bhash cid cfg' simplifiedCfg
+      tcfg <- getCfg cid
+      simplifiedCfg <- updateCfg tcfg $ \cfg -> do
+        case Parse.runParserEof (Parse.mkParserCtx cfg) Parse.parseExpr exprText of
+          Left err -> do
+            logLocalError $ "Error parsing user constraint: " <> err
+            sendToBinja . SBConstraint . C.SBInvalidConstraint . C.ParseError $ err
+            -- TODO: handle above message directly in binja, maybe remove below
+            logError $ "Parse Error:\n" <> err
+          Right expr -> do
+          
+            cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Constraint . Pil.ConstraintOp $ expr)
+            simplify cfg'
+      bhash <- getCfgBndbHash cid
+      sendDiffCfg bhash cid tcfg simplifiedCfg
 
   BSComment cid nid stmtIndex comment' -> do
     cfg <- getCfg cid
