@@ -96,7 +96,7 @@ library:
   - -Wincomplete-uni-patterns
   - -Wredundant-constraints
   - -j4
-  - -O0
+  - -O2
   source-dirs:
   - src
   exposed-modules:
@@ -146,7 +146,7 @@ tests:
     ghc-options:
     - -Wall
     - -j4
-    - -O0
+    - -O2
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N

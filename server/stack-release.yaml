@@ -2,12 +2,12 @@ resolver: nightly-2022-04-28
 compiler: ghc-9.2.2
 
 packages:
-  - ../../binary-analysis
-  - ../../binaryninja-haskell
-  - ../../blaze
   - .
   
 extra-deps:
+  - ../../blaze
+  - ../../binaryninja-haskell
+  - ../../binary-analysis
   - git: https://github.com/protolude/protolude
     commit: 3e249724fd0ead27370c8c297b1ecd38f92cbd5b
   - direct-sqlite-2.3.26@sha256:04e835402f1508abca383182023e4e2b9b86297b8533afbd4e57d1a5652e0c23,3718
@@ -19,5 +19,3 @@ extra-deps:
 allow-newer: true
 
 rebuild-ghc-options: true
-ghc-options:
-  "$locals": -O0
