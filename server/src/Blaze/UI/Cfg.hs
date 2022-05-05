@@ -11,12 +11,10 @@ import Blaze.UI.Types (EventLoop)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import Blaze.UI.Types.Cfg (CfgId)
-import Blaze.Types.Cfg.Grouping (Cfg, CfNode, CfEdge)
+import Blaze.Types.Cfg.Grouping (CfNode, CfEdge)
 import qualified Blaze.Types.Graph as G
 import qualified Blaze.Types.Cfg as Cfg
-import Blaze.Types.Pil.Checker (ConstraintGenError)
-import Blaze.Types.Pil (Stmt)
-import qualified Blaze.Cfg.Checker as Ch
+
 
 -- | Changes CfgId key in graph cache.
 -- Used whenever an auto-saved cfg is turned into a snapshot.

@@ -41,7 +41,7 @@ import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Blaze.UI.Db as Db
-import Blaze.UI.Types.Cfg (CfgId, TypedCfg, UngroupedCfg, GroupedCfg)
+import Blaze.UI.Types.Cfg (CfgId)
 import qualified Blaze.UI.BinaryManager as BM
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session ( SessionId
@@ -377,21 +377,22 @@ mkTypedCfg mgspec cfg = case checkCfg cfg of
         , CfgUI.typeSymCfg =  maybe (CfgUI.GroupedCfg typeSymedCfg') (`CfgUI.group_` typeSymedCfg') mgspec
         }
 
-updateCfg :: TypedCfg -> (Cfg [Stmt] -> EventLoop (Cfg [Stmt])) -> EventLoop TypedCfg
-updateCfg tcfg f = do
+updateCfg_ :: TypedCfg -> (Cfg [Stmt] -> EventLoop (a, Cfg [Stmt])) -> EventLoop (a, TypedCfg)
+updateCfg_ tcfg f = do
   let ucfg = CfgUI.ungroup $ tcfg ^. #typeSymCfg
       cfg = CfgUI.untypeCfg $ ucfg ^. #cfg
-  cfg' <- f cfg
-  mkTypedCfg (Just $ ucfg ^. #groupSpec) cfg'
-  -- case checkCfg cfg' of
-  --   Left err -> logError $ "Error typechecking cfg: " <> show err
-  --   Right (_, typeSymedCfg, tr) -> do
-  --     -- Cfg [(Int, Statement (Ch.InfoExpression (Ch.SymInfo, Maybe Ch.DeepSymType)))]
-  --     let typeSymedCfg' = fmap (fmap (bimap Just (fmap $ fmap fst))) typeSymedCfg :: Cfg [(Maybe StmtIndex, TypeSymStmt)]
-  --     return $ TypedCfg
-  --       { CfgUI.typeInfo = CfgUI.typeInfoFromTypeReport tr
-  --       , CfgUI.typeSymCfg = CfgUI.group_ (ucfg ^. #groupSpec) typeSymedCfg'
-  --       }
+  (s, cfg') <- f cfg
+  (s,) <$>  mkTypedCfg (Just $ ucfg ^. #groupSpec) cfg'
+  
+updateCfg :: TypedCfg -> (Cfg [Stmt] -> EventLoop (Cfg [Stmt])) -> EventLoop TypedCfg
+updateCfg tcfg f = fmap snd . updateCfg_ tcfg $ (fmap ((),)) <$> f
+
+-- updateCfg :: TypedCfg -> (Cfg [Stmt] -> EventLoop (Cfg [Stmt])) -> EventLoop TypedCfg
+-- updateCfg tcfg f = do
+--   let ucfg = CfgUI.ungroup $ tcfg ^. #typeSymCfg
+--       cfg = CfgUI.untypeCfg $ ucfg ^. #cfg
+--   cfg' <- f cfg
+--   mkTypedCfg (Just $ ucfg ^. #groupSpec) cfg'
 
 -- | Simplifies the CFG by autopruning impossible edges and various passes on
 -- the PIL statements, like copy propagation and phi var reduction.
@@ -864,42 +865,48 @@ handleBinjaEvent = \case
       sendDiffCfg bhash cid tcfg simplifiedCfg
 
   BSComment cid nid stmtIndex comment' -> do
-    cfg <- getCfg cid
-    cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Annotation comment')
+    tcfg <- getCfg cid
+    tcfg' <- updateCfg tcfg $ \cfg -> insertStmt cfg cid nid stmtIndex (Pil.Annotation comment')
     bhash <- getCfgBndbHash cid
-    sendDiffCfg bhash cid cfg' cfg'
+    sendCfg bhash tcfg' cid Nothing Nothing Nothing
 
   BSGroupStart cid nid -> do
     bhash <- getCfgBndbHash cid
-    cfg <- getCfg cid
-    startNode <- getNode cfg cid nid
-    groupOptions <- getGroupOptions cfg startNode
-    sendCfgWithCallRatings bhash cfg cid groupOptions
+    tcfg <- getCfg cid
+
+    (groupOptions, tcfg') <- updateCfg_ tcfg $ \cfg -> do
+      startNode <- getNode cfg cid nid
+      groupOptions <- getGroupOptions cfg startNode
+      return (groupOptions, cfg)
+    sendCfgWithCallRatings bhash tcfg' cid groupOptions
 
   BSGroupDefine cid startId endId -> do
     bhash <- getCfgBndbHash cid
-    cfg <- getCfg cid
-    startNode <- getNode cfg cid startId
-    endNode <- getNode cfg cid endId
-    -- group <- createGroup cfg startNode endNode
-    -- summaryNode <- createSummaryNode cfg group
-    -- cfg' <- substituteGroup cfg group summaryNode
-    let cfg' = Grp.makeGrouping startNode endNode cfg []
-    autosaveCfg cid cfg'
-      >>= sendCfgAndSnapshots bhash cfg' cid
+    tcfg <- getCfg cid
+    tcfg' <- updateCfg tcfg $ \cfg -> do
+      startNode <- getNode cfg cid startId
+      endNode <- getNode cfg cid endId
+      -- group <- createGroup cfg startNode endNode
+      -- summaryNode <- createSummaryNode cfg group
+      -- cfg' <- substituteGroup cfg group summaryNode
+      return $ Grp.makeGrouping startNode endNode cfg []
+      
+    autosaveCfg cid tcfg'
+      >>= sendCfgAndSnapshots bhash tcfg' cid
 
     -- sendCfgWithCallRatings bhash cfg' cid Nothing
 
   BSGroupExpand cid groupNodeId -> do
     -- logError "Group expand not yet implemented."
     bhash <- getCfgBndbHash cid
-    cfg <- getCfg cid
-    getNode cfg cid groupNodeId >>= \case
-      Cfg.Grouping gnode -> do
-        let cfg' = Grp.expandGroupingNode gnode cfg
-        autosaveCfg cid cfg'
-          >>= sendCfgAndSnapshots bhash cfg' cid
-      _ -> logError "Cannot expand non-Grouping node"
+    tcfg <- getCfg cid
+    tcfg' <- updateCfg tcfg $ \cfg -> do
+      getNode cfg cid groupNodeId >>= \case
+        Cfg.Grouping gnode -> return $ Grp.expandGroupingNode gnode cfg
+        _ -> logError "Cannot expand non-Grouping node"
+    autosaveCfg cid tcfg'
+      >>= sendCfgAndSnapshots bhash tcfg' cid
+
 
 insertStmt ::
   (Eq a, Hashable a) =>
