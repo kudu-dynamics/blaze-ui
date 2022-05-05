@@ -1,32 +1,36 @@
+.PHONY: build help test copy-tests hlint docs clean
+
+BUILD_TYPE ?= dev
+STACK_OPTIONS ?=
+STACK_BUILD_OPTIONS ?=
+STACK_HADDOCK_OPTIONS ?=
+
+stack_options_dev := $(STACK_OPTIONS)
+stack_options_release := --stack-yaml stack-release.yaml $(STACK_OPTIONS)
+stack_options := $(stack_options_$(BUILD_TYPE))
+
 stackage_snapshot := $(shell grep -oE '^resolver: .*$$' stack.yaml | sed -E -e 's/resolver:\s*//' -e 's/\s*$$//')
 haddock_remote := https://www.stackage.org/haddock/${stackage_snapshot}/
 
-# HADDOCK_ARGS := --no-haddock-hyperlink-source
-HADDOCK_ARGS :=
-STACK_OPTIONS ?=
-
 # Ideally we'd include all of our projects but this creates too large an artifact (>100MB) for our gitlab pages instance
 # HADDOCK_CP_COMMAND := cp -ar $$(stack path --haddock ${HADDOCK_ARGS} --local-doc-root)/{binary-analysis-*,binaryninja-*,blaze-*,blaze-ui-server-*,doc-index*,index.html,*.css,*.js,*.png} docs/
-HADDOCK_CP_COMMAND := cp -ar $$(stack path --haddock ${HADDOCK_ARGS} --local-doc-root)/{blaze-*,blaze-ui-server-*,doc-index*,index.html,*.css,*.js,*.png} docs/
-
-.PHONY: build optim help test submodule-init submodule-update hlint docs
+HADDOCK_CP_COMMAND := cp -ar $$(stack $(stack_options) path --haddock ${STACK_HADDOCK_OPTIONS} --local-doc-root)/{blaze-*,blaze-ui-server-*,doc-index*,index.html,*.css,*.js,*.png} docs/
 
 build:
-	stack build --test --no-run-tests --fast ${STACK_OPTIONS}
-
-optim:
-	stack clean
-	$(MAKE) -C ../blaze optim
-	stack build --test --no-run-tests --ghc-options=-O2 ${STACK_OPTIONS}
+	stack $(stack_options) build --test --no-run-tests $(STACK_BUILD_OPTIONS)
 
 test: build
-	.ci/scripts/run_test.py $$(stack path --dist-dir)/build/blaze-server-test/blaze-server-test
+	../.ci/scripts/run_test.py $$(stack $(stack_options) path --dist-dir)/build/blaze-server-test/blaze-server-test
+
+copy-tests: build
+	if ! [ -d "$${TEST_BIN_DEST_DIR}" ]; then echo "TEST_BIN_DEST_DIR does not exist or is not a directory" >&2; exit 2; fi
+	cp $$(stack $(stack_options) path --dist-dir)/build/blaze-server-test/blaze-server-test "$${TEST_BIN_DEST_DIR}"
 
 hlint:
 	hlint src test
 
 docs:
-	stack haddock ${HADDOCK_ARGS}
+	stack $(stack_options) haddock $(STACK_HADDOCK_OPTIONS)
 	rm -rf docs/
 	mkdir -p docs
 	bash -c 'shopt -s nullglob && ${HADDOCK_CP_COMMAND}'
@@ -35,3 +39,6 @@ docs:
 		while read d; do \
 			find docs/ -name '*.html' -type f -exec sed -i 's|<a href="'"${haddock_remote}$$d"'/docs|<a href="../'"$$d"'|g' {} \; ; \
 		done
+
+clean:
+	stack $(stack_options) clean

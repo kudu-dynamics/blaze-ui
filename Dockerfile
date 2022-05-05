@@ -1,6 +1,9 @@
 ARG BLAZE_IMAGE=${CI_REGISTRY}/blaze/blaze/blaze:latest
 
 FROM ${BLAZE_IMAGE} as main
+ARG BUILD_TYPE=dev
+ARG STACK_BUILD_OPTIONS=
+
 RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
     echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 RUN --mount=type=cache,id=blaze-apt,target=/var/cache/apt,sharing=locked \
@@ -11,7 +14,7 @@ RUN --mount=type=cache,id=blaze-apt,target=/var/cache/apt,sharing=locked \
 
 # Copy project definition for building dependencies
 COPY \
-    server/stack.yaml \
+    server/stack*.yaml \
     server/package.yaml \
     server/Makefile \
     /blaze/build/blaze-ui/server/
@@ -25,7 +28,10 @@ RUN --mount=type=cache,id=blaze-stackroot,target=/root/.stack \
     --mount=type=cache,id=blazeui-blaze-stackwork,target=/blaze/build/blaze/.stack-work \
     --mount=type=cache,id=blazeui-blazeui-stackwork,target=/blaze/build/blaze-ui/server/.stack-work \
     cd server && \
-    STACK_OPTIONS="--only-dependencies --ghc-options=-fdiagnostics-color=always" make
+    make \
+        STACK_BUILD_OPTIONS="${STACK_BUILD_OPTIONS} --only-dependencies" \
+        BUILD_TYPE="${BUILD_TYPE}" \
+        build
 
 # Copy and build
 COPY server/ /blaze/build/blaze-ui/server
@@ -35,8 +41,11 @@ RUN --mount=type=cache,id=blaze-stackroot,target=/root/.stack \
     --mount=type=cache,id=blazeui-blaze-stackwork,target=/blaze/build/blaze/.stack-work \
     --mount=type=cache,id=blazeui-blazeui-stackwork,target=/blaze/build/blaze-ui/server/.stack-work \
     cd server && \
-    STACK_OPTIONS="--copy-bins --local-bin-path /blaze/bin --ghc-options=-fdiagnostics-color=always" make && \
-    cp $(stack path --dist-dir)/build/blaze-server-test/blaze-server-test ~/.local/bin
+    make \
+        STACK_BUILD_OPTIONS="${STACK_BUILD_OPTIONS} --copy-bins --local-bin-path /blaze/bin" \
+        BUILD_TYPE="${BUILD_TYPE}" \
+        TEST_BIN_DEST_DIR="${HOME}/.local/bin" \
+        copy-tests
 
 ENV BLAZE_UI_HOST=localhost
 ENV BLAZE_UI_WS_PORT=5765
@@ -53,7 +62,7 @@ RUN --mount=type=cache,id=blaze-stackroot,target=/root/.stack \
     --mount=type=cache,id=blazeui-bnhs-stackwork,target=/blaze/build/binaryninja-haskell/.stack-work \
     --mount=type=cache,id=blazeui-blaze-stackwork,target=/blaze/build/blaze/.stack-work \
     --mount=type=cache,id=blazeui-blazeui-stackwork,target=/blaze/build/blaze-ui/server/.stack-work \
-    STACK_OPTIONS="--ghc-options=-fdiagnostics-color=always" make docs
+    make docs
 
 FROM main as minimal
 SHELL ["/bin/bash", "-c"]
