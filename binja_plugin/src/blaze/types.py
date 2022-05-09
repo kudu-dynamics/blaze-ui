@@ -19,6 +19,9 @@ BinaryHash = str
 BndbHash = str
 HostBinaryPath = str
 CtxId = int
+Sym = int
+StmtIndex = int
+
 
 # What Aeson encodes the unit value `()` as
 # TODO: This used to be a Literal[[]] type, but that is actually an invalid Literal.
@@ -125,12 +128,15 @@ def tokens_from_server(ts: List[Token], max_str_length: Optional[int]) -> Disass
     return DisassemblyTextLine(tokens)
 
 
+IndexedStmt = Tuple[Optional[StmtIndex], List[Token]]
+
+
 class BasicBlockNode(TypedDict):
     uuid: UUID
     ctx: Ctx
     start: Address
     end: Address
-    nodeData: List[List[Token]]
+    nodeData: List[IndexedStmt]
 
 
 class CallNode(TypedDict):
@@ -138,28 +144,28 @@ class CallNode(TypedDict):
     ctx: Ctx
     start: Address
     callDest: CallDest
-    nodeData: List[List[Token]]
+    nodeData: List[IndexedStmt]
 
 
 class EnterFuncNode(TypedDict):
     uuid: UUID
     prevCtx: Ctx
     nextCtx: Ctx
-    nodeData: List[List[Token]]
+    nodeData: List[IndexedStmt]
 
 
 class LeaveFuncNode(TypedDict):
     uuid: UUID
     prevCtx: Ctx
     nextCtx: Ctx
-    nodeData: List[List[Token]]
+    nodeData: List[IndexedStmt]
 
 
 class GroupingNode(TypedDict):
     uuid: UUID
     termNode: 'CfNode'
     grouping: 'ServerCfg'
-    nodeData: List[List[Token]]
+    nodeData: List[IndexedStmt]
 
 
 CfNodeUnion = Union[BasicBlockNode, CallNode, EnterFuncNode, LeaveFuncNode, GroupingNode]
@@ -176,6 +182,19 @@ class CfEdge(TypedDict):
     branchType: Literal['TrueBranch', 'FalseBranch', 'UnconditionalBranch']
 
 
+class TypeError(TypedDict):
+    stmtOrigin: int
+    sym: Sym
+    error: List[Token]
+    
+    
+class TypeInfo(TypedDict):
+    varSymMap: Dict[str, Sym]
+    varEqMap: Dict[Sym, List[Sym]]
+    symTypes: Dict[Sym, List[Token]]
+    typeErrors: List[TypeError]
+
+
 class Cfg(TypedDict):
     edges: List[CfEdge]
     root: UUID
@@ -188,6 +207,11 @@ class ServerCfg(TypedDict):
     transportRoot: CfNode
     transportNodes: List[Tuple[CfNode, CfNode]]
     transportNextCtxIndex: CtxId
+
+
+class ServerTypedCfg(TypedDict):
+    typeInfo: ServerTypeInfo
+    typeSymCfg: ServerCfg
 
 
 class SnapshotInfo(TypedDict):

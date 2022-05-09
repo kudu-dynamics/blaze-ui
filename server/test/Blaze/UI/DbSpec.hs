@@ -28,6 +28,7 @@ import qualified Data.Text as Text
 import qualified Blaze.UI.Types.BinaryHash as BinaryHash
 import qualified Blaze.Types.Cfg as Cfg
 import qualified Blaze.Types.Cfg.Grouping as Grp
+import Blaze.UI.Server (mkTypedCfg)
 
 diveBin :: FilePath
 diveBin = "res/test_bins/Dive_Logger/Dive_Logger.bndb"
@@ -75,23 +76,26 @@ spec = describe "Blaze.UI.Db" $ do
     selectDive <- runIO $ fromJust <$> CG.getFunction imp 0x804e080
     (ImportResult _ originalCfg _) <- runIO $ fromJust <$> getCfg imp selectDive 0
     let originalCfg' = Grp.foldGroups originalCfg []
-    mRetrievedCfg <- runIO . mockEventLoop $ do
-      Db.saveNewCfg_ bid cid originalCfg' Snapshot.Immutable
-      Db.getCfg cid
+    (mRetrievedCfg, tcfg) <- runIO . mockEventLoop $ do
+      tcfg <- mkTypedCfg Nothing originalCfg'
+      Db.saveNewCfg_ bid cid tcfg Snapshot.Immutable
+      (,tcfg) <$> Db.getCfg cid
 
     it "Should save and retrieve a pil cfg" $ do
-      mRetrievedCfg `shouldBe` Just originalCfg'
+      mRetrievedCfg `shouldBe` Just tcfg
 
-    mRetrievedCfg2 <- runIO . mockEventLoop $ do
+    (mRetrievedCfg2, originalTCfg) <- runIO . mockEventLoop $ do
       let firstCfg = G.removeEdges
             (fmap (\(Cfg.CfEdge src' dst' _) -> G.Edge src' dst')
                . HashSet.toList
                . Cfg.succEdges (originalCfg' ^. #root)
                $ originalCfg')
             originalCfg'
-      Db.saveNewCfg_ bid cid firstCfg Snapshot.Immutable
-      Db.setCfg cid originalCfg'
-      Db.getCfg cid
+      firstTCfg <- mkTypedCfg Nothing firstCfg
+      originalTCfg <- mkTypedCfg Nothing originalCfg'
+      Db.saveNewCfg_ bid cid firstTCfg Snapshot.Immutable
+      Db.setCfg cid originalTCfg
+      (, originalTCfg) <$> Db.getCfg cid
 
     it "Should overwrite first cfg using setCfg" $ do
-      mRetrievedCfg2 `shouldBe` Just originalCfg'
+      mRetrievedCfg2 `shouldBe` Just originalTCfg

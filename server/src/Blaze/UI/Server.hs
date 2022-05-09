@@ -26,7 +26,7 @@ import qualified Blaze.Cfg.Analysis as CfgA
 import qualified Blaze.Pil.Analysis as PilA
 import qualified Blaze.UI.Cfg as CfgUI
 import qualified Blaze.UI.Types.Cfg as CfgUI
-import Blaze.UI.Types.Cfg (TypedCfg(TypedCfg), StmtIndex, TypeSymStmt, tokenizeTypeInfo, tokenizeTypedCfg)
+import Blaze.UI.Types.Cfg (TypedCfg(TypedCfg), StmtIndex, TypeSymStmt, tokenizeTypeInfo, tokenizeTypedCfg, CfgId)
 import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
 import qualified Blaze.Cfg.Interprocedural as ICfg
@@ -41,7 +41,6 @@ import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.BinaryHash (BinaryHash)
 import qualified Blaze.UI.Db as Db
-import Blaze.UI.Types.Cfg (CfgId)
 import qualified Blaze.UI.BinaryManager as BM
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.UI.Types.Session ( SessionId
@@ -385,7 +384,7 @@ updateCfg_ tcfg f = do
   (s,) <$>  mkTypedCfg (Just $ ucfg ^. #groupSpec) cfg'
   
 updateCfg :: TypedCfg -> (Cfg [Stmt] -> EventLoop (Cfg [Stmt])) -> EventLoop TypedCfg
-updateCfg tcfg f = fmap snd . updateCfg_ tcfg $ (fmap ((),)) <$> f
+updateCfg tcfg f = fmap snd . updateCfg_ tcfg $ fmap ((),) <$> f
 
 -- updateCfg :: TypedCfg -> (Cfg [Stmt] -> EventLoop (Cfg [Stmt])) -> EventLoop TypedCfg
 -- updateCfg tcfg f = do
@@ -696,23 +695,6 @@ handleBinjaEvent = \case
           return simplifiedCfg
     sendDiffCfg bhash cid tcfg simplifiedCfg
 
-  -- BSCfgRemoveNode cid node' -> do
-  --   debug "Binja remove node"
-  --   bhash <- getCfgBndbHash cid
-  --   cfg <- getCfg cid
-  --   case Cfg.getFullNodeMay cfg node' of
-  --     Nothing -> sendToBinja
-  --       . SBLogError $ "Node doesn't exist in CFG"
-  --     Just fullNode -> if fullNode == cfg ^. #root
-  --       then sendToBinja $ SBLogError "Cannot remove root node"
-  --       else do
-  --         let cfg' = G.removeNode fullNode cfg
-  --         simplifiedCfg <- flip updateCfgM cfg' $ \cfg'' -> do
-  --           simplifiedCfg <- simplify cfg''
-  --           printSimplifyStats cfg'' simplifiedCfg
-  --           return simplifiedCfg
-  --         sendDiffCfg bhash cid cfg simplifiedCfg
-
   BSCfgFocus cid node' -> do
     debug "Binja Focus"
     bhash <- getCfgBndbHash cid
@@ -747,6 +729,8 @@ handleBinjaEvent = \case
       sendCfgWithCallRatings bhash pcfg cid Nothing
 
   BSNoop -> debug "Binja noop"
+
+  BSChecker _ -> return ()
 
   BSSnapshot snapMsg -> case snapMsg of
     Snapshot.GetAllBranchesOfClient -> sendLatestClientSnapshots

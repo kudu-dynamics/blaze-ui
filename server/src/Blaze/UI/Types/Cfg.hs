@@ -1,6 +1,6 @@
 module Blaze.UI.Types.Cfg where
 
-import Blaze.UI.Prelude hiding (Symbol, group)
+import Blaze.UI.Prelude hiding (TypeError, Symbol, group)
 
 import qualified Blaze.Graph as G
 import Blaze.Pretty (Tokenizable, Token, mkTokenizerCtx, runTokenize, TokenizerCtx, pretty', blankTokenizerCtx)
@@ -37,16 +37,23 @@ newtype CfgId = CfgId UUID
 type TypeSymExpr = Ch.InfoExpression Ch.SymInfo
 type TypeSymStmt = Pil.Statement TypeSymExpr
 
-data TypeInfo pvar stype = TypeInfo
+data TypeError = TypeError
+  { stmtOrigin :: Int -- ^ Index in list of pil stmts for now
+  , sym :: Sym
+  , error :: [Token]
+  }
+  deriving (Eq, Ord, Show, Generic, Hashable, FromJSON, ToJSON)  
+
+data TypeInfo pvar stype err = TypeInfo
   { varSymMap :: HashMap pvar Sym
   , varEqMap :: HashMap Sym (HashSet Sym)
   , symTypes :: HashMap Sym stype
-  , typeErrors :: [UnifyConstraintsError stype]
+  , typeErrors :: [err]
   } deriving (Eq, Ord, Show, Hashable, Generic, ToJSON, FromJSON)
 
-type TokenizedTypeInfo = TypeInfo Symbol [Token]
+type TokenizedTypeInfo = TypeInfo Symbol [Token] TypeError
 
-type PilTypeInfo = TypeInfo PilVar DeepSymType
+type PilTypeInfo = TypeInfo PilVar DeepSymType (UnifyConstraintsError DeepSymType)
 
 typeInfoFromTypeReport :: TypeReport -> PilTypeInfo
 typeInfoFromTypeReport tr = TypeInfo
@@ -59,7 +66,7 @@ typeInfoFromTypeReport tr = TypeInfo
 data TypedCfg = TypedCfg
   { typeInfo :: PilTypeInfo
   , typeSymCfg :: GroupedCfg [(Maybe StmtIndex, TypeSymStmt)]
-  } deriving (Generic, ToJSON, FromJSON)
+  } deriving (Eq, Ord, Show, Hashable, Generic, ToJSON, FromJSON)
 
 instance SqlType CfgId where
    mkLit (CfgId x) = LCustom TBlob $ Sql.mkLit x
@@ -87,7 +94,14 @@ tokenizeTypeInfo t = TypeInfo
   { varSymMap = transportVarSymMap $ t ^. #varSymMap
   , varEqMap = t ^. #varEqMap
   , symTypes = transportSymTypes $ t ^. #symTypes
-  , typeErrors = fmap (fmap tokenize) $ t ^. #typeErrors
+  , typeErrors = tokenizeTypeError <$> t ^. #typeErrors
+  }
+
+tokenizeTypeError :: UnifyConstraintsError DeepSymType -> TypeError
+tokenizeTypeError u = TypeError
+  { stmtOrigin = u ^. #stmtOrigin
+  , sym = u ^. #sym
+  , error = tokenize $ u ^. #error
   }
 
 untypeExpr :: TypeSymExpr -> Pil.Expression
@@ -135,7 +149,7 @@ tokenizeTypeSymNode tinfo ctx n = case n of
                --       This should be tidied up once we have `Cfg a` paramerterized
                --       on node types rather than node data types.
                (tokenizeTypedCfg . TypedCfg tinfo . GroupedCfg $ gn ^. #grouping)
-               ((fmap $ runTokenize ctx) <$> startPreview ++ [(Nothing, Pil.Annotation "...")] ++ endPreview))
+               (fmap (runTokenize ctx) <$> startPreview ++ [(Nothing, Pil.Annotation "...")] ++ endPreview))
    where
      startPreview = take 2 $ Cfg.getNodeData startNode
      endPreview = takeEnd 2 $ Cfg.getNodeData endNode
@@ -150,14 +164,14 @@ tokenizeTypeSymNode tinfo ctx n = case n of
 --- Grouping/Ungrouping
 -- TODO: move something like this to Blaze
 
-newtype GroupedCfg a = GroupedCfg { _unwrapGroupedCfg :: (Cfg a) }
-  deriving (Generic)
-  deriving newtype (ToJSON, FromJSON)
+newtype GroupedCfg a = GroupedCfg { _unwrapGroupedCfg :: Cfg a }
+  deriving (Eq, Ord, Show, Generic)
+  deriving newtype (Hashable, ToJSON, FromJSON)
 
 data UngroupedCfg a = UngroupedCfg
   { groupSpec :: Grp.GroupingTree a
   , cfg :: Cfg a
-  } deriving (Generic, ToJSON, FromJSON)
+  } deriving (Eq, Ord, Show, Hashable, Generic, ToJSON, FromJSON)
   
 ungroup :: (Hashable a, Ord a) => GroupedCfg a -> UngroupedCfg a
 ungroup = uncurry (flip UngroupedCfg) . Grp.unfoldGroups . _unwrapGroupedCfg

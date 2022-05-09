@@ -1,16 +1,14 @@
 module Blaze.UI.Cfg
   ( module Blaze.UI.Cfg
-  , module Exports
+  , module CfgUI
   ) where
 
 import Blaze.UI.Prelude hiding (group)
-import qualified Blaze.UI.Types.Cfg as Exports
-import Blaze.UI.Types.Cfg (TypedCfg(TypedCfg), UngroupedCfg, withUngrouped, group_, typeInfoFromTypeReport)
-import qualified Blaze.UI.Types.Cfg as Cfg
+import Blaze.UI.Types.Cfg (TypedCfg(TypedCfg), UngroupedCfg, withUngrouped, group_, typeInfoFromTypeReport, CfgId)
+import qualified Blaze.UI.Types.Cfg as CfgUI
 import Blaze.UI.Types (EventLoop)
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
-import Blaze.UI.Types.Cfg (CfgId)
 import Blaze.Types.Cfg.Grouping (CfNode, CfEdge)
 import qualified Blaze.Types.Graph as G
 import qualified Blaze.Types.Cfg as Cfg
@@ -59,14 +57,14 @@ getRemovedNodes :: TypedCfg -> TypedCfg -> HashSet (CfNode ())
 getRemovedNodes old new =
   HashSet.difference (G.nodes $ old' ^. #graph) (G.nodes $ new' ^. #graph)
   where
-    old' = Cfg.toUnwrappedGroupedPilCfg old
-    new' = Cfg.toUnwrappedGroupedPilCfg new
+    old' = CfgUI.toUnwrappedGroupedPilCfg old
+    new' = CfgUI.toUnwrappedGroupedPilCfg new
 
 getRemovedEdges :: TypedCfg -> TypedCfg -> HashSet (CfEdge ())
 getRemovedEdges old new = HashSet.difference (f old') (f new')
   where
-    old' = Cfg.toUnwrappedGroupedPilCfg old
-    new' = Cfg.toUnwrappedGroupedPilCfg new
+    old' = CfgUI.toUnwrappedGroupedPilCfg old
+    new' = CfgUI.toUnwrappedGroupedPilCfg new
     f = HashSet.fromList . fmap Cfg.fromLEdge . G.edges . view #graph
 
 edgeToUUIDTuple :: CfEdge a -> (UUID, UUID)
