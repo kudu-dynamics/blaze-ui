@@ -36,14 +36,12 @@ dependencies:
   - extra
   - generic-lens
   - hashable
-  - hashable-time
   - hashids
   - http-types
   - lens
   - mtl
   - pretty-simple
   - protolude
-  - purescript-bridge # >= 0.14.0.0
   - random
   - resource-pool
   - scotty
@@ -56,6 +54,7 @@ dependencies:
   - temporary
   - text
   - time
+  - time-compat
   - transformers
   - unordered-containers
   - uuid
@@ -96,7 +95,7 @@ library:
   - -Wincomplete-record-updates
   - -Wincomplete-uni-patterns
   - -Wredundant-constraints
-  - -j
+  - -j4
   - -O2
   source-dirs:
   - src
@@ -126,6 +125,7 @@ executables:
     main: Main.hs
     source-dirs:  app
     ghc-options:
+    - -j4
     - -O2
     - -Wall
     - -threaded
@@ -145,6 +145,7 @@ tests:
     - test
     ghc-options:
     - -Wall
+    - -j4
     - -O2
     - -threaded
     - -rtsopts
