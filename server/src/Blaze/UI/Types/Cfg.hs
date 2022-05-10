@@ -86,6 +86,11 @@ transportVarSymMap = HashMap.mapKeys pretty'
 transportSymTypes :: HashMap Sym DeepSymType -> HashMap Sym [Token]
 transportSymTypes = HashMap.map tokenize
 
+trojanTypeSymInAddress :: Token -> Token
+trojanTypeSymInAddress t = case t ^. #typeSym of
+  Nothing -> t
+  Just (Sym s) -> t & #address .~ fromIntegral s
+
 tokenize :: Tokenizable a => a -> [Token]
 tokenize = runTokenize blankTokenizerCtx
 

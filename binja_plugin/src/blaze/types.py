@@ -210,7 +210,7 @@ class ServerCfg(TypedDict):
 
 
 class ServerTypedCfg(TypedDict):
-    typeInfo: ServerTypeInfo
+    typeInfo: TypeInfo
     typeSymCfg: ServerCfg
 
 

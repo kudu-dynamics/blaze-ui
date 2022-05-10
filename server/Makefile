@@ -19,6 +19,9 @@ HADDOCK_CP_COMMAND := cp -ar $$(stack $(stack_options) path --haddock ${STACK_HA
 build:
 	stack $(stack_options) build --test --no-run-tests $(STACK_BUILD_OPTIONS)
 
+run:
+	stack $(stack_options) run blaze-server
+
 test: build
 	../.ci/scripts/run_test.py $$(stack $(stack_options) path --dist-dir)/build/blaze-server-test/blaze-server-test
 
