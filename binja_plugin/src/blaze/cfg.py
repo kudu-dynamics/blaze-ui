@@ -410,7 +410,7 @@ class ICFGFlowGraph(FlowGraph):
             if node['contents'].get('nodeData'):
                 tokenized_lines = node['contents']['nodeData']
                 fg_node.lines += [
-                    tokens_from_server(line, self.max_str_length) for line in tokenized_lines
+                    tokens_from_server(line[1], self.max_str_length) for line in tokenized_lines
                 ]
 
             # TODO: Make use of view "modes" to detangle this complex if-else-if chain

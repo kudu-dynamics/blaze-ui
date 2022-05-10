@@ -3,7 +3,7 @@ module Blaze.UI.Types.Checker where
 
 import Blaze.Prelude hiding (Symbol)
 
-import Data.Hashable.Time ()
+-- import Data.Hashable.Time ()
 import Database.Selda (SqlRow, Table, primary, Attr((:-)), table)
 import Blaze.UI.Types.Db (Blob)
 import Blaze.UI.Types.Db.Address ()

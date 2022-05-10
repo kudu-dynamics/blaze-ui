@@ -425,6 +425,7 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
     poiMsg: PoiServerToBinja
     poiSearchResults: Optional[PoiSearchResults]
     pendingChanges: Optional[ServerPendingChanges]
+    typeInfo: TypeInfo
 
 
 class BinjaToServerTotal(TypedDict, total=True):
