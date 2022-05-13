@@ -1,4 +1,7 @@
+# syntax=docker/dockerfile:1.4
+
 ARG BLAZE_IMAGE=${CI_REGISTRY}/blaze/blaze/blaze:latest
+ARG BLAZE_MINIMAL_BASE_IMAGE=ubuntu:21.10
 
 FROM ${BLAZE_IMAGE} as main
 ARG BUILD_TYPE=dev
@@ -64,40 +67,48 @@ RUN --mount=type=cache,id=blaze-stackroot,target=/root/.stack \
     --mount=type=cache,id=blazeui-blazeui-stackwork,target=/blaze/build/blaze-ui/server/.stack-work \
     make docs
 
-FROM main as minimal
+FROM ${BLAZE_MINIMAL_BASE_IMAGE} as minimal
 SHELL ["/bin/bash", "-c"]
-WORKDIR /blaze
-RUN shopt -s nullglob && \
-    rm -rf \
-        /var/cache/apt \
-        /var/apt/lists \
-        /root/.local/bin/* \
-        /usr/local/bin/stack \
-        /blaze/build \
-        /root/.stack \
-        /root/.cabal \
-        /usr/share/binaryninja-api
 
-# This is hacky. Maybe we should FROM a more minimal base image?
+RUN rm -f /etc/apt/apt.conf.d/docker-clean
+RUN cat <<-EOF >/etc/apt/apt.conf.d/keep-cache
+	Binary::apt::APT::Keep-Downloaded-Packages "true";
+EOF
+
 RUN --mount=type=cache,id=blaze-apt,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=blaze-apt-lists,target=/var/apt/lists,sharing=locked \
-    apt remove -y \
-        autoconf \
-        automake \
-        build-essential \
-        nano \
-        haskell-stack \
-        git \
-        vim \
-        cmake \
-        ninja-build \
-        python3-distutils \
-        hlint \
+<<EOF
+    apt update -yq
+    packages=(
+        netbase
+        locales
 
-    && apt autoremove -y
+        # binja things
+        dbus
 
-ENV PATH="/blaze/bin:${PATH}"
-CMD ["blaze-server"]
+        # ghc things
+        libffi7
+        libgmp10
+        libncurses5
+        libtinfo5
+    )
+    apt install -yq --no-install-recommends "${packages[@]}"
+EOF
+
+COPY --from=main /usr/share/binaryninja /usr/share/binaryninja
+COPY --from=main /root/.binaryninja /root/.binaryninja
+COPY --from=main /usr/local/bin/z3 /usr/local/bin/z3
+COPY --from=main /blaze/src/ /blaze/src/
+COPY --from=main /blaze/bin/blaze-server /blaze/bin/blaze-server
+
+ENV LD_LIBRARY_PATH="/usr/share/binaryninja"
+ENV BLAZE_BINJA_API="/usr/share/binaryninja-api"
+ENV BINJA_CORE="/usr/share/binaryninja"
+ENV BINJA_PLUGINS="/usr/share/binaryninja/plugins"
+
+WORKDIR /blaze
+
+CMD ["/blaze/bin/blaze-server"]
 
 
 FROM python:3.8 as wheel-builder

@@ -131,7 +131,7 @@ build:
   needs: []
   script:
     - blaze_image=${REPO_DOCKER_REGISTRY}/blaze-service
-    - squashed_blaze_image=${REPO_DOCKER_REGISTRY}/blaze-service/squashed
+    - minimal_blaze_image=${REPO_DOCKER_REGISTRY}/blaze-service/minimal
     - wheel_server_image=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
 
     # Pull images for layer caching
@@ -151,10 +151,10 @@ build:
       --build-arg "BUILD_TYPE=${build_type}"
       --build-arg STACK_BUILD_OPTIONS=--ghc-options=-fdiagnostics-color=always
       -t "${blaze_image}:pipeline-${CI_PIPELINE_IID}"
-    - docker build --squash --pull . -f Dockerfile --target minimal
+    - docker build --pull . -f Dockerfile --target minimal
       --build-arg "BUILD_TYPE=${build_type}"
       --build-arg STACK_BUILD_OPTIONS=--ghc-options=-fdiagnostics-color=always
-      -t "${squashed_blaze_image}:pipeline-${CI_PIPELINE_IID}"
+      -t "${minimal_blaze_image}:pipeline-${CI_PIPELINE_IID}"
     - docker build --pull . -f Dockerfile --target wheel-server
       --build-arg CI_PIPELINE_ID="${CI_PIPELINE_ID}"
       -t "${wheel_server_image}:pipeline-${CI_PIPELINE_IID}"
@@ -163,7 +163,7 @@ build:
     # Push images
     - echo -e "section_start:`date +%s`:docker-push[collapsed=true]\r\e[0KPush new docker images"
     - docker push "${blaze_image}:pipeline-${CI_PIPELINE_IID}"
-    - docker push "${squashed_blaze_image}:pipeline-${CI_PIPELINE_IID}"
+    - docker push "${minimal_blaze_image}:pipeline-${CI_PIPELINE_IID}"
     - docker push "${wheel_server_image}:pipeline-${CI_PIPELINE_IID}"
     - echo -e "section_end:`date +%s`:docker-push\r\e[0K"
 
@@ -195,7 +195,7 @@ push:latest:
     GIT_STRATEGY: none
     GIT_CLEAN_FLAGS: none
   script:
-    - gitlab_blaze=${REPO_DOCKER_REGISTRY}/blaze-service/squashed
+    - gitlab_blaze=${REPO_DOCKER_REGISTRY}/blaze-service/minimal
     - aws_blaze=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-service
     - gitlab_wheel_server=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
     - aws_wheel_server=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-wheel-server
@@ -240,7 +240,7 @@ push:tag:
     GIT_STRATEGY: none
     GIT_CLEAN_FLAGS: none
   script:
-    - gitlab_blaze=${REPO_DOCKER_REGISTRY}/blaze-service/squashed
+    - gitlab_blaze=${REPO_DOCKER_REGISTRY}/blaze-service/minimal
     - aws_blaze=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-service
     - gitlab_wheel_server=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
     - aws_wheel_server=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-wheel-server
@@ -309,7 +309,7 @@ cleanup:
       bash -c '
         images=(
           ${REPO_DOCKER_REGISTRY}/blaze-service
-          ${REPO_DOCKER_REGISTRY}/blaze-service/squashed
+          ${REPO_DOCKER_REGISTRY}/blaze-service/minimal
           ${REPO_DOCKER_REGISTRY}/blaze-wheel-server
           )
         tags=()
