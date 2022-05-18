@@ -3,7 +3,8 @@ module Blaze.UI.Types.Cfg where
 import Blaze.UI.Prelude hiding (TypeError, Symbol, group)
 
 import qualified Blaze.Graph as G
-import Blaze.Pretty (Tokenizable, Token, mkTokenizerCtx, runTokenize, TokenizerCtx, pretty', blankTokenizerCtx)
+import Blaze.Pretty (Tokenizable, Token, mkTokenizerCtx, TokenizerCtx, pretty', blankTokenizerCtx, runTokenize)
+import qualified Blaze.Pretty as Pretty
 import Blaze.Types.Cfg (
   CfNode (
     Grouping
@@ -34,6 +35,16 @@ newtype CfgId = CfgId UUID
   deriving newtype (Random)
   deriving anyclass (Hashable, ToJSON, FromJSON, ToJSONKey, FromJSONKey)
 
+newtype PrintSymInfo = PrintSymInfo { _unPrintSymInfo :: Ch.SymInfo }
+  deriving (Eq, Ord, Show, Generic)
+  deriving anyclass (Hashable, FromJSON, ToJSON)
+
+instance Tokenizable (Ch.InfoExpression PrintSymInfo) where
+  tokenize (Ch.InfoExpression (PrintSymInfo (Ch.SymInfo bitwidth (Sym n))) op) =
+    Pretty.tokenizeExprOp (Just $ Sym n) op (coerce $ bitwidth * 8)
+
+type PrintTypeSymStmt = Pil.Statement (Ch.InfoExpression PrintSymInfo)
+  
 type TypeSymExpr = Ch.InfoExpression Ch.SymInfo
 type TypeSymStmt = Pil.Statement TypeSymExpr
 
@@ -42,7 +53,7 @@ data TypeError = TypeError
   , sym :: Sym
   , error :: [Token]
   }
-  deriving (Eq, Ord, Show, Generic, Hashable, FromJSON, ToJSON)  
+  deriving (Eq, Ord, Show, Generic, Hashable, FromJSON, ToJSON)
 
 data TypeInfo pvar stype err = TypeInfo
   { varSymMap :: HashMap pvar Sym
@@ -77,7 +88,7 @@ instance SqlType CfgId where
 symToInt :: Sym -> Int
 symToInt (Sym n) = fromIntegral n
 
-hashMapBimap :: (Hashable k', Eq k') => (k -> k') -> (a -> a') -> HashMap k a -> HashMap k' a'
+hashMapBimap :: (Hashable k') => (k -> k') -> (a -> a') -> HashMap k a -> HashMap k' a'
 hashMapBimap f g = HashMap.fromList . fmap (bimap f g) . HashMap.toList
 
 transportVarSymMap :: HashMap PilVar Sym -> HashMap Symbol Sym
@@ -85,11 +96,6 @@ transportVarSymMap = HashMap.mapKeys pretty'
 
 transportSymTypes :: HashMap Sym DeepSymType -> HashMap Sym [Token]
 transportSymTypes = HashMap.map tokenize
-
-trojanTypeSymInAddress :: Token -> Token
-trojanTypeSymInAddress t = case t ^. #typeSym of
-  Nothing -> t
-  Just (Sym s) -> t & #address .~ fromIntegral s
 
 tokenize :: Tokenizable a => a -> [Token]
 tokenize = runTokenize blankTokenizerCtx
@@ -162,7 +168,7 @@ tokenizeTypeSymNode tinfo ctx n = case n of
  where
    convert :: CfNode [(Maybe StmtIndex, TypeSymStmt)]
            -> CfNode [(Maybe StmtIndex, [Token])]
-   convert = fmap . fmap . fmap $ runTokenize ctx -- fmaps: node => list => tuple
+   convert = fmap . fmap . fmap $ runTokenize ctx . fmap (fmap PrintSymInfo)
 
 
 ----------------------
@@ -181,10 +187,10 @@ data UngroupedCfg a = UngroupedCfg
 ungroup :: (Hashable a, Ord a) => GroupedCfg a -> UngroupedCfg a
 ungroup = uncurry (flip UngroupedCfg) . Grp.unfoldGroups . _unwrapGroupedCfg
 
-group_ :: (Hashable a, Ord a) => Grp.GroupingTree a -> Cfg a -> GroupedCfg a
+group_ :: Hashable a => Grp.GroupingTree a -> Cfg a -> GroupedCfg a
 group_ spec cfg_ = GroupedCfg $ Grp.foldGroups cfg_ spec
 
-group :: (Hashable a, Ord a) => UngroupedCfg a -> GroupedCfg a
+group :: Hashable a => UngroupedCfg a -> GroupedCfg a
 group (UngroupedCfg spec cfg_) = group_ spec cfg_
 
 withUngrouped :: (Cfg a -> Cfg a) -> UngroupedCfg a -> UngroupedCfg a
@@ -193,5 +199,4 @@ withUngrouped f (UngroupedCfg spec cfg_) = UngroupedCfg spec $ f cfg_
 -- | Converts Grouped to Ungrouped, then regroups
 asUngrouped :: (Hashable a, Ord a) => (Cfg a -> Cfg a) -> GroupedCfg a -> GroupedCfg a
 asUngrouped f = group . withUngrouped f . ungroup
-
 

@@ -60,6 +60,7 @@ from .types import (
     PoiSearchResults,
     ServerCfg,
     SnapshotBinjaToServer,
+    TypeInfo,
     Word64,
     tokens_from_server,
 )
@@ -370,6 +371,7 @@ class ICFGFlowGraph(FlowGraph):
         pending_changes: PendingChanges,
         group_options: Optional[GroupOptions],
         max_str_length: Optional[int],
+        type_info: Optional[TypeInfo],
     ):
         super().__init__()
         self.bv: BinaryView = bv
@@ -380,7 +382,7 @@ class ICFGFlowGraph(FlowGraph):
         self.pending_changes: PendingChanges = pending_changes
         self.group_options: Optional[GroupOptions] = group_options
         self.max_str_length: Optional[int] = max_str_length
-
+        self.type_info: Optional[TypeInfo] = type_info
         self.format()
 
         log.debug('Initialized object: %r', self)
@@ -744,6 +746,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             pending_changes=self.blaze_instance.graph.pending_changes,
             group_options=None,
             max_str_length=self.blaze_instance.blaze.settings.string_truncation_length,
+            type_info=self.blaze_instance.graph.type_info,
         )
 
         assert self.blaze_instance._icfg_dock_widget
@@ -1034,12 +1037,30 @@ class ICFGWidget(FlowGraphWidget, QObject):
         # Send start_node to server
         self.select_group_end(end_node)
 
+
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        if (event is not None):
-            if (tok := self.getTokenForMouseEvent(event)):
-                if tok.valid:
-                    # log.info(f"tok: {tok.token}")
-                    self.setToolTip(str(tok.token.text))
+        if (self.blaze_instance.graph is None or event is None or self.blaze_instance.graph.type_info is None):
+            return
+        
+        if (tok := self.getTokenForMouseEvent(event)):
+            if tok.valid:
+                if tok.token.address == 0:
+                    self.setToolTip("no sym")
+                else:
+                    tsym = tok.token.address - 1
+                    tinfo = self.blaze_instance.graph.type_info
+                    if tsym in tinfo.get('symTypes'):
+                        ts = tinfo.get('symTypes')[tsym]
+                        tstring = ''.join(str(t['text']) for t in ts)
+                        self.setToolTip(tstring)
+                    else:
+                        self.setToolTip("sym not found")
+            else:
+                log.info(f"my token: {tok.addr} {tok.type}")
+                self.setToolTip("invalid token")
+        else:
+            self.setToolTip("")
+
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
@@ -1084,14 +1105,46 @@ class ICFGWidget(FlowGraphWidget, QObject):
         '''
         return
 
+    # def mouseReleaseEvent(self, event: QMouseEvent):
+    #     '''
+    #     If the left mouse button was clicked, show a type on hover.
+    #     '''
+
+    #     if event.button() == Qt.MouseButton.LeftButton:
+    #         self.clicked_token = self.getTokenForMouseEvent(event)
+
+    #         if (tok := self.clicked_token):
+    #             if tok.valid:
+    #                 if tok.token.address == 0:
+    #                     self.setToolTip("")
+    #                 else:
+    #                     log.info(f"tok: {tok.token}")
+    #                     self.setToolTip(str(tok.token.address - 1))
+
+
     def mousePressEvent(self, event: QMouseEvent):
         '''
         If the right mouse button was clicked, remember the node or edge (if any)
-        under the mouse, and show the context menu
+        under the mouse, and show the context menu.
+        If the left mouse button was clicked, show a type on hover.
         '''
 
+        # if event.button() == Qt.MouseButton.LeftButton:
+        #     self.clicked_token = self.getTokenForMouseEvent(event)
+
+        #     if (tok := self.clicked_token):
+        #         if tok.valid:
+        #             if tok.token.address == 0:
+        #                 self.setToolTip("")
+        #             else:
+        #                 log.info(f"tok: {tok.token}")
+        #                 self.setToolTip(str(tok.token.address - 1))
+
+        
         if event.button() != Qt.MouseButton.RightButton:
             return super().mousePressEvent(event)
+
+
 
         # NOTE synthesize left mouse button click/release in order to highlight the
         # edge, line, or token under point
