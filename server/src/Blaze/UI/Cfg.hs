@@ -12,6 +12,7 @@ import qualified Data.HashSet as HashSet
 import Blaze.Types.Cfg.Grouping (CfNode, CfEdge)
 import qualified Blaze.Types.Graph as G
 import qualified Blaze.Types.Cfg as Cfg
+import Blaze.Types.Pil (Stmt)
 
 
 -- | Changes CfgId key in graph cache.
@@ -53,29 +54,19 @@ getCfg cid = do
     m <- readTVar cfgMapTVar
     maybe (return Nothing) (fmap Just . readTVar) $ HashMap.lookup cid m
 
-getRemovedNodes :: TypedCfg -> TypedCfg -> HashSet (CfNode ())
+getRemovedNodes :: TypedCfg -> TypedCfg -> HashSet (CfNode [Stmt])
 getRemovedNodes old new =
   HashSet.difference (G.nodes $ old' ^. #graph) (G.nodes $ new' ^. #graph)
   where
     old' = CfgUI.toUnwrappedGroupedPilCfg old
     new' = CfgUI.toUnwrappedGroupedPilCfg new
 
-getRemovedEdges :: TypedCfg -> TypedCfg -> HashSet (CfEdge ())
+getRemovedEdges :: TypedCfg -> TypedCfg -> HashSet (CfEdge (CfNode [Stmt]))
 getRemovedEdges old new = HashSet.difference (f old') (f new')
   where
     old' = CfgUI.toUnwrappedGroupedPilCfg old
     new' = CfgUI.toUnwrappedGroupedPilCfg new
     f = HashSet.fromList . fmap Cfg.fromLEdge . G.edges . view #graph
 
-edgeToUUIDTuple :: CfEdge a -> (UUID, UUID)
+edgeToUUIDTuple :: CfEdge (CfNode a) -> (UUID, UUID)
 edgeToUUIDTuple e = (Cfg.getNodeUUID $ e ^. #src, Cfg.getNodeUUID $ e ^. #dst)
-
-
--- checkCfg :: UngroupedCfg [(Maybe StmtIndex, TypeSymStmt)] -> Either ConstraintGenError TypedCfg
--- checkCfg ucfg = Ch.checkCfg (ucfg ^. #cfg) >>= \(_, tcfg, tr) ->
---   let tcfg' = fmap (fmap (bimap Just fst)) $ tcfg :: Cfg [(Maybe Cfg.StmtIndex, Cfg.TypeSymStmt)] in
---     Right $ TypedCfg
---     { typeInfo = typeInfoFromTypeReport tr
---     , typeSymCfg = group_ (ucfg ^. #groupSpec) tcfg'
---     }
-

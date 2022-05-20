@@ -19,6 +19,8 @@ import Blaze.UI.Types.Cfg.Snapshot ( BranchId
 import qualified Blaze.UI.Cfg.Snapshot as Snapshot
 import qualified Blaze.UI.Types.Graph as Graph
 import qualified Blaze.Types.Graph as G
+import qualified Blaze.Types.Graph.EdgeGraph as EG
+import Blaze.Types.Graph.EdgeGraph (EdgeGraphNode(NodeNode))
 import Blaze.UI.Types.BndbHash (BndbHash)
 import Blaze.UI.Types.Graph (graphFromTransport, graphToTransport)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
@@ -268,8 +270,8 @@ previewDeleteSnapshot cid = withDb $ do
     Nothing -> return Nothing
     Just branch -> do
       let btree = graphFromTransport $ branch ^. #tree . #unBlob :: BranchTree
-          edgeNodeGraph = G.toEdgeGraph btree :: AlgaGraph () () (G.EdgeGraphNode () CfgId)
-          reachable = G.reachable (G.NodeNode cid) edgeNodeGraph
+          edgeNodeGraph = EG.toEdgeGraph btree :: AlgaGraph () (EdgeGraphNode () CfgId) (EdgeGraphNode () CfgId)
+          reachable = G.reachable (NodeNode cid) edgeNodeGraph
           deletedNodes' = HashSet.fromList $ mapMaybe (preview #_NodeNode) reachable
           deletedEdges = HashSet.fromList
                          $ mapMaybe (preview #_EdgeNode) reachable

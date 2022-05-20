@@ -2,7 +2,6 @@ module Blaze.UI.Types.Cfg where
 
 import Blaze.UI.Prelude hiding (TypeError, Symbol, group)
 
-import qualified Blaze.Graph as G
 import Blaze.Pretty (Tokenizable, Token, mkTokenizerCtx, TokenizerCtx, pretty', blankTokenizerCtx, runTokenize)
 import qualified Blaze.Pretty as Pretty
 import Blaze.Types.Cfg (
@@ -12,7 +11,7 @@ import Blaze.Types.Cfg (
   Cfg (Cfg),
   GroupingNode (GroupingNode),
  )
-import qualified Blaze.Types.Cfg as Cfg
+import qualified Blaze.Cfg as Cfg
 import qualified Blaze.Types.Cfg.Grouping as Grp
 import Data.List.Extra (takeEnd)
 import System.Random (Random)
@@ -124,21 +123,21 @@ untypeExpr x = Pil.Expression
 untypeStmt :: TypeSymStmt -> Pil.Stmt
 untypeStmt = fmap untypeExpr
 
-untypeCfg :: Cfg [(Maybe StmtIndex, TypeSymStmt)] -> Cfg [Pil.Stmt]
-untypeCfg = fmap (fmap $ untypeStmt . snd)
+untypeCfg :: Cfg (CfNode [(Maybe StmtIndex, TypeSymStmt)]) -> Cfg (CfNode [Pil.Stmt])
+untypeCfg = fmap $ fmap (fmap $ untypeStmt . snd)
 
-toUnwrappedGroupedPilCfg :: TypedCfg -> Cfg [Pil.Stmt]
+toUnwrappedGroupedPilCfg :: TypedCfg -> Cfg (CfNode [Pil.Stmt])
 toUnwrappedGroupedPilCfg = untypeCfg .  _unwrapGroupedCfg . view #typeSymCfg
 
 untypeTypedCfg :: TypedCfg -> GroupedCfg [Pil.Stmt]
 untypeTypedCfg = GroupedCfg . toUnwrappedGroupedPilCfg
 
-tokenizeTypedCfg :: TypedCfg -> Cfg [(Maybe StmtIndex, [Token])]
-tokenizeTypedCfg (TypedCfg tinfo@(TypeInfo vsMap _ _ _) (GroupedCfg (Cfg g rootNode nextCtxIndex))) =
+tokenizeTypedCfg :: TypedCfg -> Cfg (CfNode [(Maybe StmtIndex, [Token])])
+tokenizeTypedCfg (TypedCfg tinfo@(TypeInfo vsMap _ _ _) (GroupedCfg (Cfg g rootNodeId nextCtxIndex))) =
   Cfg
-  { graph = G.mapAttrs tokenizeNode' g
+  { graph = tokenizeNode' <$> g
     -- TODO: This is busted if root is a group node
-  , root = tokenizeNode' rootNode
+  , rootId = rootNodeId
   , nextCtxIndex = nextCtxIndex
   }
   where
@@ -152,9 +151,9 @@ tokenizeTypeSymNode
   -> CfNode [(Maybe StmtIndex, TypeSymStmt)]
   -> CfNode [(Maybe StmtIndex, [Token])]
 tokenizeTypeSymNode tinfo ctx n = case n of
-  Grouping gn@(GroupingNode endNode _ (Cfg _ startNode _) _) ->
+  Grouping gn@(GroupingNode endNodeId _ innerCfg _) ->
     Grouping (GroupingNode
-               (convert $ gn ^. #termNode)
+               endNodeId
                (gn ^. #uuid)
                -- TODO: There's no need to recurse into the inner CFG for tokenization
                --       This should be tidied up once we have `Cfg a` paramerterized
@@ -162,6 +161,9 @@ tokenizeTypeSymNode tinfo ctx n = case n of
                (tokenizeTypedCfg . TypedCfg tinfo . GroupedCfg $ gn ^. #grouping)
                (fmap (runTokenize ctx) <$> startPreview ++ [(Nothing, Pil.Annotation "...")] ++ endPreview))
    where
+     startNode = Cfg.getRootNode innerCfg
+     endNode = Grp.getTermNode gn
+     
      startPreview = take 2 $ Cfg.getNodeData startNode
      endPreview = takeEnd 2 $ Cfg.getNodeData endNode
   _ -> convert n
@@ -175,28 +177,28 @@ tokenizeTypeSymNode tinfo ctx n = case n of
 --- Grouping/Ungrouping
 -- TODO: move something like this to Blaze
 
-newtype GroupedCfg a = GroupedCfg { _unwrapGroupedCfg :: Cfg a }
+newtype GroupedCfg a = GroupedCfg { _unwrapGroupedCfg :: Cfg (CfNode a) }
   deriving (Eq, Ord, Show, Generic)
   deriving newtype (Hashable, ToJSON, FromJSON)
 
 data UngroupedCfg a = UngroupedCfg
   { groupSpec :: Grp.GroupingTree a
-  , cfg :: Cfg a
+  , cfg :: Cfg (CfNode a)
   } deriving (Eq, Ord, Show, Hashable, Generic, ToJSON, FromJSON)
   
 ungroup :: (Hashable a, Ord a) => GroupedCfg a -> UngroupedCfg a
 ungroup = uncurry (flip UngroupedCfg) . Grp.unfoldGroups . _unwrapGroupedCfg
 
-group_ :: Hashable a => Grp.GroupingTree a -> Cfg a -> GroupedCfg a
+group_ :: Hashable a => Grp.GroupingTree [a] -> Cfg (CfNode [a]) -> GroupedCfg [a]
 group_ spec cfg_ = GroupedCfg $ Grp.foldGroups cfg_ spec
 
-group :: Hashable a => UngroupedCfg a -> GroupedCfg a
+group :: Hashable a => UngroupedCfg [a] -> GroupedCfg [a]
 group (UngroupedCfg spec cfg_) = group_ spec cfg_
 
-withUngrouped :: (Cfg a -> Cfg a) -> UngroupedCfg a -> UngroupedCfg a
+withUngrouped :: (Cfg (CfNode a) -> Cfg (CfNode a)) -> UngroupedCfg a -> UngroupedCfg a
 withUngrouped f (UngroupedCfg spec cfg_) = UngroupedCfg spec $ f cfg_
 
 -- | Converts Grouped to Ungrouped, then regroups
-asUngrouped :: (Hashable a, Ord a) => (Cfg a -> Cfg a) -> GroupedCfg a -> GroupedCfg a
+asUngrouped :: (Hashable a, Ord a) => (Cfg (CfNode [a]) -> Cfg (CfNode [a])) -> GroupedCfg [a] -> GroupedCfg [a]
 asUngrouped f = group . withUngrouped f . ungroup
 

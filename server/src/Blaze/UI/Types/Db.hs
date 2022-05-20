@@ -58,7 +58,7 @@ data SnapshotBranch = SnapshotBranch
   , originFuncName :: Text
   , branchName :: Maybe Text
   , rootNode :: CfgId
-  , tree :: Blob (GraphTransport () () CfgId)
+  , tree :: Blob (GraphTransport () CfgId)
   } deriving (Generic, SqlRow)
 
 cfgTable :: Table SavedCfg

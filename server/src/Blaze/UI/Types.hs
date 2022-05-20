@@ -103,7 +103,7 @@ data ServerToBinja = SBLogInfo { message :: Text }
                            , groupOptions :: Maybe GroupOptions
                            -- TODO: send cfg with text
                            , typeInfo :: TokenizedTypeInfo
-                           , cfg :: Cfg [(Maybe StmtIndex, [Token])]
+                           , cfg :: Cfg (CfNode [(Maybe StmtIndex, [Token])])
                            }
 
                    | SBSnapshot { snapshotMsg :: Snapshot.ServerToBinja }

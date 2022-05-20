@@ -29,6 +29,7 @@ import qualified Blaze.UI.Types.Cfg as CfgUI
 import Blaze.UI.Types.Cfg (TypedCfg(TypedCfg), StmtIndex, TypeSymStmt, tokenizeTypeInfo, tokenizeTypedCfg, CfgId)
 import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
+import Blaze.Graph (NodeId)
 import qualified Blaze.Cfg.Interprocedural as ICfg
 import Blaze.Pretty (PIndexedStmts (..), mkTokenizerCtx, prettyIndexedStmts', pretty', showHex, pretty)
 import qualified Blaze.Types.Pil.Checker as Ch
@@ -356,7 +357,7 @@ broadcastGlobalPois st binHash = do
 --   cfg' <- f ogCfg
 --   return $ Grp.foldGroups cfg' groupStructure
 
-withCfg :: TypedCfg -> (Cfg [Stmt] -> EventLoop a) -> EventLoop a
+withCfg :: TypedCfg -> (Cfg (CfNode [Stmt]) -> EventLoop a) -> EventLoop a
 withCfg tcfg f = f cfg
   where
     ucfg = CfgUI.ungroup $ tcfg ^. #typeSymCfg
@@ -364,26 +365,26 @@ withCfg tcfg f = f cfg
 
 mkTypedCfg
   :: Maybe (Grp.GroupingTree [(Maybe StmtIndex, TypeSymStmt)])
-  -> Cfg [Stmt]
+  -> Cfg (CfNode [Stmt])
   -> EventLoop TypedCfg
 mkTypedCfg mgspec cfg = case checkCfg cfg of
     Left err -> logError $ "Error typechecking cfg: " <> show err
     Right (_, typeSymedCfg, tr) -> do
       -- Cfg [(Int, Statement (Ch.InfoExpression (Ch.SymInfo, Maybe Ch.DeepSymType)))]
-      let typeSymedCfg' = fmap (fmap (bimap Just (fmap $ fmap fst))) typeSymedCfg :: Cfg [(Maybe StmtIndex, TypeSymStmt)]
+      let typeSymedCfg' = fmap (fmap (bimap Just (fmap $ fmap fst))) typeSymedCfg :: Cfg (CfNode [(Maybe StmtIndex, TypeSymStmt)])
       return $ TypedCfg
         { CfgUI.typeInfo = CfgUI.typeInfoFromTypeReport tr
         , CfgUI.typeSymCfg =  maybe (CfgUI.GroupedCfg typeSymedCfg') (`CfgUI.group_` typeSymedCfg') mgspec
         }
 
-updateCfg_ :: TypedCfg -> (Cfg [Stmt] -> EventLoop (a, Cfg [Stmt])) -> EventLoop (a, TypedCfg)
+updateCfg_ :: TypedCfg -> (Cfg (CfNode [Stmt]) -> EventLoop (a, Cfg (CfNode [Stmt]))) -> EventLoop (a, TypedCfg)
 updateCfg_ tcfg f = do
   let ucfg = CfgUI.ungroup $ tcfg ^. #typeSymCfg
       cfg = CfgUI.untypeCfg $ ucfg ^. #cfg
   (s, cfg') <- f cfg
   (s,) <$>  mkTypedCfg (Just $ ucfg ^. #groupSpec) cfg'
   
-updateCfg :: TypedCfg -> (Cfg [Stmt] -> EventLoop (Cfg [Stmt])) -> EventLoop TypedCfg
+updateCfg :: TypedCfg -> (Cfg (CfNode [Stmt]) -> EventLoop (Cfg (CfNode [Stmt]))) -> EventLoop TypedCfg
 updateCfg tcfg f = fmap snd . updateCfg_ tcfg $ fmap ((),) <$> f
 
 -- updateCfg :: TypedCfg -> (Cfg [Stmt] -> EventLoop (Cfg [Stmt])) -> EventLoop TypedCfg
@@ -399,7 +400,7 @@ updateCfg tcfg f = fmap snd . updateCfg_ tcfg $ fmap ((),) <$> f
 -- often due to type inference errors, it calls a non-SMT simplify which uses
 -- constant propagation and can only prune constraints with constants on either side.
 -- Assumes 'cfg' is ungrouped.
-simplify :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
+simplify :: Cfg (CfNode [Pil.Stmt]) -> EventLoop (Cfg (CfNode [Pil.Stmt]))
 simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
   Left err -> do
     case err of
@@ -410,7 +411,7 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
           , ""
           , cs $ pshow ("errors" :: Text, tr ^. #errors)
           , ""
-          , pretty (mkTokenizerCtx . Just $ tr ^. #varSymMap) . PIndexedStmts $ tr ^. #symTypeStmts
+          , pretty (mkTokenizerCtx . Just $ tr ^. #varSymMap) . PIndexedStmts $ tr ^. #symTypedStmts
           , "-----------------------------------------------------------------------"
           ]
       _ -> logLocalError . show $ err
@@ -427,7 +428,7 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
           [ cs $ pshow ("errors" :: Text, tr ^. #errors)
           , pretty' $ tr ^. #errorConstraints
           , ""
-          , pretty' . PIndexedStmts $ tr ^. #symTypeStmts
+          , pretty' . PIndexedStmts $ tr ^. #symTypedStmts
           ]
         logLocalInfo "\n-------------- solver errors -----------------\n"
         logLocalInfo . cs . pshow $ warn ^. #warnings
@@ -480,11 +481,13 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
 --- main event handler
 
 getTermUUID :: CfNode a -> UUID
-getTermUUID (Cfg.Grouping n) = getTermUUID $ n ^. #termNode
-getTermUUID n = Cfg.getNodeUUID n
+getTermUUID n =Cfg.getNodeUUID $
+  case n of
+    Cfg.Grouping grpNode -> Grp.getDeepTermNodeFromGroupingNode grpNode
+    n' -> n'
 
-getStartUUID :: CfNode a -> UUID
-getStartUUID (Cfg.Grouping n) = getStartUUID $ n ^. #grouping . #root
+getStartUUID :: CfNode a ->  UUID
+getStartUUID (Cfg.Grouping n) = getStartUUID . Cfg.getRootNode $ n ^. #grouping
 getStartUUID n = Cfg.getNodeUUID n
 
 
@@ -577,7 +580,7 @@ getPoiSearchResults bhash pcfg = do
 
           -- Should do we care about the Target function? or just the addr here?
           present = fmap Cfg.getNodeUUID . HashSet.toList
-                    $ Grp.getNodesContainingAddress (tgt ^. #address) pcfg
+                    $ CfgA.getNodesContainingAddress (tgt ^. #address) pcfg
       return . Just $ PoiSearchResults ratings' present
 
 -- | Handles messages incoming from the Binja client.
@@ -653,7 +656,7 @@ handleBinjaEvent = \case
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
     tcfg <- getCfg cid
     simplifiedCfg <- updateCfg tcfg $ \cfg -> do
-      case Cfg.getFullNodeMay cfg (Cfg.Call callNode) of
+      case Cfg.getNode cfg (Cfg.Call callNode) of
         Nothing ->
           logError "Could not find call node in CFG"
           -- TODO: fix issue #160 so we can just send `CallNode ()` to expandCall
@@ -703,7 +706,7 @@ handleBinjaEvent = \case
     simplifiedCfg <- updateCfg tcfg $ \cfg -> do
       case Cfg.findNodeByUUID (getStartUUID node') cfg of
         Nothing -> logError "Node doesn't exist in CFG"
-        Just fullNode -> if fullNode == cfg ^. #root
+        Just fullNode -> if fullNode == G.unNodeId (cfg ^. #rootId)
           then logError "Cannot remove root node"
           else do
             let cfg' = CfgA.focus_ fullNode cfg
@@ -894,12 +897,12 @@ handleBinjaEvent = \case
 
 insertStmt ::
   Hashable a =>
-  Cfg [a] ->
+  Cfg (CfNode [a]) ->
   CfgId ->
   UUID ->
   Word64 ->
   a ->
-  EventLoop (Cfg [a])
+  EventLoop (Cfg (CfNode [a]))
 insertStmt cfg cid nid stmtIndex stmt = do
   node' <- getNode cfg cid nid
   (stmtsA, stmtsB) <- getStmtsAround node' stmtIndex
@@ -908,7 +911,7 @@ insertStmt cfg cid nid stmtIndex stmt = do
 
 getGroupOptions
   :: Hashable a
-  => Cfg [a]
+  => Cfg (CfNode [a])
   -> CfNode [a]
   -> EventLoop (Maybe GroupOptions)
 getGroupOptions cfg startNode = do
@@ -922,7 +925,7 @@ getGroupOptions cfg startNode = do
 -- TODO: Should we check if persisting a node index would improve performance?
 getNode ::
   Hashable a =>
-  Cfg a ->
+  Cfg (CfNode a) ->
   CfgId ->
   UUID ->
   EventLoop (CfNode a)
@@ -983,7 +986,7 @@ printTypeReportToConsole fn tr = liftIO $ do
     , cs $ pshow ("errors" :: Text, tr ^. #errors)
     , pretty' $ tr ^. #errorConstraints
     , ""
-    , pretty' . PIndexedStmts $ tr ^. #symTypeStmts
+    , pretty' . PIndexedStmts $ tr ^. #symTypedStmts
     , "-----------------------------------------------------------------------"
     ]
 

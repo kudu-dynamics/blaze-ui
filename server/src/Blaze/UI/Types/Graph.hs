@@ -7,22 +7,18 @@ import Blaze.Graph (Graph)
 import qualified Data.HashSet as HashSet
 
 
-data GraphTransport e attr n = GraphTransport
-  { edges :: [(e, (n, n))]
-  , nodes :: [(n, Maybe attr)]
+data GraphTransport l n = GraphTransport
+  { edges :: [(l, (n, n))]
+  , nodes :: [n]
   } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, Functor, Hashable)
 
-graphToTransport :: Graph e attr n g => g -> GraphTransport e attr n
+graphToTransport :: Hashable n => Graph l n g => g n -> GraphTransport l n
 graphToTransport g = GraphTransport edges' nodes'
   where
-    nodes' = fmap (\n -> (n, G.getNodeAttr n g)) . HashSet.toList . G.nodes $ g
+    nodes' = HashSet.toList . G.nodes $ g
     edges' = G.toTupleLEdge <$> G.edges g
 
-graphFromTransport :: Graph e attr n g => GraphTransport e attr n -> g
+graphFromTransport :: Graph l n g => GraphTransport l n -> g n
 graphFromTransport gt 
-  = G.addNodesWithAttrs (mapMaybe hasAttr $ gt ^. #nodes)
-  . G.addNodes (fst <$> gt ^. #nodes)
+  = G.addNodes (gt ^. #nodes)
   . G.fromEdges . fmap G.fromTupleLEdge $ gt ^. #edges
-  where
-    hasAttr (n, Just attr) = Just (n, attr)
-    hasAttr _ = Nothing
