@@ -349,14 +349,6 @@ broadcastGlobalPois st binHash = do
   pois <- flip runReaderT st $ GlobalPoiDb.getPoisOfBinary binHash
   sendToAllWithBinary st binHash . SBPoi . Poi.GlobalPoisOfBinary $ pois
 
--- -- | Converts TypedCfg with groups into Cfg without groups, updates with f,
--- --   and re-groups into TypedCfg
--- updateGroupedCfgM :: (Ord a, Hashable a, Monad m) => (Cfg a -> m (Cfg a)) -> Cfg a-> m (Cfg a)
--- updateGroupedCfgM f gcfg = do
---   let (ogCfg, groupStructure) = Grp.unfoldGroups gcfg
---   cfg' <- f ogCfg
---   return $ Grp.foldGroups cfg' groupStructure
-
 withCfg :: TypedCfg -> (Cfg (CfNode [Stmt]) -> EventLoop a) -> EventLoop a
 withCfg tcfg f = f cfg
   where
@@ -732,8 +724,6 @@ handleBinjaEvent = \case
       sendCfgWithCallRatings bhash pcfg cid Nothing
 
   BSNoop -> debug "Binja noop"
-
-  BSChecker _ -> return ()
 
   BSSnapshot snapMsg -> case snapMsg of
     Snapshot.GetAllBranchesOfClient -> sendLatestClientSnapshots

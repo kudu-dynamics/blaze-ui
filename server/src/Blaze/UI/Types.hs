@@ -51,7 +51,6 @@ import Blaze.UI.Types.BinaryHash (BinaryHash)
 import Blaze.UI.Types.Db (MonadDb(withDb))
 import qualified Blaze.UI.Types.Db as Db
 import Blaze.UI.Types.BinaryManager (BinaryManager, BinaryManagerStorageDir(BinaryManagerStorageDir))
-import qualified Blaze.UI.Types.Checker as Checker
 import Blaze.UI.Types.Session (SessionId, ClientId)
 import Blaze.UI.Types.HostBinaryPath (HostBinaryPath)
 import Blaze.Pretty (Token)
@@ -158,8 +157,6 @@ data BinjaToServer = BSConnect
                    | BSPoi { poiMsg :: Poi.BinjaToServer }
 
                    | BSConstraint { constraintMsg :: C.BinjaToServer }
-
-                   | BSChecker { checkerMsg :: Checker.BinjaToServer }
 
                    | BSComment
                      { cfgId :: CfgId
