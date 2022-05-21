@@ -421,47 +421,6 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
     where
       nonEmptyWarns = filter (not . null . view #warnings) warns
 
-
--- simplify :: UngroupedCfg [Stmt] -> EventLoop TypedCfg
--- simplify ucfg = liftIO (GSolver.simplify $ ucfg ^. #cfg) >>= \case
---   Left err -> do
---     case err of
---       GSolver.SolverError tr _ -> liftIO $ do
---         logLocalInfo . unlines $
---           [ ""
---           , "------------------------Type Checking Cfg-------------------------"
---           , ""
---           , cs $ pshow ("errors" :: Text, tr ^. #errors)
---           , ""
---           , pretty (mkTokenizerCtx cfg) . PIndexedStmts $ tr ^. #symTypeStmts
---           , "-----------------------------------------------------------------------"
---           ]
---       _ -> logLocalError . show $ err
---     return $ CfgA.simplify $ ucfg ^. #cfg
---     case 
---     return cfg'
---   Right (warns, cfg') -> case nonEmptyWarns of
---     [] -> return cfg'
---     xs -> do
---       logLocalInfo "\n\n==================== Solver Errors ======================\n"
---       forM_ xs $ \warn -> do
---         logLocalInfo "\n-------------- type report -----------------\n"
---         let tr = warn ^. #typeReport
---         logLocalInfo . unlines $
---           [ cs $ pshow ("errors" :: Text, tr ^. #errors)
---           , pretty' $ tr ^. #errorConstraints
---           , ""
---           , pretty' . PIndexedStmts $ tr ^. #symTypeStmts
---           ]
---         logLocalInfo "\n-------------- solver errors -----------------\n"
---         logLocalInfo . cs . pshow $ warn ^. #warnings
---       return cfg'
---     where
---       nonEmptyWarns = filter (not . null . view #warnings) warns
-
--- simplify_ :: Cfg [Pil.Stmt] -> EventLoop (Cfg [Pil.Stmt])
--- simplify_ = updateCfgM simplify
-
 ------------------------------------------
 --- main event handler
 
