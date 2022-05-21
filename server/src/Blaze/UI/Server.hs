@@ -29,7 +29,7 @@ import qualified Blaze.UI.Types.Cfg as CfgUI
 import Blaze.UI.Types.Cfg (TypedCfg(TypedCfg), StmtIndex, TypeSymStmt, tokenizeTypeInfo, tokenizeTypedCfg, CfgId)
 import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
-import Blaze.Graph (NodeId)
+import Blaze.Graph (NodeId(NodeId), Identifiable)
 import qualified Blaze.Cfg.Interprocedural as ICfg
 import Blaze.Pretty (PIndexedStmts (..), mkTokenizerCtx, prettyIndexedStmts', pretty', showHex, pretty)
 import qualified Blaze.Types.Pil.Checker as Ch
@@ -370,8 +370,8 @@ mkTypedCfg
 mkTypedCfg mgspec cfg = case checkCfg cfg of
     Left err -> logError $ "Error typechecking cfg: " <> show err
     Right (_, typeSymedCfg, tr) -> do
-      -- Cfg [(Int, Statement (Ch.InfoExpression (Ch.SymInfo, Maybe Ch.DeepSymType)))]
-      let typeSymedCfg' = fmap (fmap (bimap Just (fmap $ fmap fst))) typeSymedCfg :: Cfg (CfNode [(Maybe StmtIndex, TypeSymStmt)])
+      -- Cfg (CfNode [(Int, Statement (Ch.InfoExpression (Ch.SymInfo, Maybe Ch.DeepSymType)))])
+      let typeSymedCfg' = fmap (fmap (fmap (bimap Just (fmap $ fmap fst)))) typeSymedCfg :: Cfg (CfNode [(Maybe StmtIndex, TypeSymStmt)])
       return $ TypedCfg
         { CfgUI.typeInfo = CfgUI.typeInfoFromTypeReport tr
         , CfgUI.typeSymCfg =  maybe (CfgUI.GroupedCfg typeSymedCfg') (`CfgUI.group_` typeSymedCfg') mgspec
@@ -656,7 +656,7 @@ handleBinjaEvent = \case
     debug $ "Binja expand call for:\n" <> cs (pshow callNode)
     tcfg <- getCfg cid
     simplifiedCfg <- updateCfg tcfg $ \cfg -> do
-      case Cfg.getNode cfg (Cfg.Call callNode) of
+      case Cfg.getNode cfg (NodeId $ callNode ^. #uuid) of
         Nothing ->
           logError "Could not find call node in CFG"
           -- TODO: fix issue #160 so we can just send `CallNode ()` to expandCall
@@ -706,7 +706,7 @@ handleBinjaEvent = \case
     simplifiedCfg <- updateCfg tcfg $ \cfg -> do
       case Cfg.findNodeByUUID (getStartUUID node') cfg of
         Nothing -> logError "Node doesn't exist in CFG"
-        Just fullNode -> if fullNode == G.unNodeId (cfg ^. #rootId)
+        Just fullNode -> if G.getNodeId fullNode == cfg ^. #rootId
           then logError "Cannot remove root node"
           else do
             let cfg' = CfgA.focus_ fullNode cfg
@@ -907,7 +907,7 @@ insertStmt cfg cid nid stmtIndex stmt = do
   node' <- getNode cfg cid nid
   (stmtsA, stmtsB) <- getStmtsAround node' stmtIndex
   let stmts' = stmtsA <> [stmt] <> stmtsB
-  pure $ Cfg.setNodeData stmts' node' cfg
+  pure $ G.updateNode (Cfg.setNodeData stmts') node' cfg
 
 getGroupOptions
   :: Hashable a
@@ -964,7 +964,7 @@ getStmtsAround node' stmtIndex = do
         <> "Adding to end."
     pure $ splitAt (fromIntegral stmtIndex) stmts
 
-printSimplifyStats :: (Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
+printSimplifyStats :: (Identifiable a UUID, Hashable a, MonadIO m) => Cfg a -> Cfg a -> m ()
 printSimplifyStats a b = do
   logLocalInfo . unlines $
     [ ""

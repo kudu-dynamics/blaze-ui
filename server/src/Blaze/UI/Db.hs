@@ -1,3 +1,5 @@
+{- HLINT ignore "Redundant <$>" -}
+
 module Blaze.UI.Db
   ( module Blaze.UI.Db
   , module Exports

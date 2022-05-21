@@ -212,15 +212,15 @@ def type_info_from_server(type_info: ServerTypeInfo) -> TypeInfo:
     
 class Cfg(TypedDict):
     edges: List[CfEdge]
-    root: UUID
+    rootId: UUID
     nodes: Dict[UUID, CfNode]
     nextCtxIndex: CtxId
 
 
 class ServerCfg(TypedDict):
     transportEdges: List[CfEdge]
-    transportRoot: CfNode
-    transportNodes: List[Tuple[CfNode, CfNode]]
+    transportRootId: UUID
+    transportNodes: List[Tuple[UUID, CfNode]]
     transportNextCtxIndex: CtxId
 
 

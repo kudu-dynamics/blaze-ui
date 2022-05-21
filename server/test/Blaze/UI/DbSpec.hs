@@ -26,7 +26,7 @@ import Test.Hspec
 import qualified Data.UUID as UUID
 import qualified Data.Text as Text
 import qualified Blaze.UI.Types.BinaryHash as BinaryHash
-import qualified Blaze.Types.Cfg as Cfg
+import qualified Blaze.Cfg as Cfg
 import qualified Blaze.Types.Cfg.Grouping as Grp
 import Blaze.UI.Server (mkTypedCfg)
 
@@ -88,7 +88,7 @@ spec = describe "Blaze.UI.Db" $ do
       let firstCfg = G.removeEdges
             (fmap (\(Cfg.CfEdge src' dst' _) -> G.Edge src' dst')
                . HashSet.toList
-               . Cfg.succEdges (originalCfg' ^. #root)
+               . Cfg.succEdges (Cfg.getRootNode originalCfg')
                $ originalCfg')
             originalCfg'
       firstTCfg <- mkTypedCfg Nothing firstCfg

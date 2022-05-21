@@ -82,13 +82,13 @@ log = _logging.getLogger(__name__)
 
 
 def cfg_from_server(cfg: ServerCfg) -> Cfg:
-    nodes = {k['contents']['uuid']: v for k, v in cfg['transportNodes']}
-    return Cfg(nodes=nodes, edges=cfg['transportEdges'], root=cfg['transportRoot']['contents']['uuid'], nextCtxIndex=cfg['transportNextCtxIndex'])
+    nodes = {k: v for k, v in cfg['transportNodes']}
+    return Cfg(nodes=nodes, edges=cfg['transportEdges'], rootId=cfg['transportRootId'], nextCtxIndex=cfg['transportNextCtxIndex'])
 
 
 def cfg_to_server(cfg: Cfg) -> ServerCfg:
-    nodes = [(cfg['nodes'][k], v) for k, v in cfg['nodes'].items()]
-    return ServerCfg(transportNodes=nodes, transportEdges=cfg['edges'], transportRoot=cfg['nodes'][cfg['root']], transportNextCtxIndex=cfg['nextCtxIndex'])
+    nodes = [(k, v) for k, v in cfg['nodes'].items()]
+    return ServerCfg(transportNodes=nodes, transportEdges=cfg['edges'], transportRootId=cfg['rootId'], transportNextCtxIndex=cfg['nextCtxIndex'])
 
 
 def get_edge_style(
@@ -398,11 +398,11 @@ class ICFGFlowGraph(FlowGraph):
         # Root node MUST be added to the FlowGraph first, otherwise weird FlowGraphWidget
         # layout issues may ensue
         source_nodes: List[Tuple[UUID, CfNode]]
-        source_nodes = [(self.pil_icfg['root'],
-                         self.pil_icfg['nodes'][self.pil_icfg['root']])]
+        source_nodes = [(self.pil_icfg['rootId'],
+                         self.pil_icfg['nodes'][self.pil_icfg['rootId']])]
         source_nodes += [(k, v)
                          for (k, v) in self.pil_icfg['nodes'].items()
-                         if k != self.pil_icfg['root']]
+                         if k != self.pil_icfg['rootId']]
 
         for (node_id, node) in source_nodes:
             fg_node = FlowGraphNode(self)
@@ -1045,7 +1045,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
         if (tok := self.getTokenForMouseEvent(event)):
             if tok.valid:
                 if tok.token.address == 0:
-                    self.setToolTip("no sym")
+                    # no sym
+                    self.setToolTip("")
                 else:
                     tsym = tok.token.address - 1
                     tinfo = self.blaze_instance.graph.type_info
@@ -1054,11 +1055,13 @@ class ICFGWidget(FlowGraphWidget, QObject):
                         tstring = ''.join(str(t['text']) for t in ts)
                         self.setToolTip(tstring)
                     else:
-                        self.setToolTip("sym not found")
+                        # sym not found
+                        self.setToolTip("")
             else:
-                log.info(f"my token: {tok.addr} {tok.type}")
-                self.setToolTip("invalid token")
+                # invalid token
+                self.setToolTip("")
         else:
+            # no token for mouse event
             self.setToolTip("")
 
 

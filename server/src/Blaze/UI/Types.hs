@@ -130,6 +130,7 @@ data BinjaToServer = BSConnect
                      }
                    | BSCfgExpandCall
                      { cfgId :: CfgId
+                     -- TODO: just send call node id
                      , callNode :: CallNode ()
                      , targetAddress :: Word64
                      }
