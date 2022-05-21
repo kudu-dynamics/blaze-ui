@@ -2,7 +2,7 @@ version: "3.4"
 
 services:
   blaze-server:
-    image: ${CI_REGISTRY}/blaze/blaze-ui/blaze-service/squashed
+    image: ${CI_REGISTRY}/blaze/blaze-ui/blaze-service/minimal
     # image: 077943246560.dkr.ecr.us-east-2.amazonaws.com/integrated_blaze_system/kudu/blaze-service
     build:
       context: .
