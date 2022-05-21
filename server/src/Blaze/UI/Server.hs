@@ -379,13 +379,6 @@ updateCfg_ tcfg f = do
 updateCfg :: TypedCfg -> (Cfg (CfNode [Stmt]) -> EventLoop (Cfg (CfNode [Stmt]))) -> EventLoop TypedCfg
 updateCfg tcfg f = fmap snd . updateCfg_ tcfg $ fmap ((),) <$> f
 
--- updateCfg :: TypedCfg -> (Cfg [Stmt] -> EventLoop (Cfg [Stmt])) -> EventLoop TypedCfg
--- updateCfg tcfg f = do
---   let ucfg = CfgUI.ungroup $ tcfg ^. #typeSymCfg
---       cfg = CfgUI.untypeCfg $ ucfg ^. #cfg
---   cfg' <- f cfg
---   mkTypedCfg (Just $ ucfg ^. #groupSpec) cfg'
-
 -- | Simplifies the CFG by autopruning impossible edges and various passes on
 -- the PIL statements, like copy propagation and phi var reduction.
 -- It first tries the BranchContext pruner; if this fails, which happens
