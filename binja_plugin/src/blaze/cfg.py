@@ -1108,22 +1108,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
         '''
         return
 
-    # def mouseReleaseEvent(self, event: QMouseEvent):
-    #     '''
-    #     If the left mouse button was clicked, show a type on hover.
-    #     '''
-
-    #     if event.button() == Qt.MouseButton.LeftButton:
-    #         self.clicked_token = self.getTokenForMouseEvent(event)
-
-    #         if (tok := self.clicked_token):
-    #             if tok.valid:
-    #                 if tok.token.address == 0:
-    #                     self.setToolTip("")
-    #                 else:
-    #                     log.info(f"tok: {tok.token}")
-    #                     self.setToolTip(str(tok.token.address - 1))
-
 
     def mousePressEvent(self, event: QMouseEvent):
         '''
@@ -1131,18 +1115,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
         under the mouse, and show the context menu.
         If the left mouse button was clicked, show a type on hover.
         '''
-
-        # if event.button() == Qt.MouseButton.LeftButton:
-        #     self.clicked_token = self.getTokenForMouseEvent(event)
-
-        #     if (tok := self.clicked_token):
-        #         if tok.valid:
-        #             if tok.token.address == 0:
-        #                 self.setToolTip("")
-        #             else:
-        #                 log.info(f"tok: {tok.token}")
-        #                 self.setToolTip(str(tok.token.address - 1))
-
         
         if event.button() != Qt.MouseButton.RightButton:
             return super().mousePressEvent(event)
