@@ -425,7 +425,7 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
 --- main event handler
 
 getTermUUID :: CfNode a -> UUID
-getTermUUID n =Cfg.getNodeUUID $
+getTermUUID n = Cfg.getNodeUUID $
   case n of
     Cfg.Grouping grpNode -> Grp.getDeepTermNodeFromGroupingNode grpNode
     n' -> n'
@@ -815,9 +815,6 @@ handleBinjaEvent = \case
     tcfg' <- updateCfg tcfg $ \cfg -> do
       startNode <- getNode cfg cid startId
       endNode <- getNode cfg cid endId
-      -- group <- createGroup cfg startNode endNode
-      -- summaryNode <- createSummaryNode cfg group
-      -- cfg' <- substituteGroup cfg group summaryNode
       return $ Grp.makeGrouping startNode endNode cfg []
       
     autosaveCfg cid tcfg'
@@ -835,7 +832,6 @@ handleBinjaEvent = \case
         _ -> logError "Cannot expand non-Grouping node"
     autosaveCfg cid tcfg'
       >>= sendCfgAndSnapshots bhash tcfg' cid
-
 
 insertStmt ::
   Hashable a =>

@@ -137,10 +137,6 @@ data BinjaToServer = BSConnect
                      { cfgId :: CfgId
                      , edge :: (CfNode (), CfNode ())
                      }
-                   -- | BSCfgRemoveNode
-                   --   { cfgId :: CfgId
-                   --   , node :: CfNode ()
-                   --   }
                    | BSCfgFocus
                      { cfgId :: CfgId
                      , node :: CfNode ()
