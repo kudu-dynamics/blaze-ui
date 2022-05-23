@@ -1050,8 +1050,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 else:
                     tsym = tok.token.address - 1
                     tinfo = self.blaze_instance.graph.type_info
-                    if tsym in tinfo.get('symTypes'):
-                        ts = tinfo.get('symTypes')[tsym]
+                    if tsym in tinfo['symTypes']:
+                        ts = tinfo['symTypes'][tsym]
                         tstring = ''.join(str(t['text']) for t in ts)
                         self.setToolTip(tstring)
                     else:
