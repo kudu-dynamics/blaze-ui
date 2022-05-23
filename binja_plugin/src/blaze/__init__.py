@@ -1,9 +1,11 @@
-import logging
+import logging as _logging
 
-from . import logging_config
+from . import logging_config as _logging_config
 
-logging_config.setup_logging()
-log = logging.getLogger(__name__)
+_logging_config.setup_logging()
+log = _logging.getLogger(__name__)
+
+del _logging, _logging_config
 
 # NOTE: any modules that should make use of the above logging configuration
 # (output to the BinaryNinja UI log, and jsonl to the logfile) MUST be imported

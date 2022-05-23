@@ -18,8 +18,8 @@ from binaryninja.interaction import (
     MessageBoxButtonSet,
     MessageBoxIcon,
     TextLineField,
-    get_form_input,
-    show_message_box,
+    get_form_input,  # type: ignore
+    show_message_box,  # type: ignore
 )
 from binaryninjaui import (
     ContextMenuManager,
@@ -31,7 +31,7 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-from PySide6.QtCore import QEvent, QObject, Qt, Slot
+from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, Qt, Slot
 from PySide6.QtGui import QContextMenuEvent, QMouseEvent
 from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -82,12 +82,20 @@ log = _logging.getLogger(__name__)
 
 def cfg_from_server(cfg: ServerCfg) -> Cfg:
     nodes = {k: v for k, v in cfg['transportNodes']}
-    return Cfg(nodes=nodes, edges=cfg['transportEdges'], rootId=cfg['transportRootId'], nextCtxIndex=cfg['transportNextCtxIndex'])
+    return Cfg(
+        nodes=nodes,
+        edges=cfg['transportEdges'],
+        rootId=cfg['transportRootId'],
+        nextCtxIndex=cfg['transportNextCtxIndex'])
 
 
 def cfg_to_server(cfg: Cfg) -> ServerCfg:
     nodes = [(k, v) for k, v in cfg['nodes'].items()]
-    return ServerCfg(transportNodes=nodes, transportEdges=cfg['edges'], transportRootId=cfg['rootId'], transportNextCtxIndex=cfg['nextCtxIndex'])
+    return ServerCfg(
+        transportNodes=nodes,
+        transportEdges=cfg['edges'],
+        transportRootId=cfg['rootId'],
+        transportNextCtxIndex=cfg['nextCtxIndex'])
 
 
 def get_edge_style(
@@ -164,9 +172,7 @@ def is_expandable_call_node(bv: BinaryView, call_node: CallNode) -> bool:
 
 # TODO: Need to add Summary node
 def is_group_start_node(node: CfNode) -> bool:
-    return (is_call_node(node) or
-            is_basic_node(node) or
-            is_grouping_node(node))
+    return (is_call_node(node) or is_basic_node(node) or is_grouping_node(node))
 
 
 def is_group_end_node(node: CfNode) -> bool:
@@ -393,15 +399,13 @@ class ICFGFlowGraph(FlowGraph):
         nodes: Dict[UUID, FlowGraphNode] = {}
         self.node_mapping = {}
 
-
         # Root node MUST be added to the FlowGraph first, otherwise weird FlowGraphWidget
         # layout issues may ensue
         source_nodes: List[Tuple[UUID, CfNode]]
-        source_nodes = [(self.pil_icfg['rootId'],
-                         self.pil_icfg['nodes'][self.pil_icfg['rootId']])]
-        source_nodes += [(k, v)
-                         for (k, v) in self.pil_icfg['nodes'].items()
-                         if k != self.pil_icfg['rootId']]
+        source_nodes = [(self.pil_icfg['rootId'], self.pil_icfg['nodes'][self.pil_icfg['rootId']])]
+        source_nodes += [
+            (k, v) for (k, v) in self.pil_icfg['nodes'].items() if k != self.pil_icfg['rootId']
+        ]
 
         for (node_id, node) in source_nodes:
             fg_node = FlowGraphNode(self)
@@ -420,14 +424,11 @@ class ICFGFlowGraph(FlowGraph):
             if node['contents']['uuid'] in self.pending_changes.removed_nodes:
                 fg_node.highlight = colors.ICFG_CHANGES_REMOVED
             elif (self.poi_search_results and
-                  (node['contents']['uuid']
-                   in self.poi_search_results['presentTargetNodes'])):
+                  (node['contents']['uuid'] in self.poi_search_results['presentTargetNodes'])):
                 fg_node.highlight = colors.POI_PRESENT_TARGET
-            elif (self.group_options and
-                  node['contents']['uuid'] in self.group_options.end_nodes):
+            elif (self.group_options and node['contents']['uuid'] in self.group_options.end_nodes):
                 fg_node.highlight = colors.GROUP_END_CANDIDATE
-            elif (self.group_options and
-                  node['contents']['uuid'] == self.group_options.start_node):
+            elif (self.group_options and node['contents']['uuid'] == self.group_options.start_node):
                 fg_node.highlight = colors.GROUP_START
             elif self.group_options:
                 # Don't color any other nodes when selecting a group end node
@@ -456,9 +457,8 @@ class ICFGFlowGraph(FlowGraph):
             self.append(fg_node)
 
         for edge in self.pil_icfg['edges']:
-            edge_style = get_edge_style(edge,
-                                        self.pil_icfg['nodes'],
-                                        self.pending_changes.removed_edges)
+            edge_style = get_edge_style(
+                edge, self.pil_icfg['nodes'], self.pending_changes.removed_edges)
             nodes[edge['src']['contents']['uuid']].add_outgoing_edge(
                 BranchType.UserDefinedBranch,
                 nodes[edge['dst']['contents']['uuid']],
@@ -550,8 +550,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 activate=self.context_menu_action_select_group_start,
                 is_valid=lambda ctx: (
                     self.clicked_node is not None and
-                    (cf_node := self.get_cf_node(self.clicked_node)) is not None and
-                    is_group_start_node(cf_node)),
+                    (cf_node := self.get_cf_node(self.clicked_node)
+                    ) is not None and is_group_start_node(cf_node)),
             ),
             BNAction(
                 'Blaze\\ICFG\\Group',
@@ -559,8 +559,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 activate=self.context_menu_action_expand_group,
                 is_valid=lambda ctx: (
                     self.clicked_node is not None and
-                    (cf_node := self.get_cf_node(self.clicked_node)) is not None and
-                    is_grouping_node(cf_node)),
+                    (cf_node := self.get_cf_node(self.clicked_node)
+                    ) is not None and is_grouping_node(cf_node)),
             ),
             # TODO: Add back but only activate when in grouping mode.
             # BNAction(
@@ -695,8 +695,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
                     tag='BSGroupDefine',
                     cfgId=self.blaze_instance.graph.pil_icfg_id,
                     startNodeId=start_uuid,
-                    endNodeId=end_uuid
-                ))
+                    endNodeId=end_uuid))
 
     def expand_group(self, grouping_node: CfNode) -> None:
         assert self.blaze_instance.graph
@@ -707,8 +706,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             BinjaToServer(
                 tag='BSGroupExpand',
                 cfgId=self.blaze_instance.graph.pil_icfg_id,
-                groupingNodeId=grouping_uuid
-            ))
+                groupingNodeId=grouping_uuid))
 
     def prune(self, from_node: CfNode, to_node: CfNode):
         '''
@@ -1023,7 +1021,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         log.debug('Expand Group')
 
         assert self.clicked_node is not None
-        summary_node = self.get_cf_node(self.clicked_node) 
+        summary_node = self.get_cf_node(self.clicked_node)
         assert summary_node is not None
 
         self.expand_group(summary_node)
@@ -1038,16 +1036,14 @@ class ICFGWidget(FlowGraphWidget, QObject):
         # Send start_node to server
         self.select_group_end(end_node)
 
-
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        if (self.blaze_instance.graph is None or 
-            event is None or 
-            self.blaze_instance.graph.type_info is None):
+        if (self.blaze_instance.graph is None or event is None or
+                self.blaze_instance.graph.type_info is None):
             return super().mouseMoveEvent(event)
-        
+
         # Pass event to super class for default behaviors like drag to scroll.
         super().mouseMoveEvent(event)
-        
+
         if (tok := self.getTokenForMouseEvent(event)):
             if tok.valid:
                 if tok.token.address == 0:
@@ -1070,7 +1066,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
             # no token for mouse event
             self.setToolTip("")
 
-
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any
@@ -1080,7 +1075,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         if event.button() != Qt.LeftButton or self.blaze_instance.graph is None:
             return super().mousePressEvent(event)
-            
+
         if (fg_node := self.getNodeForMouseEvent(event)):
             node = self.get_cf_node(fg_node)
 
@@ -1089,7 +1084,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 return
 
             if (self.blaze_instance.graph.group_options and
-                node['contents']['uuid'] in self.blaze_instance.graph.group_options.end_nodes):
+                    node['contents']['uuid'] in self.blaze_instance.graph.group_options.end_nodes):
                 self.select_group_end(node)
                 return
 
@@ -1097,7 +1092,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
                 log.warning('Did not double-click on a call node')
                 return
             elif not (is_expandable_call_node(self.blaze_instance.bv, cast(CallNode,
-                                                                         node['contents']))):
+                                                                           node['contents']))):
                 log.warning('Call node not expandable')
                 return
             else:
@@ -1111,27 +1106,24 @@ class ICFGWidget(FlowGraphWidget, QObject):
         '''
         return
 
-
     def mousePressEvent(self, event: QMouseEvent):
         '''
         If the right mouse button was clicked, remember the node or edge (if any)
         under the mouse, and show the context menu.
         If the left mouse button was clicked, show a type on hover.
         '''
-        
+
         if event.button() != Qt.MouseButton.RightButton:
             return super().mousePressEvent(event)
-
-
 
         # NOTE synthesize left mouse button click/release in order to highlight the
         # edge, line, or token under point
         super().mousePressEvent(
             QMouseEvent(
                 QEvent.Type.MouseButtonPress,
-                event.localPos(),
-                event.windowPos(),
-                event.globalPos(),
+                cast(QPointF, event.localPos()),
+                cast(QPointF, event.windowPos()),
+                cast(QPoint, event.globalPos()),
                 Qt.MouseButton.LeftButton,
                 Qt.MouseButtons(Qt.MouseButton.LeftButton),  # type: ignore
                 Qt.KeyboardModifiers(),
@@ -1141,9 +1133,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
         super().mouseReleaseEvent(
             QMouseEvent(
                 QEvent.Type.MouseButtonRelease,
-                event.localPos(),
-                event.windowPos(),
-                event.globalPos(),
+                cast(QPointF, event.localPos()),
+                cast(QPointF, event.windowPos()),
+                cast(QPoint, event.globalPos()),
                 Qt.MouseButton.LeftButton,
                 Qt.MouseButtons(Qt.MouseButton.LeftButton),  # type: ignore
                 Qt.KeyboardModifiers(),
@@ -1388,9 +1380,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
             self.icfg_toolbar_widget.cancel_button.setVisible(True)
 
             self.icfg_toolbar_widget.update_stats(
-                nodes=len(graph.pil_icfg['nodes']),
-                edges=len(graph.pil_icfg['edges'])
-                )
+                nodes=len(graph.pil_icfg['nodes']), edges=len(graph.pil_icfg['edges']))
 
         if self.mode == ICFGWidget.Mode.STANDARD:
             self.icfg_toolbar_widget.accept_button.setVisible(False)
@@ -1398,9 +1388,7 @@ class ICFGDockWidget(QWidget, DockContextHandler):
             self.icfg_toolbar_widget.cancel_button.setVisible(False)
 
             self.icfg_toolbar_widget.update_stats(
-                nodes=len(graph.pil_icfg['nodes']),
-                edges=len(graph.pil_icfg['edges'])
-                )
+                nodes=len(graph.pil_icfg['nodes']), edges=len(graph.pil_icfg['edges']))
 
         self.icfg_widget.setGraph(graph)
 
