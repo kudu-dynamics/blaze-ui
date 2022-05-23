@@ -71,6 +71,7 @@ from .types import (
     SnapshotServerToBinja,
     group_options_from_server,
     pending_changes_from_server,
+    type_info_from_server,
 )
 from .util import (
     bv_key,
@@ -624,6 +625,7 @@ class BlazePlugin():
             server_pending_changes = msg.get('pendingChanges')
             server_poi_search_results = msg.get('poiSearchResults')
             server_group_options = msg.get('groupOptions')
+            type_info = type_info_from_server(ti) if (ti := msg.get('typeInfo')) else None
 
             if server_poi_search_results:
                 poi_search_results = PoiSearchResults(
@@ -652,6 +654,7 @@ class BlazePlugin():
                     pending_changes=pending_changes,
                     group_options=group_options,
                     max_str_length=self.settings.string_truncation_length,
+                    type_info=type_info,
                 )
                 instance.icfg_dock_widget.set_graph(instance.graph)
                 instance.snaptree_dock_widget.snaptree_widget.focus_icfg(cfg_id)

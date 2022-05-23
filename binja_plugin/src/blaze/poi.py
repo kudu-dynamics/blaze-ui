@@ -47,7 +47,7 @@ class PoiListItem(QListWidgetItem):
         """
         parent: the parent list widget
         """
-        QListWidgetItem.__init__(self, parent, type=QListWidgetItem.UserType)
+        QListWidgetItem.__init__(self, parent, type=cast(int, QListWidgetItem.UserType))
 
         self.poiId = poiId
         self.name = name

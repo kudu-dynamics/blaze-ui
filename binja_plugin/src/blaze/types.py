@@ -19,6 +19,9 @@ BinaryHash = str
 BndbHash = str
 HostBinaryPath = str
 CtxId = int
+Sym = int
+StmtIndex = int
+
 
 # What Aeson encodes the unit value `()` as
 # TODO: This used to be a Literal[[]] type, but that is actually an invalid Literal.
@@ -98,6 +101,7 @@ class Token(TypedDict):
     operand: int
     context: TokenContext
     address: int
+    typeSym: Optional[Sym]
 
 
 def tokens_from_server(ts: List[Token], max_str_length: Optional[int]) -> DisassemblyTextLine:
@@ -110,7 +114,7 @@ def tokens_from_server(ts: List[Token], max_str_length: Optional[int]) -> Disass
 
         quote = t['text'][0]
         return t['text'][:max_str_length + 1] + '…' + quote
-
+    
     tokens = [
         InstructionTextToken(
             type=getattr(InstructionTextTokenType, t['tokenType']),
@@ -119,10 +123,15 @@ def tokens_from_server(ts: List[Token], max_str_length: Optional[int]) -> Disass
             size=t['size'],
             operand=t['operand'],
             context=getattr(InstructionTextTokenContext, t['context']),
-            address=t['address'],
+            # Trojan the typeSym into the address field.
+            # 0 means there's no type. Make sure to subtract 1 when using
+            address= t['typeSym'] + 1 if t['typeSym'] else 0,
         ) for t in ts
     ]
     return DisassemblyTextLine(tokens)
+
+
+IndexedStmt = Tuple[Optional[StmtIndex], List[Token]]
 
 
 class BasicBlockNode(TypedDict):
@@ -130,7 +139,7 @@ class BasicBlockNode(TypedDict):
     ctx: Ctx
     start: Address
     end: Address
-    nodeData: List[List[Token]]
+    nodeData: List[IndexedStmt]
 
 
 class CallNode(TypedDict):
@@ -138,28 +147,28 @@ class CallNode(TypedDict):
     ctx: Ctx
     start: Address
     callDest: CallDest
-    nodeData: List[List[Token]]
+    nodeData: List[IndexedStmt]
 
 
 class EnterFuncNode(TypedDict):
     uuid: UUID
     prevCtx: Ctx
     nextCtx: Ctx
-    nodeData: List[List[Token]]
+    nodeData: List[IndexedStmt]
 
 
 class LeaveFuncNode(TypedDict):
     uuid: UUID
     prevCtx: Ctx
     nextCtx: Ctx
-    nodeData: List[List[Token]]
+    nodeData: List[IndexedStmt]
 
 
 class GroupingNode(TypedDict):
     uuid: UUID
     termNode: 'CfNode'
     grouping: 'ServerCfg'
-    nodeData: List[List[Token]]
+    nodeData: List[IndexedStmt]
 
 
 CfNodeUnion = Union[BasicBlockNode, CallNode, EnterFuncNode, LeaveFuncNode, GroupingNode]
@@ -176,17 +185,42 @@ class CfEdge(TypedDict):
     branchType: Literal['TrueBranch', 'FalseBranch', 'UnconditionalBranch']
 
 
+class TypeError(TypedDict):
+    stmtOrigin: int
+    sym: Sym
+    error: List[Token]
+    
+    
+class TypeInfo(TypedDict):
+    varSymMap: Dict[str, Sym]
+    varEqMap: Dict[Sym, Set[Sym]]
+    symTypes: Dict[Sym, List[Token]]
+    typeErrors: List[TypeError]
+
+
+class ServerTypeInfo(TypedDict):
+    varSymMap: List[Tuple[str, Sym]]
+    varEqMap: List[Tuple[Sym, List[Sym]]]
+    symTypes: List[Tuple[Sym, List[Token]]]
+    typeErrors: List[TypeError]
+
+
+def type_info_from_server(type_info: ServerTypeInfo) -> TypeInfo:
+    veqs = {k: set(v) for k, v in type_info['varEqMap']}
+    return TypeInfo(varSymMap=dict(type_info['varSymMap']), varEqMap=veqs, symTypes=dict(type_info['symTypes']), typeErrors=type_info['typeErrors'])
+
+    
 class Cfg(TypedDict):
     edges: List[CfEdge]
-    root: UUID
+    rootId: UUID
     nodes: Dict[UUID, CfNode]
     nextCtxIndex: CtxId
 
 
 class ServerCfg(TypedDict):
     transportEdges: List[CfEdge]
-    transportRoot: CfNode
-    transportNodes: List[Tuple[CfNode, CfNode]]
+    transportRootId: UUID
+    transportNodes: List[Tuple[UUID, CfNode]]
     transportNextCtxIndex: CtxId
 
 
@@ -401,6 +435,7 @@ class ServerToBinja(ServerToBinjaTotal, total=False):
     poiMsg: PoiServerToBinja
     poiSearchResults: Optional[PoiSearchResults]
     pendingChanges: Optional[ServerPendingChanges]
+    typeInfo: ServerTypeInfo
 
 
 class BinjaToServerTotal(TypedDict, total=True):

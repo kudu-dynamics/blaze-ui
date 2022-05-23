@@ -60,6 +60,7 @@ from .types import (
     PoiSearchResults,
     ServerCfg,
     SnapshotBinjaToServer,
+    TypeInfo,
     Word64,
     tokens_from_server,
 )
@@ -81,13 +82,13 @@ log = _logging.getLogger(__name__)
 
 
 def cfg_from_server(cfg: ServerCfg) -> Cfg:
-    nodes = {k['contents']['uuid']: v for k, v in cfg['transportNodes']}
-    return Cfg(nodes=nodes, edges=cfg['transportEdges'], root=cfg['transportRoot']['contents']['uuid'], nextCtxIndex=cfg['transportNextCtxIndex'])
+    nodes = {k: v for k, v in cfg['transportNodes']}
+    return Cfg(nodes=nodes, edges=cfg['transportEdges'], rootId=cfg['transportRootId'], nextCtxIndex=cfg['transportNextCtxIndex'])
 
 
 def cfg_to_server(cfg: Cfg) -> ServerCfg:
-    nodes = [(cfg['nodes'][k], v) for k, v in cfg['nodes'].items()]
-    return ServerCfg(transportNodes=nodes, transportEdges=cfg['edges'], transportRoot=cfg['nodes'][cfg['root']], transportNextCtxIndex=cfg['nextCtxIndex'])
+    nodes = [(k, v) for k, v in cfg['nodes'].items()]
+    return ServerCfg(transportNodes=nodes, transportEdges=cfg['edges'], transportRootId=cfg['rootId'], transportNextCtxIndex=cfg['nextCtxIndex'])
 
 
 def get_edge_style(
@@ -370,6 +371,7 @@ class ICFGFlowGraph(FlowGraph):
         pending_changes: PendingChanges,
         group_options: Optional[GroupOptions],
         max_str_length: Optional[int],
+        type_info: Optional[TypeInfo],
     ):
         super().__init__()
         self.bv: BinaryView = bv
@@ -380,7 +382,7 @@ class ICFGFlowGraph(FlowGraph):
         self.pending_changes: PendingChanges = pending_changes
         self.group_options: Optional[GroupOptions] = group_options
         self.max_str_length: Optional[int] = max_str_length
-
+        self.type_info: Optional[TypeInfo] = type_info
         self.format()
 
         log.debug('Initialized object: %r', self)
@@ -392,14 +394,15 @@ class ICFGFlowGraph(FlowGraph):
         nodes: Dict[UUID, FlowGraphNode] = {}
         self.node_mapping = {}
 
+
         # Root node MUST be added to the FlowGraph first, otherwise weird FlowGraphWidget
         # layout issues may ensue
         source_nodes: List[Tuple[UUID, CfNode]]
-        source_nodes = [(self.pil_icfg['root'],
-                         self.pil_icfg['nodes'][self.pil_icfg['root']])]
+        source_nodes = [(self.pil_icfg['rootId'],
+                         self.pil_icfg['nodes'][self.pil_icfg['rootId']])]
         source_nodes += [(k, v)
                          for (k, v) in self.pil_icfg['nodes'].items()
-                         if k != self.pil_icfg['root']]
+                         if k != self.pil_icfg['rootId']]
 
         for (node_id, node) in source_nodes:
             fg_node = FlowGraphNode(self)
@@ -409,7 +412,7 @@ class ICFGFlowGraph(FlowGraph):
             if node['contents'].get('nodeData'):
                 tokenized_lines = node['contents']['nodeData']
                 fg_node.lines += [
-                    tokens_from_server(line, self.max_str_length) for line in tokenized_lines
+                    tokens_from_server(line[1], self.max_str_length) for line in tokenized_lines
                 ]
 
             # TODO: Make use of view "modes" to detangle this complex if-else-if chain
@@ -743,6 +746,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
             pending_changes=self.blaze_instance.graph.pending_changes,
             group_options=None,
             max_str_length=self.blaze_instance.blaze.settings.string_truncation_length,
+            type_info=self.blaze_instance.graph.type_info,
         )
 
         assert self.blaze_instance._icfg_dock_widget
@@ -1018,7 +1022,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
         log.debug('Expand Group')
 
         assert self.clicked_node is not None
-        summary_node = self.get_cf_node(self.clicked_node)
+        summary_node = self.get_cf_node(self.clicked_node) 
         assert summary_node is not None
 
         self.expand_group(summary_node)
@@ -1033,6 +1037,34 @@ class ICFGWidget(FlowGraphWidget, QObject):
         # Send start_node to server
         self.select_group_end(end_node)
 
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if (self.blaze_instance.graph is None or event is None or self.blaze_instance.graph.type_info is None):
+            return
+        
+        if (tok := self.getTokenForMouseEvent(event)):
+            if tok.valid:
+                if tok.token.address == 0:
+                    # no sym
+                    self.setToolTip("")
+                else:
+                    tsym = tok.token.address - 1
+                    tinfo = self.blaze_instance.graph.type_info
+                    if tsym in tinfo['symTypes']:
+                        ts = tinfo['symTypes'][tsym]
+                        tstring = ''.join(str(t['text']) for t in ts)
+                        self.setToolTip(tstring)
+                    else:
+                        # sym not found
+                        self.setToolTip("")
+            else:
+                # invalid token
+                self.setToolTip("")
+        else:
+            # no token for mouse event
+            self.setToolTip("")
+
+
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         '''
         Expand the call node under mouse, if any
@@ -1042,7 +1074,7 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         if event.button() != Qt.LeftButton or self.blaze_instance.graph is None:
             return super().mousePressEvent(event)
-
+            
         if (fg_node := self.getNodeForMouseEvent(event)):
             node = self.get_cf_node(fg_node)
 
@@ -1073,14 +1105,18 @@ class ICFGWidget(FlowGraphWidget, QObject):
         '''
         return
 
+
     def mousePressEvent(self, event: QMouseEvent):
         '''
         If the right mouse button was clicked, remember the node or edge (if any)
-        under the mouse, and show the context menu
+        under the mouse, and show the context menu.
+        If the left mouse button was clicked, show a type on hover.
         '''
-
+        
         if event.button() != Qt.MouseButton.RightButton:
             return super().mousePressEvent(event)
+
+
 
         # NOTE synthesize left mouse button click/release in order to highlight the
         # edge, line, or token under point

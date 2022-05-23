@@ -94,9 +94,9 @@ data SnapshotInfo = SnapshotInfo
   , snapshotType :: SnapshotType
   } deriving (Eq, Ord, Show, Generic, ToJSON, FromJSON, Hashable)
 
-type BranchTree = AlgaGraph () () CfgId
+type BranchTree = AlgaGraph () CfgId CfgId
 
-type BranchTransport = GraphTransport () () CfgId
+type BranchTransport = GraphTransport () CfgId
 
 data Branch a = Branch
   { hostBinaryPath :: HostBinaryPath
