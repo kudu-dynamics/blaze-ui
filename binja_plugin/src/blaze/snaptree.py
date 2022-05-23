@@ -103,9 +103,9 @@ class SnapTreeItem(QTreeWidgetItem):
         '''
         # pyright doesn't seem to handle constructor overloading well?
         if predecessor is not None:
-            QTreeWidgetItem.__init__(self, parent, predecessor, type=QTreeWidgetItem.UserType.value)
+            QTreeWidgetItem.__init__(self, parent, predecessor, type=cast(int, QTreeWidgetItem.UserType))
         else:
-            QTreeWidgetItem.__init__(self, parent, type=QTreeWidgetItem.UserType.value)
+            QTreeWidgetItem.__init__(self, parent, type=cast(int, QTreeWidgetItem.UserType))
 
         self.update_text()
         ''' From QTreeWidgetItem documentation, for reference:
