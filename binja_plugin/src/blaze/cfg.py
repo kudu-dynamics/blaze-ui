@@ -1074,9 +1074,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         if event.button() != Qt.LeftButton or self.blaze_instance.graph is None:
             return super().mousePressEvent(event)
-        
-        if (tok := self.getTokenForMouseEvent(event)):
-            log.info(f"got token: {tok.token.address}")
             
         if (fg_node := self.getNodeForMouseEvent(event)):
             node = self.get_cf_node(fg_node)
