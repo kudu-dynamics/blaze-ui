@@ -87,9 +87,6 @@ instance SqlType CfgId where
 symToInt :: Sym -> Int
 symToInt (Sym n) = fromIntegral n
 
-hashMapBimap :: (Hashable k') => (k -> k') -> (a -> a') -> HashMap k a -> HashMap k' a'
-hashMapBimap f g = HashMap.fromList . fmap (bimap f g) . HashMap.toList
-
 transportVarSymMap :: HashMap PilVar Sym -> HashMap Symbol Sym
 transportVarSymMap = HashMap.mapKeys pretty'
 
