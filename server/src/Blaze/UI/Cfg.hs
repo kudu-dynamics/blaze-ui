@@ -11,8 +11,8 @@ import qualified Data.HashMap.Strict as HashMap
 import qualified Data.HashSet as HashSet
 import Blaze.Types.Cfg.Grouping (CfNode, CfEdge)
 import qualified Blaze.Types.Graph as G
+import Blaze.Cfg (Cfg)
 import qualified Blaze.Types.Cfg as Cfg
-import Blaze.Types.Pil (Stmt)
 
 
 -- | Changes CfgId key in graph cache.
@@ -54,18 +54,12 @@ getCfg cid = do
     m <- readTVar cfgMapTVar
     maybe (return Nothing) (fmap Just . readTVar) $ HashMap.lookup cid m
 
-getRemovedNodes :: TypedCfg -> TypedCfg -> HashSet (CfNode [Stmt])
-getRemovedNodes old new =
-  HashSet.difference (G.nodes $ old' ^. #graph) (G.nodes $ new' ^. #graph)
-  where
-    old' = CfgUI.toUnwrappedGroupedPilCfg old
-    new' = CfgUI.toUnwrappedGroupedPilCfg new
+getRemovedNodes :: Cfg (CfNode ()) -> Cfg (CfNode ()) -> HashSet (CfNode ())
+getRemovedNodes old new = HashSet.difference (G.nodes old) (G.nodes new)
 
-getRemovedEdges :: TypedCfg -> TypedCfg -> HashSet (CfEdge (CfNode [Stmt]))
-getRemovedEdges old new = HashSet.difference (f old') (f new')
+getRemovedEdges :: Cfg (CfNode ()) -> Cfg (CfNode ()) -> HashSet (CfEdge (CfNode ()))
+getRemovedEdges old new = HashSet.difference (f old) (f new)
   where
-    old' = CfgUI.toUnwrappedGroupedPilCfg old
-    new' = CfgUI.toUnwrappedGroupedPilCfg new
     f = HashSet.fromList . fmap Cfg.fromLEdge . G.edges . view #graph
 
 edgeToUUIDTuple :: CfEdge (CfNode a) -> (UUID, UUID)

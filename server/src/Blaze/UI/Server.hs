@@ -266,15 +266,20 @@ sendDiffCfg bhash cid old new = do
     sendCfg bhash old cid Nothing (Just changes) Nothing
 
   where
+    toNullCfg :: TypedCfg -> Cfg (CfNode ())
+    toNullCfg = fmap void . CfgUI.toUnwrappedGroupedPilCfg
+    old' = toNullCfg old
+    new' = toNullCfg new
+
     isEmptyChanges (PendingChanges [] []) = True
     isEmptyChanges _ = False
     changes = PendingChanges removedNodes' removedEdges'
     removedNodes' = fmap Cfg.getNodeUUID
                     . HashSet.toList
-                    $ CfgUI.getRemovedNodes old new
+                    $ CfgUI.getRemovedNodes old' new'
     removedEdges' = fmap CfgUI.edgeToUUIDTuple
                     . HashSet.toList
-                    $ CfgUI.getRemovedEdges old new
+                    $ CfgUI.getRemovedEdges old' new'
 
 -- | Stores the Cfg to the cache and database.
 setCfg :: CfgId -> TypedCfg -> EventLoop ()
