@@ -26,7 +26,7 @@ import qualified Blaze.Cfg.Analysis as CfgA
 import qualified Blaze.Pil.Analysis as PilA
 import qualified Blaze.UI.Cfg as CfgUI
 import qualified Blaze.UI.Types.Cfg as CfgUI
-import Blaze.UI.Types.Cfg (TypedCfg(TypedCfg), StmtIndex, TypeSymStmt, tokenizeTypeInfo, tokenizeTypedCfg, CfgId)
+import Blaze.UI.Types.Cfg (GroupedCfg(GroupedCfg), TypedCfg(TypedCfg), StmtIndex, TypeSymStmt, tokenizeTypeInfo, tokenizeTypedCfg, CfgId)
 import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
 import Blaze.Graph (NodeId(NodeId), Identifiable)
@@ -380,9 +380,12 @@ updateCfg_ tcfg f = do
       cfg = CfgUI.untypeCfg $ ucfg ^. #cfg
   (s, cfg') <- f cfg
   (s,) <$>  mkTypedCfg (Just $ ucfg ^. #groupSpec) cfg'
-  
+
+
+-- | Ungroups and untypes a Cfg, updates it with @f, then re-types and regroups.
 updateCfg :: TypedCfg -> (Cfg (CfNode [Stmt]) -> EventLoop (Cfg (CfNode [Stmt]))) -> EventLoop TypedCfg
 updateCfg tcfg f = fmap snd . updateCfg_ tcfg $ fmap ((),) <$> f
+
 
 -- | Simplifies the CFG by autopruning impossible edges and various passes on
 -- the PIL statements, like copy propagation and phi var reduction.
@@ -817,26 +820,24 @@ handleBinjaEvent = \case
   BSGroupDefine cid startId endId -> do
     bhash <- getCfgBndbHash cid
     tcfg <- getCfg cid
-    tcfg' <- updateCfg tcfg $ \cfg -> do
-      startNode <- getNode cfg cid startId
-      endNode <- getNode cfg cid endId
-      return $ Grp.makeGrouping startNode endNode cfg []
-      
+    let cfg = CfgUI._unwrapGroupedCfg $ tcfg ^. #typeSymCfg
+
+    startNode <- getNode cfg cid startId
+    endNode <- getNode cfg cid endId
+    let tcfg' = tcfg & #typeSymCfg .~ GroupedCfg (Grp.makeGrouping startNode endNode cfg [])
     autosaveCfg cid tcfg'
       >>= sendCfgAndSnapshots bhash tcfg' cid
-
-    -- sendCfgWithCallRatings bhash cfg' cid Nothing
-
+    
   BSGroupExpand cid groupNodeId -> do
-    -- logError "Group expand not yet implemented."
     bhash <- getCfgBndbHash cid
     tcfg <- getCfg cid
-    tcfg' <- updateCfg tcfg $ \cfg -> do
-      getNode cfg cid groupNodeId >>= \case
-        Cfg.Grouping gnode -> return $ Grp.expandGroupingNode gnode cfg
-        _ -> logError "Cannot expand non-Grouping node"
-    autosaveCfg cid tcfg'
-      >>= sendCfgAndSnapshots bhash tcfg' cid
+    let cfg = CfgUI._unwrapGroupedCfg $ tcfg ^. #typeSymCfg
+    getNode cfg cid groupNodeId >>= \case
+      Cfg.Grouping gnode -> do
+        let tcfg' = tcfg & #typeSymCfg .~ GroupedCfg (Grp.expandGroupingNode gnode cfg)
+        autosaveCfg cid tcfg'
+          >>= sendCfgAndSnapshots bhash tcfg' cid
+      _ -> logError "Cannot expand non-Grouping node"
 
 insertStmt ::
   Hashable a =>
