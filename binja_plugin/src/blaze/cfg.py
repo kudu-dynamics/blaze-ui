@@ -197,7 +197,7 @@ def node_contains_addr(node: CfNode, addr: Address) -> bool:
         call_node = cast(CallNode, node['contents'])
         return call_node['start'] == addr
     elif tag == 'Grouping':
-        call_node = cast(GroupingNode, node['contents'])
+        group_node = cast(GroupingNode, node['contents'])
         return False
     else:
         assert False, f'Inexaustive match on CfNode? tag={node["tag"]}'
@@ -1039,8 +1039,13 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        if (self.blaze_instance.graph is None or event is None or self.blaze_instance.graph.type_info is None):
-            return
+        if (self.blaze_instance.graph is None or 
+            event is None or 
+            self.blaze_instance.graph.type_info is None):
+            return super().mouseMoveEvent(event)
+        
+        # Pass event to super class for default behaviors like drag to scroll.
+        super().mouseMoveEvent(event)
         
         if (tok := self.getTokenForMouseEvent(event)):
             if tok.valid:
