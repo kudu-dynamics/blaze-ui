@@ -5,6 +5,12 @@ STACK_OPTIONS ?=
 STACK_BUILD_OPTIONS ?=
 STACK_HADDOCK_OPTIONS ?=
 
+export BLAZE_UI_HOST ?= localhost
+export BLAZE_UI_WS_PORT ?= 31337
+export BLAZE_UI_HTTP_PORT ?= 31338
+export BLAZE_UI_SQLITE_FILEPATH ?= $(HOME)/.local/share/blaze/blaze.sqlite
+export BLAZE_UI_BNDB_STORAGE_DIR ?= $(HOME)/.local/share/blaze/bndbs
+
 stack_options_dev := --stack-yaml stack-dev.yaml $(STACK_OPTIONS)
 stack_options_release := $(STACK_OPTIONS)
 stack_options := $(stack_options_$(BUILD_TYPE))
