@@ -32,11 +32,11 @@ from binaryninja.interaction import (
     MessageBoxButtonSet,
     MessageBoxIcon,
     TextLineField,
-    get_form_input,
+    get_form_input,  # type: ignore
     get_save_filename_input,
-    show_message_box,
+    show_message_box,  # type: ignore
 )
-from binaryninja.mainthread import execute_on_main_thread_and_wait
+from binaryninja.mainthread import execute_on_main_thread_and_wait  # type: ignore
 from binaryninjaui import DockHandler, FileContext, UIContext, UIContextNotification, ViewFrame
 from websockets.client import WebSocketClientProtocol
 import hashlib
@@ -729,6 +729,7 @@ class BlazeNotificationListener(UIContextNotification):
     def __init__(self, blaze_plugin: BlazePlugin):
         super().__init__()
         self.blaze_plugin: BlazePlugin = blaze_plugin
+        BlazeNotificationListener.instance = self
 
     def OnAfterCloseFile(self, context: UIContext, file: FileContext, frame: ViewFrame) -> None:
         bv = frame.getCurrentViewInterface().getData()
@@ -770,8 +771,7 @@ class BlazeNotificationListener(UIContextNotification):
 
 
 blaze = BlazePlugin()
-BlazeNotificationListener.instance = BlazeNotificationListener(blaze)
-UIContext.registerNotification(BlazeNotificationListener.instance)
+UIContext.registerNotification(BlazeNotificationListener(blaze))
 
 
 class Action(str, enum.Enum):

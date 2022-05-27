@@ -3,7 +3,7 @@ import logging as _logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union, cast
 
-from binaryninja.interaction import TextLineField, get_form_input
+from binaryninja.interaction import TextLineField, get_form_input  # type: ignore
 from binaryninjaui import (
     ContextMenuManager,
     DockContextHandler,
@@ -12,7 +12,7 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 
@@ -362,7 +362,7 @@ class SnapTreeWidget(QTreeWidget):
         if event.button() != Qt.LeftButton:
             return super().mousePressEvent(event)
 
-        ev_pos = event.pos()
+        ev_pos: QPoint = event.pos()
         if (item := self.itemAt(ev_pos)):
             item = cast(SnapTreeItem, item)
             self.clicked_item = item
@@ -373,7 +373,7 @@ class SnapTreeWidget(QTreeWidget):
         if event.button() != Qt.RightButton:
             return super().mousePressEvent(event)
 
-        ev_pos = event.pos()
+        ev_pos: QPoint = event.pos()
         if (item := self.itemAt(ev_pos)):
             item = cast(SnapTreeItem, item)
             self.clicked_item = item

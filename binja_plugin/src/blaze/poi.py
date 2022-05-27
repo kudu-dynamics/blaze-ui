@@ -11,7 +11,7 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 
@@ -116,7 +116,7 @@ class PoiListWidget(QListWidget):
         if event.button() != Qt.LeftButton:
             return super().mousePressEvent(event)
 
-        ev_pos = event.pos()
+        ev_pos: QPoint = event.pos()
         if (item := self.itemAt(ev_pos)):
             item = cast(PoiListItem, item)
             self.clicked_item = item
@@ -126,7 +126,7 @@ class PoiListWidget(QListWidget):
         if event.button() != Qt.RightButton:
             return super().mousePressEvent(event)
 
-        ev_pos = event.pos()
+        ev_pos: QPoint = event.pos()
         if (item := self.itemAt(ev_pos)):
             item = cast(PoiListItem, item)
             self.clicked_item = item

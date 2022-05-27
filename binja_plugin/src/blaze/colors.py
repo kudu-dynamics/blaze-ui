@@ -15,10 +15,10 @@ def lerp(c1: HighlightColor, c2: HighlightColor, amount: float) -> HighlightColo
             f'({c1.style.name}, {c2.style.name})')
 
     return HighlightColor(
-        red=_lerp(c1.red, c2.red, amount),
-        green=_lerp(c1.green, c2.green, amount),
-        blue=_lerp(c1.blue, c2.blue, amount),
-        alpha=_lerp(c1.alpha, c2.alpha, amount),
+        red=_lerp(cast(int, c1.red), cast(int, c2.red), amount),
+        green=_lerp(cast(int, c1.green), cast(int, c2.green), amount),
+        blue=_lerp(cast(int, c1.blue), cast(int, c2.blue), amount),
+        alpha=_lerp(cast(int, c1.alpha), cast(int, c2.alpha), amount),
     )
 
 

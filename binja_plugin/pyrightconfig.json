@@ -1,8 +1,7 @@
 {
     "stubPath": "./stubs",
     "include": [
-        "src/",
-        "stubs/"
+        "src/"
     ],
     "exclude": [
         ".venv/",
