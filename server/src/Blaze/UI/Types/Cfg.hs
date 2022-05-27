@@ -21,7 +21,7 @@ import Database.Selda.SqlType ( Lit(LCustom)
                               )
 import qualified Database.Selda.SqlType as Sql
 import qualified Blaze.Types.Pil as Pil
-import Blaze.Types.Pil (PilVar, Symbol)
+import Blaze.Types.Pil (PilVar, Symbol, OperationSize(OperationSize))
 import qualified Blaze.Types.Pil.Checker as Ch
 import Blaze.Types.Pil.Checker (Sym(Sym), DeepSymType, TypeReport, UnifyConstraintsError)
 import qualified Data.HashMap.Strict as HashMap
@@ -113,7 +113,7 @@ tokenizeTypeError u = TypeError
 
 untypeExpr :: TypeSymExpr -> Pil.Expression
 untypeExpr x = Pil.Expression
-  { size = fromIntegral $ x ^. #info . #size
+  { size = OperationSize . toBytes $ x ^. #info . #size
   , op = fmap untypeExpr $ x ^. #op
   }
 
