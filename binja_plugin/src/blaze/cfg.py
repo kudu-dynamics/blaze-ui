@@ -31,13 +31,12 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-from PySide6.QtCore import QEvent, QObject, Qt
+from PySide6.QtCore import QEvent, QObject, Qt, Slot
 from PySide6.QtGui import QContextMenuEvent, QMouseEvent
 from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from . import colors
 from .types import (
-    BINARYNINJAUI_CUSTOM_EVENT,
     UUID,
     Address,
     BasicBlockNode,
@@ -596,6 +595,8 @@ class ICFGWidget(FlowGraphWidget, QObject):
         bind_actions(self.action_handler, actions)
         add_actions(self.context_menu, actions)
 
+        self.layoutComplete.connect(self.onLayoutComplete)
+
         log.debug('Initialized object: %r', self)
 
     def __del__(self):
@@ -753,9 +754,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
         # TODO: Find a less hacky approach to accomplish this?
         self.blaze_instance._icfg_dock_widget.set_graph(graph)
 
-    def customEvent(self, event: QEvent) -> None:
-        FlowGraphWidget.customEvent(self, event)
-        if event.type() != BINARYNINJAUI_CUSTOM_EVENT or self.recenter_node_id is None:
+    @Slot()
+    def onLayoutComplete(self) -> None:
+        if self.recenter_node_id is None:
             return
 
         log.debug('Recentering on UUID %r', self.recenter_node_id)

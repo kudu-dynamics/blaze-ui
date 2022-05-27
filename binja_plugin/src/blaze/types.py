@@ -29,11 +29,6 @@ StmtIndex = int
 #       representation that won't introduce ambiguities?
 Unit = List[Any]
 
-# Binary Ninja uses different event types to coordinate UI events in
-# the Binary Ninja application. These event IDs have changed in the past
-# and may need to be updated again in the future.
-BINARYNINJAUI_CUSTOM_EVENT = 0xfff8
-
 
 class Symbol(TypedDict):
     _symbolName: str
