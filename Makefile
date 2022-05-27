@@ -10,6 +10,11 @@ test: test-server
 test-server:
 	$(MAKE) -C server test
 
+run: run-server
+
+run-server:
+	$(MAKE) -C server run
+
 copy-tests-server:
 	$(MAKE) -C server copy-tests
 
