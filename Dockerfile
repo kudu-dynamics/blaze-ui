@@ -95,6 +95,11 @@ RUN --mount=type=cache,id=blaze-apt,target=/var/cache/apt,sharing=locked \
     apt install -yq --no-install-recommends "${packages[@]}"
 EOF
 
+RUN locale-gen en_US.UTF-8
+ENV LANG=en_US.UTF-8
+ENV LANGUAGE=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
 COPY --from=main /usr/share/binaryninja /usr/share/binaryninja
 COPY --from=main /root/.binaryninja /root/.binaryninja
 COPY --from=main /usr/local/bin/z3 /usr/local/bin/z3
