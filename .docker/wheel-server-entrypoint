@@ -29,4 +29,4 @@ jq --arg packageUrl "$url" '.[0].packageUrl = $packageUrl' <plugins.json \
     | sponge plugins.json
 
 echo "Starting wheel server"
-exec /usr/bin/hastatic
+strace -f /usr/bin/hastatic
