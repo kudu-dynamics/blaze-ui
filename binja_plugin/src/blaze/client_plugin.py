@@ -113,8 +113,10 @@ class BlazeInstance():
     def send(self, msg: BinjaToServer):
         self.blaze.send(self.bv, msg)
 
-        # Show processing indicator for CFG messages
-        if msg['tag'].startswith('BSCfg'):
+        # Show processing indicator for CFG messages and snapshot loading messages
+        if (msg['tag'].startswith('BSCfg') or
+            (msg['tag'].startswith('BSSnapshot') and
+             cast(SnapshotBinjaToServer, msg.get('snapshotMsg'))['tag'] == 'LoadSnapshot')):
             if self._icfg_dock_widget:
                 execute_on_main_thread_and_wait(self._icfg_dock_widget.show_progress_indicator)
 
