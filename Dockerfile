@@ -138,7 +138,7 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
     echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
 RUN --mount=type=cache,id=blaze-apt,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=blaze-apt-lists,target=/var/apt/lists,sharing=locked \
-    apt update -yq && apt install -yq --no-install-recommends jq moreutils
+    apt update -yq && apt install -yq --no-install-recommends jq moreutils strace
 COPY --from=hastatic /usr/bin/hastatic /usr/bin/hastatic
 COPY --from=wheel-builder /binja_plugin/dist/*.whl /binja_plugin/dist/plugins.json /www/
 COPY .docker/wheel-server-entrypoint /usr/bin/wheel-server-entrypoint
