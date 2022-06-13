@@ -398,12 +398,14 @@ class BlazePlugin():
                 else:
                     log.error(SEND_FAIL_LOG_MSG)
                     return
+        # Save BV changes to BNDB before uploading. The BNDB may already exist.
+        # If the user has updated the BV then 'analysis_changed' will be True.
+        # If BN upgraded the BV then 'modified' will be True.
+        else:
+            bv.create_database(bv.file.filename)
 
         # by now, bv is saved as bndb and bv.file.filename is bndb
         bv_filename: str = bv.file.filename
-
-        if bv.file.analysis_changed:
-            bv.create_database(bv_filename)
 
         with open(bv_filename, 'rb') as f:
             files = {'bndb': f}
