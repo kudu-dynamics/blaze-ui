@@ -59,14 +59,24 @@ import Blaze.Types.Pil (Stmt)
 import qualified Blaze.Cfg.Solver.BranchContext as GSolver
 
 
-receiveJSON :: FromJSON a => WS.Connection -> IO (Either Text a)
+receiveJSON :: (HasCallStack, FromJSON a) => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
-  x <- WS.receiveData conn :: IO LBS.ByteString
+  x <- catch (WS.receiveData conn :: IO LBS.ByteString) catchConnectionException
   return . first cs . Aeson.eitherDecode $ x
+  where
+    catchConnectionException :: WS.ConnectionException -> IO a
+    catchConnectionException e = do
+      logLocalError (show e)
+      throwIO e
 
-sendJSON :: ToJSON a => WS.Connection -> a -> IO ()
+sendJSON :: (HasCallStack, ToJSON a) => WS.Connection -> a -> IO ()
 sendJSON conn x =
-  WS.sendTextData conn (Aeson.encode x :: LBS.ByteString)
+  catch (WS.sendTextData conn (Aeson.encode x :: LBS.ByteString)) catchConnectionException
+  where
+    catchConnectionException :: WS.ConnectionException -> IO a
+    catchConnectionException e = do
+      logLocalError (show e)
+      throwIO e
 
 data SessionError
   = InvalidSessionId Text
