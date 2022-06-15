@@ -7,6 +7,7 @@ from binaryninja._binaryninjacore import BNTagReference
 from binaryninja.binaryview import BinaryView
 from binaryninja.flowgraph import FlowGraphEdge, FlowGraphNode
 from binaryninja.function import AddressRange
+from PySide6.QtCore import Signal
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QAbstractScrollArea, QWidget
 
@@ -167,3 +168,6 @@ class FlowGraphWidget(QAbstractScrollArea, View, PreviewScrollHandler, BinaryDat
     #def getLineForMouseEvent(self, event: QMouseEvent, /) -> Optional[Any]: ...
     def getTokenForMouseEvent(self, event: QMouseEvent, /) -> HighlightTokenState:
         ...
+
+    layoutComplete: Signal
+    updateMiniGraph: Signal

@@ -31,7 +31,7 @@ from binaryninjaui import (
     UIActionHandler,
     ViewFrame,
 )
-from PySide6.QtCore import QEvent, QObject, QPoint, QPointF, Qt, Slot
+from PySide6.QtCore import QEvent, QObject, Qt, Slot
 from PySide6.QtGui import QContextMenuEvent, QMouseEvent
 from PySide6.QtWidgets import QGridLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -1121,9 +1121,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
         super().mousePressEvent(
             QMouseEvent(
                 QEvent.Type.MouseButtonPress,
-                cast(QPointF, event.localPos()),
-                cast(QPointF, event.windowPos()),
-                cast(QPoint, event.globalPos()),
+                event.localPos(),
+                event.windowPos(),
+                event.globalPos(),
                 Qt.MouseButton.LeftButton,
                 Qt.MouseButtons(Qt.MouseButton.LeftButton),  # type: ignore
                 Qt.KeyboardModifiers(),
@@ -1133,9 +1133,9 @@ class ICFGWidget(FlowGraphWidget, QObject):
         super().mouseReleaseEvent(
             QMouseEvent(
                 QEvent.Type.MouseButtonRelease,
-                cast(QPointF, event.localPos()),
-                cast(QPointF, event.windowPos()),
-                cast(QPoint, event.globalPos()),
+                event.localPos(),
+                event.windowPos(),
+                event.globalPos(),
                 Qt.MouseButton.LeftButton,
                 Qt.MouseButtons(Qt.MouseButton.LeftButton),  # type: ignore
                 Qt.KeyboardModifiers(),
