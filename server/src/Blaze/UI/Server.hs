@@ -58,6 +58,13 @@ import qualified Blaze.Types.Pil as Pil
 import Blaze.Types.Pil (Stmt)
 import qualified Blaze.Cfg.Solver.BranchContext as GSolver
 
+import Network.HTTP.Types (status400)
+import Network.Wai (Application)
+import qualified Network.Wai as Wai
+import qualified Network.Wai.Handler.Warp as Warp
+import Network.Wai.Handler.WebSockets (websocketsOr)
+import Network.WebSockets (ServerApp)
+
 
 receiveJSON :: (HasCallStack, FromJSON a) => WS.Connection -> IO (Either Text a)
 receiveJSON conn = do
@@ -193,13 +200,21 @@ sendToAllWithBinary st bh msg = do
 
 run :: AppState -> IO ()
 run st = do
-  logLocalInfo $ "Starting Blaze UI Server at "
-    <> serverHost cfg
-    <> ":"
-    <> show (serverWsPort cfg)
-  WS.runServer (cs $ serverHost cfg) (serverWsPort cfg) (app st)
-  where
-    cfg = st ^. #serverConfig
+  logLocalInfo $
+    "Starting Blaze UI Server at "
+      <> serverHost cfg
+      <> ":"
+      <> show (serverWsPort cfg)
+  Warp.run (serverWsPort cfg) $ websocketsOr WS.defaultConnectionOptions wsApp backupApp
+ where
+  cfg :: ServerConfig
+  cfg = st ^. #serverConfig
+
+  wsApp :: ServerApp
+  wsApp = app st
+
+  backupApp :: Application
+  backupApp _ respond = respond $ Wai.responseLBS status400 [] "Not a WebSocket request"
 
 testClient :: BinjaMessage BinjaToServer -> WS.Connection -> IO (BinjaMessage ServerToBinja)
 testClient msg conn = do
@@ -805,7 +820,7 @@ handleBinjaEvent = \case
             -- TODO: handle above message directly in binja, maybe remove below
             logError $ "Parse Error:\n" <> err
           Right expr -> do
-          
+
             cfg' <- insertStmt cfg cid nid stmtIndex (Pil.Constraint . Pil.ConstraintOp $ expr)
             simplify cfg'
       bhash <- getCfgBndbHash cid
@@ -837,7 +852,7 @@ handleBinjaEvent = \case
     let tcfg' = tcfg & #typeSymCfg .~ GroupedCfg (Grp.makeGrouping startNode endNode cfg [])
     autosaveCfg cid tcfg'
       >>= sendCfgAndSnapshots bhash tcfg' cid
-    
+
   BSGroupExpand cid groupNodeId -> do
     bhash <- getCfgBndbHash cid
     tcfg <- getCfg cid
