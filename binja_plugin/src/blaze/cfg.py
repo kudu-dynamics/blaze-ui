@@ -1164,11 +1164,6 @@ class ICFGWidget(FlowGraphWidget, QObject):
 
         self.context_menu_manager.show(self.context_menu, self.action_handler)
 
-    def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', view_frame: ViewFrame):
-        log.debug('Changing ICFG view to blaze instance %r', blaze_instance)
-        self.blaze_instance = blaze_instance
-        self._view_frame = view_frame
-
     def notifyOffsetChanged(self, view_frame: ViewFrame, offset: int) -> None:
         pass
 
@@ -1406,7 +1401,6 @@ class ICFGDockWidget(QWidget, DockContextHandler):
         else:
             view = view_frame.getCurrentViewInterface()
             self.blaze_instance = self.blaze_instance.blaze.ensure_instance(view.getData())
-            self.icfg_widget.notifyInstanceChanged(self.blaze_instance, view_frame)
 
     def notifyOffsetChanged(self, offset: int) -> None:
         log.debug('offset changed (bv=%r, offset=%r)', self.blaze_instance.bv, offset)
