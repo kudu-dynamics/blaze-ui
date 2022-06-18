@@ -268,6 +268,8 @@ data SessionState = SessionState
   , dbConn :: Db.Conn
   , activePoi :: TVar (Maybe Poi)
   , callNodeRatingCtx :: CachedCalc BndbHash CallNodeRatingCtx
+  , outbox :: TQueue ServerToBinja
+  , outboxThread :: TMVar ThreadId
   } deriving (Generic)
 
 addWorkerThread :: ThreadId -> SessionState -> STM ()
@@ -296,6 +298,8 @@ emptySessionState cid binPath binHash bm dbConn' ccCallRating
     <*> pure dbConn'
     <*> newTVar Nothing
     <*> pure ccCallRating
+    <*> newTQueue
+    <*> newEmptyTMVar
 
 -- | A `ConnId` is a unique websocket connection.
 -- There is only one ConnId per BinaryNinja instance, shared across bndbs.
@@ -366,10 +370,11 @@ cleanupClosedConn cid st = do
                   False -> return []
                   True -> do
                     mEventThread <- tryReadTMVar $ ss ^. #eventHandlerThread
+                    mOutboxThread <- tryReadTMVar $ ss ^. #outboxThread
                     writeTVar (st ^. #binarySessions) $ HashMap.delete sid binSessions
                     workers <- fmap HashSet.toList . readTVar
                       $ ss ^. #eventHandlerWorkerThreads
-                    return $ maybeToList mEventThread <> workers
+                    return $ maybeToList mEventThread <> workers <> maybeToList mOutboxThread
   mapM_ killThread threads
   logLocalInfo $ "Killed " <> show (length threads) <> " thread(s)."
 
