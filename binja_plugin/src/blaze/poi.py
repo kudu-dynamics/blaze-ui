@@ -2,7 +2,7 @@ import logging as _logging
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional, cast
 
-from binaryninja import ( Function )
+from binaryninja import (Function)
 from binaryninjaui import (
     ContextMenuManager,
     DockContextHandler,
@@ -163,9 +163,6 @@ class PoiListWidget(QListWidget):
         self.clicked_item.func.set_auto_instr_highlight(self.clicked_item.instr_addr, highlight)
         bv.navigate(bv.view, self.clicked_item.instr_addr)
 
-    def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', _view_frame: ViewFrame):
-        self.blaze_instance = blaze_instance
-
 
 class PoiListDockWidget(QWidget, DockContextHandler):
     """
@@ -242,4 +239,3 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         else:
             view = view_frame.getCurrentViewInterface()
             self.blaze_instance = self.blaze_instance.blaze.ensure_instance(view.getData())
-            self.poi_list_widget.notifyInstanceChanged(self.blaze_instance, view_frame)
