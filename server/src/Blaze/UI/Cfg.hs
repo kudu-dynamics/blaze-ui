@@ -31,6 +31,7 @@ changeCfgId oldCid newCid = do
 
 addCfg :: CfgId -> TypedCfg -> EventLoop ()
 addCfg cid cfg = do
+  logLocalDebug "Saving CFG to cache..."
   cfgMapTVar <- view #cfgs <$> ask
   liftIO . atomically $ do
     m <- readTVar cfgMapTVar
@@ -40,6 +41,7 @@ addCfg cid cfg = do
         writeTVar cfgMapTVar $ HashMap.insert cid cfgTVar m
       Just cfgTMVar -> do
         writeTVar cfgTMVar cfg
+  logLocalDebug "Saved CFG to cache."
   return ()
 
 removeCfg :: CfgId -> EventLoop ()
