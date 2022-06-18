@@ -50,6 +50,8 @@ mockSessionState conn = SessionState cid hpath bhash
   <*> pure conn
   <*> newTVarIO Nothing
   <*> atomically CC.create
+  <*> newTQueueIO
+  <*> newEmptyTMVarIO
   where
     bmdir = "/tmp/blaze/bm"
     hpath = "/tmp/blaze/spec"

@@ -110,13 +110,13 @@ getSessionState sid binHash st = do
         modifyTVar (st ^. #binarySessions)
           $ HashMap.insert sid ss
         return (ss, True)
-  when justCreated $ spawnEventHandler ss
+  when justCreated $ do
+    spawnEventHandler ss
+    spawnOutboxHandler ss
   return ss
 
 sendToBinja_ :: ServerToBinja -> SessionState -> IO ()
-sendToBinja_ msg ss = do
-  conns <- fmap HashMap.elems . readTVarIO $ ss ^. #binjaConns
-  mapM_ (flip sendJSON $ BinjaMessage (ss ^. #clientId) (ss ^. #hostBinaryPath) (ss ^. #binaryHash) msg) conns
+sendToBinja_ msg ss = atomically $ writeTQueue (ss ^. #outbox) msg
 
 sendToBinja :: ServerToBinja -> EventLoop ()
 sendToBinja msg = ask >>= liftIO . sendToBinja_ msg
@@ -152,6 +152,14 @@ binjaApp st connId conn = do
             return True
       when isNewConn . logInfo' $ "Blaze Connected for binary: " <> show hpath
       pushEvent >> binjaApp st connId conn
+
+spawnOutboxHandler :: SessionState -> IO ()
+spawnOutboxHandler ss = do
+  eventTid <- forkIO . forever $ do
+    msg <- atomically . readTQueue $ ss ^. #outbox
+    conns <- fmap HashMap.elems . readTVarIO $ ss ^. #binjaConns
+    mapM_ (flip sendJSON $ BinjaMessage (ss ^. #clientId) (ss ^. #hostBinaryPath) (ss ^. #binaryHash) msg) conns
+  atomically $ putTMVar (ss ^. #outboxThread) eventTid  
 
 spawnEventHandler :: SessionState -> IO ()
 spawnEventHandler ss = do
