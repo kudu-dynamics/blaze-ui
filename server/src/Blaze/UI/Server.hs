@@ -153,29 +153,46 @@ binjaApp st connId conn = do
       when isNewConn . logInfo' $ "Blaze Connected for binary: " <> show hpath
       pushEvent >> binjaApp st connId conn
 
+sessionInfo :: SessionState -> Text
+sessionInfo ss = "(" <> show (ss ^. #clientId) <> " " <> show (ss ^. #hostBinaryPath) <> ")"
+
 spawnOutboxHandler :: SessionState -> IO ()
 spawnOutboxHandler ss = do
   eventTid <- forkIO . forever $ do
+    logLocalDebug $ sessionInfo ss <> " " <> "Waiting for outgoing msg..."
     msg <- atomically . readTQueue $ ss ^. #outbox
+    logLocalDebug $ sessionInfo ss <> " " <> "Got outgoing msg: " <> show msg
     conns <- fmap HashMap.elems . readTVarIO $ ss ^. #binjaConns
+    when (null conns) $ logLocalError
+      $ "No connections associated with session when sending responses"
+      <> " " <> sessionInfo ss
     mapM_ (flip sendJSON $ BinjaMessage (ss ^. #clientId) (ss ^. #hostBinaryPath) (ss ^. #binaryHash) msg) conns
-  atomically $ putTMVar (ss ^. #outboxThread) eventTid  
+  atomically $ putTMVar (ss ^. #outboxThread) eventTid
 
 spawnEventHandler :: SessionState -> IO ()
 spawnEventHandler ss = do
+  -- TODO: Can this every be false?
   b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
   case b of
-    False -> logLocalWarning "spawnEventHandler -- event handler already spawned"
+    False -> logLocalError "spawnEventHandler -- event handler already spawned"
     True -> do
-      -- spawns event handler workers for new messages
+      -- Spawns event handler workers for new messages
       eventTid <- forkIO . forever $ do
+        logLocalDebug $ sessionInfo ss <> " " <> "Waiting for event..."
         msg <- atomically . readTQueue $ ss ^. #eventInbox
+        logLocalDebug $ sessionInfo ss <> " " <> "Got event: " <> show msg
 
-        void . forkIO $ do
+        -- Spawn separate worker thread
+        workerTid <- forkIO $ do
+          logLocalDebug $ sessionInfo ss <> " " <> "Worker thread started"
           tid <- myThreadId
           atomically $ addWorkerThread tid ss
           void $ runEventLoop (mainEventLoop msg) ss
           atomically $ removeCompletedWorkerThread tid ss
+          logLocalDebug $ sessionInfo ss <> " " <> "Worker thread exiting"
+
+        parentTid <- myThreadId
+        logLocalDebug $ sessionInfo ss <> " " <> "Listener-worker relationship: " <> show parentTid <> "->" <> show workerTid
 
       atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
 
@@ -190,7 +207,7 @@ app st pconn = case splitPath of
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
     runBinjaApp conn = do
       connId <- newConnId
-      WS.withPingThread conn 3 (return ())
+      WS.withPingThread conn 10 (return ())
         $ catch (binjaApp st connId conn) (catchConnectionException connId)
     catchConnectionException :: ConnId -> WS.ConnectionException -> IO ()
     catchConnectionException connId e = do
@@ -324,7 +341,9 @@ setCfg cid tcfg = do
 -- if db has it, add it to cache
 getCfg :: CfgId -> EventLoop TypedCfg
 getCfg cid = CfgUI.getCfg cid >>= \case
-  Just pcfg -> return pcfg
+  Just pcfg -> do
+    logLocalDebug $ "Found cachced CFG for " <> show cid
+    return pcfg
   Nothing -> getStoredCfg cid
 
 -- | Tries to getCfg from db. if db has it, add it to cache
@@ -332,6 +351,7 @@ getStoredCfg :: CfgId -> EventLoop TypedCfg
 getStoredCfg cid = Db.getCfg cid >>= \case
     Nothing -> throwError . EventLoopError $ "Could not find existing CFG with id " <> show cid
     Just pcfg -> do
+      logLocalDebug $ "Found CFG in DB for " <> show cid <> " and added it to cache."
       CfgUI.addCfg cid pcfg
       return pcfg
 
@@ -615,6 +635,7 @@ handleBinjaEvent = \case
       Nothing -> sendToBinja
         . SBLogError $ "Couldn't find function at " <> showHex funcAddr
       Just func -> do
+        logLocalDebug $ "Generating CFG for function at " <> showHex funcAddr
         mr <- liftIO $ BnCfg.getCfg (BNImporter bv) bv func 0
 
         case mr of
@@ -624,6 +645,7 @@ handleBinjaEvent = \case
             ctx <- ask
             cfg <- simplify $ r ^. #result
             tcfg <- mkTypedCfg Nothing cfg
+            logLocalDebug "Saving CFG to DB..."
             (_bid, cid, _snapBranch) <- Db.saveNewCfgAndBranch
               (ctx ^. #clientId)
               (ctx ^. #hostBinaryPath)
@@ -631,9 +653,11 @@ handleBinjaEvent = \case
               (func ^. #address)
               (func ^. #name)
               tcfg
+            logLocalDebug "CFG saved to DB."
             CfgUI.addCfg cid tcfg
             sendLatestSnapshots
             sendCfgWithCallRatings bhash tcfg cid Nothing
+            logLocalDebug $ "Sent CFG for function at " <> showHex funcAddr
         debug "Created new branch and added auto-cfg."
 
   BSCfgExpandCall cid callNode targetAddr -> do
