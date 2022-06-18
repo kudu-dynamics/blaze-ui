@@ -107,6 +107,10 @@ class PoiListWidget(QListWidget):
         bind_actions(self.action_handler, actions)
         add_actions(self.context_menu, actions)
 
+        # Load POIs on startup
+        poi_msg = PoiBinjaToServer(tag='GetPoisOfBinary')
+        self.blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
+
         log.debug('Initialized object: %r', self)
 
     def __del__(self):
@@ -137,7 +141,7 @@ class PoiListWidget(QListWidget):
             return
 
         active_icfg_id = self.blaze_instance.graph.pil_icfg_id if self.blaze_instance.graph else None
-            
+
         poi_msg = PoiBinjaToServer(
             tag='ActivatePoiSearch',
             poiId=self.clicked_item.poiId,
@@ -162,11 +166,7 @@ class PoiListWidget(QListWidget):
     def notifyInstanceChanged(self, blaze_instance: 'BlazeInstance', _view_frame: ViewFrame):
         self.blaze_instance = blaze_instance
 
-        # Load POIs when switching BVs
-        poi_msg = PoiBinjaToServer(tag='GetPoisOfBinary')
-        self.blaze_instance.send(BinjaToServer(tag='BSPoi', poiMsg=poi_msg))
 
-        
 class PoiListDockWidget(QWidget, DockContextHandler):
     """
     Binary Ninja dock widget containing the POI list view.
@@ -224,7 +224,7 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         if tag == 'PoisOfBinary':
             pois = cast(List[Poi], poi_msg.get('pois'))
             self.local_pois = pois
-                    
+
         elif tag == 'GlobalPoisOfBinary':
             global_pois = cast(List[Poi], poi_msg.get('globalPois'))
             self.global_pois = global_pois
@@ -235,7 +235,7 @@ class PoiListDockWidget(QWidget, DockContextHandler):
         # Redraw POI list
         for poi in (self.local_pois + self.global_pois):
             self.add_poi_list_item(poi)
-                
+
     def notifyViewChanged(self, view_frame: ViewFrame) -> None:
         if view_frame is None:
             log.error('view_frame is None')
