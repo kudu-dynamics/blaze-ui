@@ -351,18 +351,20 @@ cleanupBinjaConn connId ss = do
 -- | Removes ConnId from all sessions and frees up sessions with no active connections.
 cleanupClosedConn :: ConnId -> AppState -> IO ()
 cleanupClosedConn cid st = do
-  threads <- atomically $ do
+  errorOrThreads <- atomically $ do
     sconns <- readTVar $ st ^. #sessionConns
     case HashMap.lookup cid sconns of
-      Nothing -> return []
+      Nothing -> return $ Left $ "Could not find connection with ID: " <> show cid
       Just sids -> do
         writeTVar (st ^. #sessionConns) $ HashMap.delete cid sconns
         binSessions <- readTVar $ st ^. #binarySessions
-        concatMapM (cleanSession binSessions) . HashSet.toList $ sids
+        threadIds <- concatMapM (cleanSession binSessions) . HashSet.toList $ sids
+        return $ Right threadIds
         where
           cleanSession :: HashMap SessionId SessionState -> SessionId -> STM [ThreadId]
           cleanSession binSessions sid =
             case HashMap.lookup sid binSessions of
+              -- TODO: Provide error message for this Nothing case
               Nothing -> return []
               Just ss -> do
                 binjaConnsMap <- cleanupBinjaConn cid ss
@@ -375,8 +377,11 @@ cleanupClosedConn cid st = do
                     workers <- fmap HashSet.toList . readTVar
                       $ ss ^. #eventHandlerWorkerThreads
                     return $ maybeToList mEventThread <> workers <> maybeToList mOutboxThread
-  mapM_ killThread threads
-  logLocalInfo $ "Killed " <> show (length threads) <> " thread(s)."
+  case errorOrThreads of
+    Left msg -> logLocalError msg
+    Right threads -> do
+      mapM_ killThread threads
+      logLocalInfo $ "Killed " <> show (length threads) <> " thread(s)."
 
 initAppState :: ServerConfig -> Db.Conn -> IO AppState
 initAppState cfg' conn = AppState cfg'

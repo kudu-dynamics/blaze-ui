@@ -142,15 +142,16 @@ binjaApp st connId conn = do
       let pushEvent = atomically . writeTQueue (ss ^. #eventInbox)
             . BinjaEvent
             $ x ^. #action
-      isNewConn <- atomically $ do
+      isNewSessionForConn <- atomically $ do
         sconns <- readTVar $ st ^. #sessionConns
         case HashSet.member sid <$> HashMap.lookup connId sconns of
           Just True -> return False
           _ -> do
             addSessionConn sid connId st
+            -- Add connection entry for session state
             modifyTVar (ss ^. #binjaConns) $ HashMap.insert connId conn
             return True
-      when isNewConn . logInfo' $ "Blaze Connected for binary: " <> show hpath
+      when isNewSessionForConn . logInfo' $ "New session for connection with binary: " <> show hpath
       pushEvent >> binjaApp st connId conn
 
 sessionInfo :: SessionState -> Text

@@ -10,6 +10,7 @@ import System.IO ( BufferMode(LineBuffering)
                  , hSetBuffering)
 import qualified Blaze.UI.Types.BinaryManager as BM
 import qualified Blaze.UI.Db as Db
+import GHC.Conc (numCapabilities)
 
 main :: IO ()
 main = do
@@ -24,6 +25,12 @@ main = do
       putText "or"
       putText "blaze-ui-server <host> <websockets port> <http port> <sqlite filepath> <bndb dir>"
       P.error "Invalid args"
+
+  usedCapabilities <- getNumCapabilities
+  putStrLn @Text
+    $ "User specified " <> show numCapabilities <> " capabilities; server using "
+    <> show usedCapabilities <> " capabilities."
+
   conn <- Db.init $ cfg ^. #sqliteFilePath
   appState <- initAppState cfg conn
   void . forkIO $ WebServer.run appState
