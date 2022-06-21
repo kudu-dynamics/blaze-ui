@@ -10,7 +10,7 @@ It consists of three components:
 
 ## Requirements
 
-* Binary Ninja `>=2.4.2985-dev`
+* Binary Ninja `3.1.3469` (stable/release)
 * Python `^3.8`
   * It is recommended you use a virtualenv. [See here for more instructions][wiki-virtualenv]
 * Either
@@ -32,31 +32,26 @@ BinaryNinja, you can use Docker to serve the plugin.
 
 ### Using Stack
 
-Start the backend server:
-
+Build server:
 ```sh
 $ cd server
-$ stack build
+$ make
 $ mkdir -p "$HOME/.local/share/blaze"
-$ BLAZE_UI_HOST=localhost \
+```
+
+Run server (using default values of `BLAZE_*` environment variables):
+```sh
+$ make run
+```
+
+Run server (overriding environment variables):
+```sh
+$ make run \
+  BLAZE_UI_HOST=localhost \
   BLAZE_UI_WS_PORT=31337 \
   BLAZE_UI_HTTP_PORT=31338 \
   BLAZE_UI_SQLITE_FILEPATH="$HOME/.local/share/blaze/blaze.sqlite" \
-  BLAZE_UI_BNDB_STORAGE_DIR="$HOME/.local/share/blaze/bndbs" \
-  stack run
-```
-or
-```sh
-$ export BLAZE_UI_HOST=localhost
-$ export BLAZE_UI_WS_PORT=31337
-$ export BLAZE_UI_HTTP_PORT=31338
-$ export BLAZE_UI_SQLITE_FILEPATH="$HOME/.local/share/blaze/blaze.sqlite"
-$ export BLAZE_UI_BNDB_STORAGE_DIR="$HOME/.local/share/blaze/bndbs"
-$ stack run
-```
-or
-```sh
-$ stack run localhost 31337 31338 "$HOME/.local/share/blaze/blaze.sqlite" "$HOME/.local/share/blaze/bndbs"
+  BLAZE_UI_BNDB_STORAGE_DIR="$HOME/.local/share/blaze/bndbs"
 ```
 
 And then start the plugin server:
@@ -74,7 +69,7 @@ And then start the plugin server:
   # ... or rebuild if local modifications have been made
   $ docker-compose build wheel-server
   # Start the service
-  $ docker-compose up wheel-server
+  $ docker-compose up blaze-plugin-repository
   ```
 
 ### Using docker
