@@ -10,7 +10,7 @@ It consists of three components:
 
 ## Requirements
 
-* Binary Ninja `>=2.4.2985-dev`
+* Binary Ninja `3.1.3469` (stable/release)
 * Python `^3.8`
   * It is recommended you use a virtualenv. [See here for more instructions][wiki-virtualenv]
 * Either
@@ -32,31 +32,26 @@ BinaryNinja, you can use Docker to serve the plugin.
 
 ### Using Stack
 
-Start the backend server:
-
+Build server:
 ```sh
 $ cd server
-$ stack build
+$ make
 $ mkdir -p "$HOME/.local/share/blaze"
-$ BLAZE_UI_HOST=localhost \
+```
+
+Run server (using default values of `BLAZE_*` environment variables):
+```sh
+$ make run
+```
+
+Run server (overriding environment variables):
+```sh
+$ make run \
+  BLAZE_UI_HOST=localhost \
   BLAZE_UI_WS_PORT=31337 \
   BLAZE_UI_HTTP_PORT=31338 \
   BLAZE_UI_SQLITE_FILEPATH="$HOME/.local/share/blaze/blaze.sqlite" \
-  BLAZE_UI_BNDB_STORAGE_DIR="$HOME/.local/share/blaze/bndbs" \
-  stack run
-```
-or
-```sh
-$ export BLAZE_UI_HOST=localhost
-$ export BLAZE_UI_WS_PORT=31337
-$ export BLAZE_UI_HTTP_PORT=31338
-$ export BLAZE_UI_SQLITE_FILEPATH="$HOME/.local/share/blaze/blaze.sqlite"
-$ export BLAZE_UI_BNDB_STORAGE_DIR="$HOME/.local/share/blaze/bndbs"
-$ stack run
-```
-or
-```sh
-$ stack run localhost 31337 31338 "$HOME/.local/share/blaze/blaze.sqlite" "$HOME/.local/share/blaze/bndbs"
+  BLAZE_UI_BNDB_STORAGE_DIR="$HOME/.local/share/blaze/bndbs"
 ```
 
 And then start the plugin server:
@@ -74,7 +69,7 @@ And then start the plugin server:
   # ... or rebuild if local modifications have been made
   $ docker-compose build wheel-server
   # Start the service
-  $ docker-compose up wheel-server
+  $ docker-compose up blaze-plugin-repository
   ```
 
 ### Using docker
@@ -97,7 +92,7 @@ $ docker-compose build --pull
 $ docker-compose up
 ```
 
-## Installing Blaze in BinaryNinja
+## Installing Blaze in Binary Ninja
 
 1. After starting the wheel server (which also functions as a BinaryNinja plugin repository), open BinaryNinja and edit these settings (`Edit > Preferences > Settings` or `Ctrl-,`):
    - `Plugin Manager > Unofficial 3rd Party Plugin Repository Display Name` can be set to anything. Example: `localhost`
@@ -111,6 +106,36 @@ $ docker-compose up
    - `Blaze > Blaze WebSocket Port` should be the value of `BLAZE_UI_WS_PORT` (`31337` by default)
    - `Blaze > Blaze HTTP Port` should be the value of `BLAZE_UI_HTTP_PORT` (`31338` by default)
 6. Restart Binary Ninja
+
+### Verifying installed Blaze version
+
+After installing Blaze in Binary Ninja, in the Binary Ninja Python Console, run:
+
+``` python
+>>> from pathlib import Path
+>>> print((Path(Kudu_Blaze.__file__).parent / 'METADATA').read_text())
+```
+
+You should see output like
+
+```
+Metadata-Version: 2.1
+Name: blaze
+Version: 0.1.0.65746
+Summary: Blaze
+Author: Kudu Dynamics
+Requires-Python: >=3.6.1,<3.10
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Requires-Dist: requests (>=2.26.0,<3.0.0)
+Requires-Dist: typing-extensions (>=3.10.0,<4.0.0)
+Requires-Dist: websockets (>=9.1,<10.0)
+```
+
+The `Version: 0.1.0.65746` line indicates that `pyproject.toml` set `version = "0.1.0"`, and that the unique build ID determined by the value of `CI_PIPELINE_ID` was `65746`.
+You can then go to https://gitlab/blaze/blaze-ui/-/pipelines/65746 to determine which commit it came from.
 
 
 ## Using Blaze
