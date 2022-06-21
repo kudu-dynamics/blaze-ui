@@ -92,7 +92,7 @@ $ docker-compose build --pull
 $ docker-compose up
 ```
 
-## Installing Blaze in BinaryNinja
+## Installing Blaze in Binary Ninja
 
 1. After starting the wheel server (which also functions as a BinaryNinja plugin repository), open BinaryNinja and edit these settings (`Edit > Preferences > Settings` or `Ctrl-,`):
    - `Plugin Manager > Unofficial 3rd Party Plugin Repository Display Name` can be set to anything. Example: `localhost`
@@ -106,6 +106,36 @@ $ docker-compose up
    - `Blaze > Blaze WebSocket Port` should be the value of `BLAZE_UI_WS_PORT` (`31337` by default)
    - `Blaze > Blaze HTTP Port` should be the value of `BLAZE_UI_HTTP_PORT` (`31338` by default)
 6. Restart Binary Ninja
+
+### Verifying installed Blaze version
+
+After installing Blaze in Binary Ninja, in the Binary Ninja Python Console, run:
+
+``` python
+>>> from pathlib import Path
+>>> print((Path(Kudu_Blaze.__file__).parent / 'METADATA').read_text())
+```
+
+You should see output like
+
+```
+Metadata-Version: 2.1
+Name: blaze
+Version: 0.1.0.65746
+Summary: Blaze
+Author: Kudu Dynamics
+Requires-Python: >=3.6.1,<3.10
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Requires-Dist: requests (>=2.26.0,<3.0.0)
+Requires-Dist: typing-extensions (>=3.10.0,<4.0.0)
+Requires-Dist: websockets (>=9.1,<10.0)
+```
+
+The `Version: 0.1.0.65746` line indicates that `pyproject.toml` set `version = "0.1.0"`, and that the unique build ID determined by the value of `CI_PIPELINE_ID` was `65746`.
+You can then go to https://gitlab/blaze/blaze-ui/-/pipelines/65746 to determine which commit it came from.
 
 
 ## Using Blaze
