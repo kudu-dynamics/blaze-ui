@@ -12,6 +12,7 @@ import qualified Blaze.UI.Types.BinaryManager as BM
 import qualified Blaze.UI.Db as Db
 import GHC.Conc (numCapabilities)
 
+
 main :: IO ()
 main = do
   hSetBuffering stdout LineBuffering
@@ -32,8 +33,34 @@ main = do
     <> show usedCapabilities <> " capabilities."
 
   conn <- Db.init $ cfg ^. #sqliteFilePath
+
   appState <- initAppState cfg conn
-  void . forkIO $ WebServer.run appState
-  Server.run appState
+
+  r <- catches (race (WebServer.run appState) (Server.run appState))
+    [ Handler $ \(err :: AsyncException) -> case err of
+        UserInterrupt -> do
+          putText $ "User Interrupt"
+          shutdown ExitSuccess conn
+        _ -> do
+          putText $ "Fatal async exception: " <> show err
+          shutdown (ExitFailure $ (-1)) conn
+    , Handler $ \(err :: SomeException) -> do
+        putText $ "Fatal exception: " <> show err
+        shutdown (ExitFailure (-1)) conn
+    ]
+
+  case r of
+    Left _ -> do
+      putText "Error: Webserver exited prematurely."
+      shutdown (ExitFailure (-1)) conn
+    Right _ -> do
+      putText "Error: Websocket server exited prematurely."
+      shutdown (ExitFailure (-1)) conn
+
+shutdown :: ExitCode -> Db.Conn -> IO a
+shutdown exitCode conn = do
+  putText "Shutting down Blaze"
   putText "Closing database connection"
   Db.close conn
+  exitWith exitCode
+  

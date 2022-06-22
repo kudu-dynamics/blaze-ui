@@ -5,6 +5,8 @@
 
 module Blaze.UI.Prelude
   ( module Exports
+  , asyncAndLink
+  , asyncAndLink_
   , writeManyTQueue
   , logLocal
   , logLocalWithTraceback
@@ -17,6 +19,7 @@ module Blaze.UI.Prelude
 import Blaze.Prelude as Exports hiding (SrcLoc)
 import Control.Monad.Catch as Exports (MonadMask, MonadCatch, MonadThrow)
 import Control.Lens.Extras as Exports (is)
+import Control.Concurrent.Async as Exports (uninterruptibleCancel)
 import Control.Concurrent.STM.TQueue as Exports
 import Control.Concurrent.STM.TVar as Exports
 import Control.Concurrent.STM.TMVar as Exports
@@ -78,3 +81,12 @@ logLocalWarning = withFrozenCallStack $ logLocal "WARNING"
 
 logLocalError :: (HasCallStack, MonadIO m) => Text -> m ()
 logLocalError = withFrozenCallStack $ logLocalWithTraceback "ERROR"
+
+asyncAndLink :: IO a -> IO (Async a)
+asyncAndLink action = do
+  a1 <- async action
+  link a1
+  return a1
+
+asyncAndLink_ :: IO a -> IO ()
+asyncAndLink_ = link <=< async
