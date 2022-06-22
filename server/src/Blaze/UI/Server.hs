@@ -31,7 +31,7 @@ import qualified Data.HashSet as HashSet
 import qualified Blaze.Graph as G
 import Blaze.Graph (NodeId(NodeId), Identifiable)
 import qualified Blaze.Cfg.Interprocedural as ICfg
-import Blaze.Pretty (PIndexedStmts (..), mkTokenizerCtx, prettyIndexedStmts', pretty', showHex, pretty)
+import Blaze.Pretty (PIndexedStmts (..), prettyIndexedStmts', pretty', showHex)
 import qualified Blaze.Types.Pil.Checker as Ch
 import qualified Blaze.Pil.Checker as Ch
 import Blaze.Cfg.Checker (checkCfg)
@@ -58,6 +58,7 @@ import qualified Blaze.Types.Pil as Pil
 import Blaze.Types.Pil (Stmt)
 import qualified Blaze.Cfg.Solver.BranchContext as GSolver
 
+import qualified Data.Text as T
 import Network.HTTP.Types (status400)
 import Network.Wai (Application)
 import qualified Network.Wai as Wai
@@ -159,43 +160,43 @@ sessionInfo ss = "(" <> show (ss ^. #clientId) <> " " <> show (ss ^. #hostBinary
 
 spawnOutboxHandler :: SessionState -> IO ()
 spawnOutboxHandler ss = do
-  eventTid <- forkIO . forever $ do
+  outboxHandlerAsync <- asyncAndLink . forever $ do
     logLocalDebug $ sessionInfo ss <> " " <> "Waiting for outgoing msg..."
     msg <- atomically . readTQueue $ ss ^. #outbox
-    logLocalDebug $ sessionInfo ss <> " " <> "Got outgoing msg: " <> show msg
+    logLocalDebug $ sessionInfo ss <> " " <> "Got outgoing msg: " <> T.take 30 (show msg)
     conns <- fmap HashMap.elems . readTVarIO $ ss ^. #binjaConns
     when (null conns) $ logLocalError
       $ "No connections associated with session when sending responses"
       <> " " <> sessionInfo ss
     mapM_ (flip sendJSON $ BinjaMessage (ss ^. #clientId) (ss ^. #hostBinaryPath) (ss ^. #binaryHash) msg) conns
-  atomically $ putTMVar (ss ^. #outboxThread) eventTid
+  atomically $ putTMVar (ss ^. #outboxHandler) outboxHandlerAsync
 
 spawnEventHandler :: SessionState -> IO ()
 spawnEventHandler ss = do
   -- TODO: Can this every be false?
-  b <- atomically . isEmptyTMVar $ ss ^. #eventHandlerThread
+  b <- atomically . isEmptyTMVar $ ss ^. #eventHandler
   case b of
     False -> logLocalError "spawnEventHandler -- event handler already spawned"
     True -> do
       -- Spawns event handler workers for new messages
-      eventTid <- forkIO . forever $ do
+      eventHandlerAsync <- asyncAndLink . forever $ do
         logLocalDebug $ sessionInfo ss <> " " <> "Waiting for event..."
         msg <- atomically . readTQueue $ ss ^. #eventInbox
-        logLocalDebug $ sessionInfo ss <> " " <> "Got event: " <> show msg
+        logLocalDebug $ sessionInfo ss <> " " <> "Got event: " <> T.take 30 (show msg)
 
-        -- Spawn separate worker thread
-        workerTid <- forkIO $ do
+        workerAsync <- asyncAndLink . withAsync (runEventLoop (mainEventLoop msg) ss) $ \w -> do
           logLocalDebug $ sessionInfo ss <> " " <> "Worker thread started"
-          tid <- myThreadId
-          atomically $ addWorkerThread tid ss
-          void $ runEventLoop (mainEventLoop msg) ss
-          atomically $ removeCompletedWorkerThread tid ss
+          atomically $ addEventHandlerWorker w ss
+          waitCatch w >>= \case
+            Right _ -> return ()
+            Left e -> logLocalError $ "Event worker threw exception: " <> show e
+          atomically $ removeCompletedEventHandlerWorker w ss
           logLocalDebug $ sessionInfo ss <> " " <> "Worker thread exiting"
-
+        
         parentTid <- myThreadId
-        logLocalDebug $ sessionInfo ss <> " " <> "Listener-worker relationship: " <> show parentTid <> "->" <> show workerTid
+        logLocalDebug $ sessionInfo ss <> " " <> "Listener-worker relationship: " <> show parentTid <> "->" <> show (asyncThreadId workerAsync)
 
-      atomically $ putTMVar (ss ^. #eventHandlerThread) eventTid
+      atomically $ putTMVar (ss ^. #eventHandler) eventHandlerAsync
 
 app :: AppState -> WS.PendingConnection -> IO ()
 app st pconn = case splitPath of
@@ -449,36 +450,38 @@ updateCfg tcfg f = fmap snd . updateCfg_ tcfg $ fmap ((),) <$> f
 -- Assumes 'cfg' is ungrouped.
 simplify :: Cfg (CfNode [Pil.Stmt]) -> EventLoop (Cfg (CfNode [Pil.Stmt]))
 simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
-  Left err -> do
-    case err of
-      GSolver.SolverError tr _ -> liftIO $ do
-        logLocalInfo . unlines $
-          [ ""
-          , "------------------------Type Checking Cfg-------------------------"
-          , ""
-          , cs $ pshow ("errors" :: Text, tr ^. #errors)
-          , ""
-          , pretty (mkTokenizerCtx . Just $ tr ^. #varSymMap) . PIndexedStmts $ tr ^. #symTypedStmts
-          , "-----------------------------------------------------------------------"
-          ]
-      _ -> logLocalError . show $ err
+  Left _err -> do
+    logLocalWarning "There were type checking errors in simplify."
+    -- case err of
+    --   GSolver.SolverError tr _ -> liftIO $ do
+    --     logLocalInfo . unlines $
+    --       [ ""
+    --       , "------------------------Type Checking Cfg-------------------------"
+    --       , ""
+    --       , cs $ pshow ("errors" :: Text, tr ^. #errors)
+    --       , ""
+    --       , pretty (mkTokenizerCtx . Just $ tr ^. #varSymMap) . PIndexedStmts $ tr ^. #symTypedStmts
+    --       , "-----------------------------------------------------------------------"
+    --       ]
+    --   _ -> logLocalError . show $ err
     let cfg' = CfgA.simplify cfg
     return cfg'
   Right (warns, cfg') -> case nonEmptyWarns of
     [] -> return cfg'
-    xs -> do
-      logLocalInfo "\n\n==================== Solver Errors ======================\n"
-      forM_ xs $ \warn -> do
-        logLocalInfo "\n-------------- type report -----------------\n"
-        let tr = warn ^. #typeReport
-        logLocalInfo . unlines $
-          [ cs $ pshow ("errors" :: Text, tr ^. #errors)
-          , pretty' $ tr ^. #errorConstraints
-          , ""
-          , pretty' . PIndexedStmts $ tr ^. #symTypedStmts
-          ]
-        logLocalInfo "\n-------------- solver errors -----------------\n"
-        logLocalInfo . cs . pshow $ warn ^. #warnings
+    _xs -> do
+      logLocalWarning "There were solver errors in simplify."
+      -- logLocalInfo "\n\n==================== Solver Errors ======================\n"
+      -- forM_ xs $ \warn -> do
+      --   logLocalInfo "\n-------------- type report -----------------\n"
+      --   let tr = warn ^. #typeReport
+      --   logLocalInfo . unlines $
+      --     [ cs $ pshow ("errors" :: Text, tr ^. #errors)
+      --     , pretty' $ tr ^. #errorConstraints
+      --     , ""
+      --     , pretty' . PIndexedStmts $ tr ^. #symTypedStmts
+      --     ]
+      --   logLocalInfo "\n-------------- solver errors -----------------\n"
+      --   logLocalInfo . cs . pshow $ warn ^. #warnings
       return cfg'
     where
       nonEmptyWarns = filter (not . null . view #warnings) warns
@@ -600,15 +603,6 @@ handleBinjaEvent = \case
   BSConnect -> debug "Binja explicitly connected"
   BSTextMessage t -> do
     debug $ "Message from binja: " <> t
-    sendToBinja $ SBLogInfo "Got hello. Thanks."
-    sendToBinja $ SBLogInfo "Working on finding an important integer..."
-
-    -- demo forking
-    forkEventLoop_ $ do
-      liftIO $ threadDelay 5000000 >> logLocalInfo "calculating integer"
-      n <- liftIO randomIO :: EventLoop Int
-      sendToBinja . SBLogInfo
-        $ "Here is your important integer: " <> show n
 
   BSTypeCheckFunction bhash addr -> do
     bv <- getBinaryView bhash
@@ -663,7 +657,7 @@ handleBinjaEvent = \case
 
   BSCfgExpandCall cid callNode targetAddr -> do
     (bv, bhash) <- getCfgBinaryView cid
-    debug $ "Binja expand call for:\n" <> cs (pshow callNode)
+    debug $ "Expand call for function at: " <> showHex targetAddr
     tcfg <- getCfg cid
     simplifiedCfg <- updateCfg tcfg $ \cfg -> do
       case Cfg.getNode cfg (NodeId $ callNode ^. #uuid) of

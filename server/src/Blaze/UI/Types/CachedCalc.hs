@@ -26,7 +26,9 @@ setCalc k (CachedCalc cc) action = do
         emptyV <- newEmptyTMVar
         writeTVar cc $ HashMap.insert k emptyV m
         return emptyV
-  void . forkIO $ do
+  -- Currently this is called through a warp webserver thread or through an
+  -- event handler thread in Blaze.UI.Server, which both can handle it.
+  asyncAndLink_ $ do
     v <- action
     void . atomically $ tryPutTMVar tmvar v
   return tmvar
