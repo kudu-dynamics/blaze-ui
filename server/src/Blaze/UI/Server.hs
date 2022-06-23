@@ -111,16 +111,28 @@ getSessionState sid binHash st = do
         modifyTVar (st ^. #binarySessions)
           $ HashMap.insert sid ss
         return (ss, True)
-  when justCreated $ do
-    spawnEventHandler ss
-    spawnOutboxHandler ss
+  when justCreated $ spawnEventHandler ss
   return ss
 
 sendToBinja_ :: ServerToBinja -> SessionState -> IO ()
-sendToBinja_ msg ss = atomically $ writeTQueue (ss ^. #outbox) msg
+sendToBinja_ msg ss = atomically $ do
+  binjaQueues <- fmap snd . HashMap.toList <$> readTVar (ss ^. #binjaConns)
+  mapM_ (`writeTQueue` bmsg) binjaQueues
+  where
+    bmsg = BinjaMessage (ss ^. #clientId) (ss ^. #hostBinaryPath) (ss ^. #binaryHash) msg
 
 sendToBinja :: ServerToBinja -> EventLoop ()
 sendToBinja msg = ask >>= liftIO . sendToBinja_ msg
+
+createOutbox :: WS.Connection -> IO Outbox
+createOutbox conn = do
+  outQueue <- newTQueueIO
+  outboxHandlerAsync <- asyncAndLink . forever $ do
+    logLocalDebug "Waiting for outgoing msg..."
+    msg <- atomically $ readTQueue outQueue
+    logLocalDebug $ "Got outgoing msg: " <> T.take 30 (show msg)
+    sendJSON conn msg
+  return $ Outbox outboxHandlerAsync outQueue conn
 
 -- | Websocket message handler for binja.
 -- This handles messages for multiple binaries to/from single binja.
@@ -149,27 +161,13 @@ binjaApp st connId conn = do
           Just True -> return False
           _ -> do
             addSessionConn sid connId st
-            -- Add connection entry for session state
-            modifyTVar (ss ^. #binjaConns) $ HashMap.insert connId conn
+            addBinjaConnToSessionState st ss connId
             return True
       when isNewSessionForConn . logInfo' $ "New session for connection with binary: " <> show hpath
       pushEvent >> binjaApp st connId conn
 
 sessionInfo :: SessionState -> Text
 sessionInfo ss = "(" <> show (ss ^. #clientId) <> " " <> show (ss ^. #hostBinaryPath) <> ")"
-
-spawnOutboxHandler :: SessionState -> IO ()
-spawnOutboxHandler ss = do
-  outboxHandlerAsync <- asyncAndLink . forever $ do
-    logLocalDebug $ sessionInfo ss <> " " <> "Waiting for outgoing msg..."
-    msg <- atomically . readTQueue $ ss ^. #outbox
-    logLocalDebug $ sessionInfo ss <> " " <> "Got outgoing msg: " <> T.take 30 (show msg)
-    conns <- fmap HashMap.elems . readTVarIO $ ss ^. #binjaConns
-    when (null conns) $ logLocalError
-      $ "No connections associated with session when sending responses"
-      <> " " <> sessionInfo ss
-    mapM_ (flip sendJSON $ BinjaMessage (ss ^. #clientId) (ss ^. #hostBinaryPath) (ss ^. #binaryHash) msg) conns
-  atomically $ putTMVar (ss ^. #outboxHandler) outboxHandlerAsync
 
 spawnEventHandler :: SessionState -> IO ()
 spawnEventHandler ss = do
@@ -209,6 +207,8 @@ app st pconn = case splitPath of
     splitPath = drop 1 . BSC.splitWith (== '/') $ path
     runBinjaApp conn = do
       connId <- newConnId
+      outb <- createOutbox conn
+      atomically $ addOutbox connId outb st
       WS.withPingThread conn 10 (return ())
         $ catch (binjaApp st connId conn) (catchConnectionException connId)
     catchConnectionException :: ConnId -> WS.ConnectionException -> IO ()

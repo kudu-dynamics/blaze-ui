@@ -244,7 +244,7 @@ debug :: Text -> EventLoop ()
 debug = logLocalDebug
 {-# INLINE debug #-}
 
-type BinjaConns = HashMap ConnId WS.Connection
+type BinjaConns = HashMap ConnId OutboxQueue
 
 type EventHandlerWorker = Async (Either EventLoopError ())
 
@@ -268,8 +268,6 @@ data SessionState = SessionState
   , dbConn :: Db.Conn
   , activePoi :: TVar (Maybe Poi)
   , callNodeRatingCtx :: CachedCalc BndbHash CallNodeRatingCtx
-  , outbox :: TQueue ServerToBinja
-  , outboxHandler :: TMVar OutboxHandler
   } deriving (Generic)
 
 addEventHandlerWorker :: EventHandlerWorker -> SessionState -> STM ()
@@ -280,11 +278,15 @@ removeCompletedEventHandlerWorker :: EventHandlerWorker -> SessionState -> STM (
 removeCompletedEventHandlerWorker w ss
   = modifyTVar (ss ^. #eventHandlerWorkers) $ HashSet.delete w
 
-removeOutboxHandler :: SessionState -> STM ()
-removeOutboxHandler ss = void . tryTakeTMVar $ ss ^. #outboxHandler
-
 removeEventHandler :: SessionState -> STM ()
 removeEventHandler ss = void . tryTakeTMVar $ ss ^. #eventHandler
+
+addBinjaConnToSessionState :: AppState -> SessionState -> ConnId -> STM ()
+addBinjaConnToSessionState st ss cid = do
+  outboxMap <- readTVar $ st ^. #outboxes
+  case HashMap.lookup cid outboxMap of
+    Nothing -> error $ "Could not find conn " <> show cid <> " in outboxes in AppState"
+    Just outb -> modifyTVar (ss ^. #binjaConns) $ HashMap.insert cid (outb ^. #outboxQueue)
 
 emptySessionState
   :: ClientId
@@ -304,8 +306,6 @@ emptySessionState cid binPath binHash bm dbConn' ccCallRating
     <*> pure dbConn'
     <*> newTVar Nothing
     <*> pure ccCallRating
-    <*> newTQueue
-    <*> newEmptyTMVar
 
 -- | A `ConnId` is a unique websocket connection.
 -- There is only one ConnId per BinaryNinja instance, shared across bndbs.
@@ -316,12 +316,21 @@ newtype ConnId = ConnId UUID
 newConnId :: IO ConnId
 newConnId = randomIO
 
+type OutboxQueue = TQueue (BinjaMessage ServerToBinja)
+
+data Outbox = Outbox
+  { outboxHandler :: OutboxHandler
+  , outboxQueue :: OutboxQueue
+  , wsConn :: WS.Connection
+  } deriving (Generic)
+
 -- | Stores active `SessionState`s and DB connection.
 -- This is shared by both the websocket and web servers.
 data AppState = AppState
   { serverConfig :: ServerConfig
   , binarySessions :: TVar (HashMap SessionId SessionState)
   , sessionConns :: TVar (HashMap ConnId (HashSet SessionId))
+  , outboxes :: TVar (HashMap ConnId Outbox)
   , dbConn :: Db.Conn
   } deriving (Generic)
 
@@ -329,6 +338,24 @@ instance MonadDb (ReaderT AppState IO) where
   withDb m = do
     conn <- view #dbConn <$> ask
     Db.runSelda conn m
+
+addOutbox :: ConnId -> Outbox -> AppState -> STM ()
+addOutbox cid outb st = modifyTVar' (st ^. #outboxes) $ HashMap.insert cid outb
+
+cleanAndRemoveOutbox :: ConnId -> AppState -> IO ()
+cleanAndRemoveOutbox cid st = do
+  mOutboxHandler <- atomically $ do
+    outboxMap <- readTVar $ st ^. #outboxes
+    case HashMap.lookup cid outboxMap of
+      Nothing -> return Nothing
+      Just outb -> do
+        writeTVar (st ^. #outboxes) $ HashMap.delete cid outboxMap
+        return . Just $ outb ^. #outboxHandler
+  maybe (return ()) cancelAndReport mOutboxHandler
+  where
+    cancelAndReport outHandler = do
+      cancel outHandler
+      logLocalInfo $ "Killed one outbox handler thread for " <> show cid
 
 -- | Inserts a unique ConnId for a SessionId.
 -- SessionIds can have multiple active connections if a single user opens multiple
@@ -355,44 +382,41 @@ cleanupBinjaConn connId ss = do
       return binjaConnsMap'
 
 
-type AsyncPack = (Maybe EventHandler, Maybe OutboxHandler, [EventHandlerWorker])
+type AsyncPack = (Maybe EventHandler, [EventHandlerWorker])
 
 -- | Removes ConnId from all sessions and frees up sessions with no active connections.
 cleanupClosedConn :: ConnId -> AppState -> IO ()
 cleanupClosedConn cid st = do
-  errorOrThreads <- atomically $ do
+  cleanAndRemoveOutbox cid st
+  errorOrAsyncs <- atomically $ do
     sconns <- readTVar $ st ^. #sessionConns
     case HashMap.lookup cid sconns of
       Nothing -> return $ Left $ "Could not find connection with ID: " <> show cid
       Just sids -> do
         writeTVar (st ^. #sessionConns) $ HashMap.delete cid sconns
         binSessions <- readTVar $ st ^. #binarySessions
-        threadPacks <- traverse (cleanSession binSessions) . HashSet.toList $ sids
-        return $ Right threadPacks
+        asyncPacks <- traverse (cleanSession binSessions) . HashSet.toList $ sids
+        return $ Right asyncPacks
         where
           cleanSession :: HashMap SessionId SessionState -> SessionId -> STM AsyncPack
           cleanSession binSessions sid =
             case HashMap.lookup sid binSessions of
               -- TODO: Provide error message for this Nothing case
-              Nothing -> return (Nothing, Nothing, [])
+              Nothing -> return (Nothing, [])
               Just ss -> do
                 binjaConnsMap <- cleanupBinjaConn cid ss
                 case HashMap.null binjaConnsMap of
-                  False -> return (Nothing, Nothing, [])
+                  False -> return (Nothing, [])
                   True -> do
-                    mEventThread <- tryReadTMVar $ ss ^. #eventHandler
-                    whenJust mEventThread . const $ removeOutboxHandler ss
-                    mOutboxThread <- tryReadTMVar $ ss ^. #outboxHandler
-                    whenJust mOutboxThread . const $ removeOutboxHandler ss
+                    mEventHandler <- tryReadTMVar $ ss ^. #eventHandler
                     writeTVar (st ^. #binarySessions) $ HashMap.delete sid binSessions
                     workers <- fmap HashSet.toList . readTVar
                       $ ss ^. #eventHandlerWorkers
-                    return $ (mEventThread, mOutboxThread, workers)
-  case errorOrThreads of
+                    return (mEventHandler, workers)
+  case errorOrAsyncs of
     Left msg -> logLocalError msg
-    Right packs -> forM_ packs $ \(mEventThread, mOutboxThread, workers) -> do
-      maybeCancelAndReport "Event" mEventThread
-      maybeCancelAndReport "Outbox" mOutboxThread
+    Right packs -> forM_ packs $ \(mEventHandler, workers) -> do
+      maybeCancelAndReport "Event" mEventHandler
       mapM_ cancel workers
       logLocalInfo $ "Killed " <> show (length workers) <> " worker thread(s)."
       where
@@ -405,6 +429,7 @@ cleanupClosedConn cid st = do
 initAppState :: ServerConfig -> Db.Conn -> IO AppState
 initAppState cfg' conn = AppState cfg'
   <$> newTVarIO HashMap.empty
+  <*> newTVarIO HashMap.empty
   <*> newTVarIO HashMap.empty
   <*> pure conn
 
