@@ -190,7 +190,7 @@ spawnEventHandler ss = do
             Left e -> logLocalError $ "Event worker threw exception: " <> show e
           atomically $ removeCompletedEventHandlerWorker w ss
           logLocalDebug $ sessionInfo ss <> " " <> "Worker thread exiting"
-        
+
         parentTid <- myThreadId
         logLocalDebug $ sessionInfo ss <> " " <> "Listener-worker relationship: " <> show parentTid <> "->" <> show (asyncThreadId workerAsync)
 
@@ -344,7 +344,7 @@ setCfg cid tcfg = do
 getCfg :: CfgId -> EventLoop TypedCfg
 getCfg cid = CfgUI.getCfg cid >>= \case
   Just pcfg -> do
-    logLocalDebug $ "Found cachced CFG for " <> show cid
+    logLocalDebug $ "Found cached CFG for " <> show cid
     return pcfg
   Nothing -> getStoredCfg cid
 
@@ -684,10 +684,9 @@ handleBinjaEvent = \case
     autosaveCfg cid simplifiedCfg
       >>= sendCfgAndSnapshots bhash simplifiedCfg cid
 
-
   BSCfgRemoveBranch cid (node1, node2) -> do
-    let startUUID = getStartUUID node1
-        endUUID = getTermUUID node2
+    let startUUID = getTermUUID node1
+        endUUID = getStartUUID node2
     debug "Binja remove branch"
     -- TODO: just get the bhash since bv isn't used
     bhash <- getCfgBndbHash cid
