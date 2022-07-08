@@ -450,20 +450,20 @@ updateCfg tcfg f = fmap snd . updateCfg_ tcfg $ fmap ((),) <$> f
 -- Assumes 'cfg' is ungrouped.
 simplify :: Cfg (CfNode [Pil.Stmt]) -> EventLoop (Cfg (CfNode [Pil.Stmt]))
 simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
-  Left _err -> do
-    logLocalWarning "There were type checking errors in simplify."
-    -- case err of
-    --   GSolver.SolverError tr _ -> liftIO $ do
-    --     logLocalInfo . unlines $
-    --       [ ""
-    --       , "------------------------Type Checking Cfg-------------------------"
-    --       , ""
-    --       , cs $ pshow ("errors" :: Text, tr ^. #errors)
-    --       , ""
-    --       , pretty (mkTokenizerCtx . Just $ tr ^. #varSymMap) . PIndexedStmts $ tr ^. #symTypedStmts
-    --       , "-----------------------------------------------------------------------"
-    --       ]
-    --   _ -> logLocalError . show $ err
+  Left err -> do
+    case err of
+      GSolver.SolverError _tr _ -> do
+        logLocalWarning "There were type checking errors in simplify."
+        -- logWarn . unlines $
+        --   [ ""
+        --   , "------------------------Type Checking Cfg-------------------------"
+        --   , ""
+        --   , cs $ pshow ("errors" :: Text, tr ^. #errors)
+        --   , ""
+        --   , pretty (mkTokenizerCtx . Just $ tr ^. #varSymMap) . PIndexedStmts $ tr ^. #symTypedStmts
+        --   , "-----------------------------------------------------------------------"
+        --   ]
+      _ -> logLocalError . show $ err
     let cfg' = CfgA.simplify cfg
     return cfg'
   Right (warns, cfg') -> case nonEmptyWarns of
@@ -482,6 +482,7 @@ simplify cfg = liftIO (GSolver.simplify cfg) >>= \case
       --     ]
       --   logLocalInfo "\n-------------- solver errors -----------------\n"
       --   logLocalInfo . cs . pshow $ warn ^. #warnings
+      --   forM_ (tr ^. #errors) $ logWarn . cs . pshow 
       return cfg'
     where
       nonEmptyWarns = filter (not . null . view #warnings) warns
@@ -649,6 +650,7 @@ handleBinjaEvent = \case
               (func ^. #name)
               tcfg
             logLocalDebug "CFG saved to DB."
+            printTypedCfg tcfg
             CfgUI.addCfg cid tcfg
             sendLatestSnapshots
             sendCfgWithCallRatings bhash tcfg cid Nothing
@@ -681,6 +683,7 @@ handleBinjaEvent = \case
               return simplifiedCfg
         Just _ -> do
           logError "Node must be a CallNode"
+    printTypedCfg simplifiedCfg
     autosaveCfg cid simplifiedCfg
       >>= sendCfgAndSnapshots bhash simplifiedCfg cid
 
@@ -970,6 +973,22 @@ printSimplifyStats a b = do
         <> show (length $ G.edges b) <> " edges"
     ]
 
+printTypedCfg :: MonadIO m => TypedCfg -> m ()
+printTypedCfg tcfg = logLocalInfo . unlines $
+    [ ""
+    , "-------------- TypedCfg ------------"
+    , pretty' (CfgUI._unwrapGroupedCfg $ tcfg ^. #typeSymCfg)
+    , ""
+    , "-- Type Errors --"
+    , pretty' (tcfg ^. #typeInfo . #typeErrors)
+    , ""
+    , "-- Types --"
+    , pretty' (tcfg ^. #typeInfo . #symTypes)
+    , "-- VarEqMap --"
+    , pretty' (tcfg ^. #typeInfo . #varEqMap)
+    , "-- VarSymMap --"
+    , pretty' (tcfg ^. #typeInfo . #varSymMap)
+    ]
 
 printTypeReportToConsole :: MonadIO m => BNFunc.Function -> Ch.TypeReport -> m ()
 printTypeReportToConsole fn tr = liftIO $ do

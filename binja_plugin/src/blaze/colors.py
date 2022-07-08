@@ -51,6 +51,7 @@ GROUPING_NODE = HighlightColor(red=171, green=102, blue=227)
 GROUP_START = HighlightColor(HighlightStandardColor.GreenHighlightColor)
 GROUP_END_CANDIDATE = HighlightColor(HighlightStandardColor.BlueHighlightColor)
 
+TYPE_ERROR_STMT = HighlightColor(HighlightStandardColor.RedHighlightColor)
 
 def call_node_rated_color(rating: CallNodeRating) -> HighlightColor:
     if rating['tag'] == 'Unreachable':

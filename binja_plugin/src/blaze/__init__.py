@@ -11,8 +11,8 @@ del _logging, _logging_config
 # (output to the BinaryNinja UI log, and jsonl to the logfile) MUST be imported
 # after this line
 
-__all__ = ['cfg', 'client_plugin', 'snaptree', 'poi']
+__all__ = ['cfg', 'client_plugin', 'snaptree', 'poi', 'type_errors']
 
-from . import cfg, client_plugin, poi, snaptree
+from . import cfg, client_plugin, poi, snaptree, type_errors
 
 log.debug('Blaze initialized')
