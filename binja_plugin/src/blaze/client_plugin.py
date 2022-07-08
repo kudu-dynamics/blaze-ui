@@ -50,6 +50,7 @@ from PySide6.QtWidgets import QWidget
 from .cfg import ICFGDockWidget, ICFGFlowGraph, cfg_from_server
 from .exceptions import BlazeNetworkError
 from .poi import PoiListDockWidget
+from .type_errors import TypeErrorListDockWidget
 from .settings import BlazeSettings
 from .snaptree import SnapTreeDockWidget
 from .types import (
@@ -67,6 +68,7 @@ from .types import (
     ServerCfg,
     ServerPendingChanges,
     ServerToBinja,
+    ServerTypeInfo,
     SnapshotBinjaToServer,
     SnapshotServerToBinja,
     group_options_from_server,
@@ -101,6 +103,7 @@ class BlazeInstance():
         self._icfg_dock_widget: Optional[ICFGDockWidget] = None
         self._snaptree_dock_widget: Optional[SnapTreeDockWidget] = None
         self._poi_list_dock_widget: Optional[PoiListDockWidget] = None
+        self._type_error_list_dock_widget: Optional[TypeErrorListDockWidget] = None
 
         log.debug('Initialized object: %r', self)
 
@@ -169,6 +172,18 @@ class BlazeInstance():
     def poi_list_dock_widget(self, dw: PoiListDockWidget) -> None:
         self._poi_list_dock_widget = dw
 
+    @property
+    def type_error_list_dock_widget(self) -> TypeErrorListDockWidget:
+        if self._type_error_list_dock_widget is None:
+            raise ValueError('BlazeInstance._type_error_list_dock_widget accessed before being set')
+
+        return self._type_error_list_dock_widget
+
+    @type_error_list_dock_widget.setter
+    def type_error_list_dock_widget(self, dw: TypeErrorListDockWidget) -> None:
+        self._type_error_list_dock_widget = dw
+
+        
     def with_bndb_hash(self, callback: Callable[[BinaryHash], None]) -> None:
         def set_hash_and_do_callback(h: BinaryHash) -> None:
             self.bndbHash = h
@@ -282,6 +297,27 @@ class BlazePlugin():
         )
 
         log.debug('Created POI list widget')
+
+        def create_type_error_widget(name: str, parent: ViewFrame, bv: BinaryView) -> QWidget:
+            dock_handler = DockHandler.getActiveDockHandler()
+            widget = TypeErrorListDockWidget(
+                name=name,
+                view_frame=dock_handler.getViewFrame(),
+                parent=parent,
+                blaze_instance=self.ensure_instance(bv))
+            self.ensure_instance(bv).type_error_list_dock_widget = widget
+            
+            return widget
+
+        self.dock_handler.addDockWidget(
+            "Blaze Type Errors",
+            create_type_error_widget,
+            Qt.DockWidgetArea.BottomDockWidgetArea,
+            Qt.Orientation.Vertical,
+            True  # default visibility
+        )
+
+        log.debug('Created Type Error list widget')
 
         log.debug('Initialized object: %r', self)
 
@@ -629,7 +665,7 @@ class BlazePlugin():
             server_pending_changes = msg.get('pendingChanges')
             server_poi_search_results = msg.get('poiSearchResults')
             server_group_options = msg.get('groupOptions')
-            type_info = type_info_from_server(ti) if (ti := msg.get('typeInfo')) else None
+            type_info = type_info_from_server(cast(ServerTypeInfo, msg.get('typeInfo')))
 
             if server_poi_search_results:
                 poi_search_results = PoiSearchResults(
@@ -648,6 +684,10 @@ class BlazePlugin():
                 group_options = group_options_from_server(server_group_options)
             else:
                 group_options = None
+
+            for instance in relevant_instances:
+                assert instance.type_error_list_dock_widget
+                instance.type_error_list_dock_widget.create_type_error_list(type_info['typeErrors'])
 
             for instance in relevant_instances:
                 instance.graph = ICFGFlowGraph(

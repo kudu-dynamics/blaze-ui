@@ -59,9 +59,10 @@ from .types import (
     PoiSearchResults,
     ServerCfg,
     SnapshotBinjaToServer,
+    StmtIndex,
     TypeInfo,
     Word64,
-    tokens_from_server,
+    indexed_stmt_from_server,
 )
 from .util import (
     BNAction,
@@ -415,7 +416,7 @@ class ICFGFlowGraph(FlowGraph):
             if node['contents'].get('nodeData'):
                 tokenized_lines = node['contents']['nodeData']
                 fg_node.lines += [
-                    tokens_from_server(line[1], self.max_str_length) for line in tokenized_lines
+                    indexed_stmt_from_server(line, self.max_str_length) for line in tokenized_lines
                 ]
 
             # TODO: Make use of view "modes" to detangle this complex if-else-if chain
@@ -489,6 +490,17 @@ class ICFGFlowGraph(FlowGraph):
         return [edge for edge in self.edges if source_id == edge['src']['contents']['uuid']]
 
 
+    # TODO: make Dict[StmtIndex, [DisassemblyTextLine]] a property of ICFGFlowGraph
+    # and maybe we should assume there's one instruction per StmtIndex?
+    # returns list of (node, line, line number in node)
+    def get_lines_at_index(self, stmt_index: StmtIndex) -> List[Tuple[FlowGraphNode, DisassemblyTextLine, int]]:
+        matches = []
+        for node in super().nodes:
+            for i, line in enumerate(node.lines):
+                if line.address == stmt_index:
+                    matches.append((node, line, i))
+        return matches
+    
 class ICFGWidget(FlowGraphWidget, QObject):
     def __init__(self, parent: QWidget, view_frame: ViewFrame, blaze_instance: 'BlazeInstance'):
         FlowGraphWidget.__init__(self, parent, blaze_instance.bv)

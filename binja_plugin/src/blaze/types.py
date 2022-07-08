@@ -99,7 +99,17 @@ class Token(TypedDict):
     typeSym: Optional[Sym]
 
 
-def tokens_from_server(ts: List[Token], max_str_length: Optional[int]) -> DisassemblyTextLine:
+IndexedStmt = Tuple[Optional[StmtIndex], List[Token]]
+
+
+def tokens_to_str(ts: List[Token]) -> str:
+    return ''.join(t['text'] for t in ts)
+    
+
+def indexed_stmt_from_server(istmt: IndexedStmt, max_str_length: Optional[int]) -> DisassemblyTextLine:
+    ts = istmt[1]
+    stmt_index = istmt[0]
+
     def truncate(t: Token) -> str:
         if t['tokenType'] != 'StringToken':
             return t['text']
@@ -123,10 +133,8 @@ def tokens_from_server(ts: List[Token], max_str_length: Optional[int]) -> Disass
             address= t['typeSym'] + 1 if t['typeSym'] else 0,
         ) for t in ts
     ]
-    return DisassemblyTextLine(tokens)
 
-
-IndexedStmt = Tuple[Optional[StmtIndex], List[Token]]
+    return DisassemblyTextLine(tokens, stmt_index, None)
 
 
 class BasicBlockNode(TypedDict):
@@ -181,7 +189,7 @@ class CfEdge(TypedDict):
 
 
 class TypeError(TypedDict):
-    stmtOrigin: int
+    stmtOrigin: StmtIndex
     sym: Sym
     error: List[Token]
     
