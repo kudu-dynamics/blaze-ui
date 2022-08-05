@@ -72,14 +72,6 @@ workflow:
     - *job-before-script
     - docker login -u "${CI_REGISTRY_USER}" -p "$CI_JOB_TOKEN" "$CI_REGISTRY"
 
-    # Set up AWS ECR credentials
-    - echo -e "section_start:`date +%s`:aws-config[collapsed=true]\r\e[0KConfigure AWS credentials"
-    - apk add aws-cli
-    - aws configure set default.region "${AWS_DEFAULT_REGION}"
-    - aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
-    - aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
-    - echo -e "section_end:`date +%s`:aws-config\r\e[0K"
-
 
 .haskell-job:
   extends: .job
@@ -177,6 +169,7 @@ test:
     GIT_STRATEGY: none
     GIT_CLEAN_FLAGS: none
   script:
+    - cp -T "${BLAZE_BINJA_LICENSE_FILE}" /root/.binaryninja/license.dat
     - cd /blaze/build/blaze-ui/server
     - ../.ci/scripts/run_test.py ~/.local/bin/blaze-server-test
 
@@ -196,10 +189,7 @@ push:latest:
     GIT_CLEAN_FLAGS: none
   script:
     - gitlab_blaze=${REPO_DOCKER_REGISTRY}/blaze-service/minimal
-    - aws_blaze=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-service
     - gitlab_wheel_server=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
-    - aws_wheel_server=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-wheel-server
-    - date_tag=$(date +%Y.%m.%d)
 
     # Pull this pipeline's images
     - echo -e "section_start:`date +%s`:docker-pull\r\e[0KPull latest docker images"
@@ -215,19 +205,6 @@ push:latest:
     - docker push "${gitlab_wheel_server}:latest"
     - echo -e "section_end:`date +%s`:docker-push-gitlab\r\e[0K"
 
-    # Push :latest and date tags to AWS ECR integration registry
-    - echo -e "section_start:`date +%s`:docker-push-aws\r\e[0KPush latest docker images to blaze AWS ECR registry"
-    - aws ecr get-login-password | docker login --username AWS --password-stdin "${AWS_ECR_REGISTRY}"
-    - docker tag "${gitlab_blaze}:pipeline-${CI_PIPELINE_IID}" "${aws_blaze}:latest"
-    - docker tag "${gitlab_blaze}:pipeline-${CI_PIPELINE_IID}" "${aws_blaze}:${date_tag}"
-    - docker push "${aws_blaze}:latest"
-    - docker push "${aws_blaze}:${date_tag}"
-    - docker tag "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}" "${aws_wheel_server}:latest"
-    - docker tag "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}" "${aws_wheel_server}:${date_tag}"
-    - docker push "${aws_wheel_server}:latest"
-    - docker push "${aws_wheel_server}:${date_tag}"
-    - echo -e "section_end:`date +%s`:docker-push-aws\r\e[0K"
-
 push:tag:
   stage: push
   extends: .docker-job
@@ -241,9 +218,7 @@ push:tag:
     GIT_CLEAN_FLAGS: none
   script:
     - gitlab_blaze=${REPO_DOCKER_REGISTRY}/blaze-service/minimal
-    - aws_blaze=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-service
     - gitlab_wheel_server=${REPO_DOCKER_REGISTRY}/blaze-wheel-server
-    - aws_wheel_server=${AWS_ECR_REGISTRY}/integrated_blaze_system/kudu/blaze-wheel-server
 
     # Pull this pipeline's images
     - echo -e "section_start:`date +%s`:docker-pull\r\e[0KPull latest docker images"
@@ -258,15 +233,6 @@ push:tag:
     - docker tag "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}" "${gitlab_wheel_server}:tag-${CI_COMMIT_TAG}"
     - docker push "${gitlab_wheel_server}:tag-${CI_COMMIT_TAG}"
     - echo -e "section_end:`date +%s`:docker-push-gitlab\r\e[0K"
-
-    # Push :tag-FOO images to AWS ECR integration registry
-    - echo -e "section_start:`date +%s`:docker-push-aws\r\e[0KPush latest docker images to blaze AWS ECR registry"
-    - aws ecr get-login-password | docker login --username AWS --password-stdin "${AWS_ECR_REGISTRY}"
-    - docker tag "${gitlab_blaze}:pipeline-${CI_PIPELINE_IID}" "${aws_blaze}:tag-${CI_COMMIT_TAG}"
-    - docker push "${aws_blaze}:tag-${CI_COMMIT_TAG}"
-    - docker tag "${gitlab_wheel_server}:pipeline-${CI_PIPELINE_IID}" "${aws_wheel_server}:tag-${CI_COMMIT_TAG}"
-    - docker push "${aws_wheel_server}:tag-${CI_COMMIT_TAG}"
-    - echo -e "section_end:`date +%s`:docker-push-aws\r\e[0K"
 
 pages:
   extends: .docker-job

@@ -9,6 +9,7 @@ services:
       target: minimal
     volumes:
       - blaze:/blaze/persistent
+      - ${BLAZE_BINJA_LICENSE_FILE:-./license.dat}:/root/.binaryninja/license.dat:ro
     ports:
       - 31337:31337
       - 31338:31338

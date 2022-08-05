@@ -21,10 +21,18 @@ It consists of three components:
 
 ## Installation
 
+### Binary Ninja license
+
+A license to Binary Ninja must be provided.
+When running locally (e.g. through `stack`), Blaze will use the license within the [Binary Ninja user folder](https://docs.binary.ninja/getting-started.html#user-folder) (e.g. `~/.binaryninja/license.dat`).
+When running under Docker, you can either copy `license.dat` into the root of this repository (in which case Docker Compose will automatically copy it into the appropriate containers), or you can export the environment variable `BLAZE_BINJA_LICENSE_FILE` (e.g. `export BLAZE_BINJA_LICENSE_FILE=~/.binaryninja/license.dat`) when running `docker-compose up` (see below).
+
+### Plugin Installation
+
 Follow the installation instructions for the binja plugin [here](./binja_plugin/README.md)
 
 
-## Running server
+## Running the Blaze server
 
 You can use either Stack (useful during development) or Docker (useful in
 production) to run the backend server. Additionally, to install the UI plugin in
@@ -84,10 +92,17 @@ And then start the plugin server:
 ```sh
 # Login, if needed
 $ docker login ${CI_REGISTRY}
+
 # Pull the latest prebuilt images ...
 $ docker-compose pull
 # ... or rebuild if local modifications have been made
 $ docker-compose build --pull
+
+# Copy your license file ...
+$ cp ~/.binaryninja/license.dat
+# ... or specify license file using environment variable
+$ export BLAZE_BINJA_LICENSE_FILE=~/.binaryninja/license.dat
+
 # Start the services
 $ docker-compose up
 ```
