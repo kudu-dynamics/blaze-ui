@@ -79,7 +79,7 @@ workflow:
 
 .python-job:
   extends: .job
-  image: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/python:3.8-slim
+  image: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/python:3.10-slim
   before_script:
     - *job-before-script
     - echo -e "section_start:`date +%s`:setup-python[collapsed=true]\r\e[0KSet up python dependencies"
