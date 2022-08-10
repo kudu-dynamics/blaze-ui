@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.4
 
 ARG BLAZE_IMAGE=${CI_REGISTRY}/blaze/blaze/blaze:latest
-ARG BLAZE_MINIMAL_BASE_IMAGE=ubuntu:21.10
+ARG BLAZE_MINIMAL_BASE_IMAGE=ubuntu:22.04
 
 FROM ${BLAZE_IMAGE} as main
 ARG BUILD_TYPE=dev
