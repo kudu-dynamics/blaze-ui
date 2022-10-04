@@ -142,10 +142,10 @@ executables:
 
 
 tests:
-  blaze-server-test:
+  blaze-server-general-test:
     main: Spec.hs
     source-dirs:
-    - test
+    - test/general
     ghc-options:
     - -Wall
     - -j4

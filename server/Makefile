@@ -29,11 +29,11 @@ run:
 	stack $(stack_options) run blaze-server
 
 test: build
-	../.ci/scripts/run_test.py $$(stack $(stack_options) path --dist-dir)/build/blaze-server-test/blaze-server-test
+	../.ci/scripts/run_test.py $$(stack $(stack_options) path --dist-dir)/build/blaze-server-general-test/blaze-server-general-test
 
 copy-tests: build
 	if ! [ -d "$${TEST_BIN_DEST_DIR}" ]; then echo "TEST_BIN_DEST_DIR does not exist or is not a directory" >&2; exit 2; fi
-	cp $$(stack $(stack_options) path --dist-dir)/build/blaze-server-test/blaze-server-test "$${TEST_BIN_DEST_DIR}"
+	cp $$(stack $(stack_options) path --dist-dir)/build/blaze-server-general-test/blaze-server-general-test "$${TEST_BIN_DEST_DIR}"
 
 hlint:
 	hlint src test

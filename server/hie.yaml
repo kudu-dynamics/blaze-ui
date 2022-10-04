@@ -2,7 +2,7 @@ cradle:
   stack:
     - path: "src/"
       component: "blaze-ui-server:lib"
-    - path: "test/"
-      component: "blaze-ui-server:test:blaze-server-test"
+    - path: "test/general/"
+      component: "blaze-ui-server:test:blaze-server-general-test"
     - path: "app/"
       component: "blaze-ui-server:exe:blaze-server"
