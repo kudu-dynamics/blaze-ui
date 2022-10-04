@@ -158,3 +158,20 @@ tests:
     - blaze-ui-server
     - hspec
     - text
+
+  blaze-server-binja-test:
+    main: Spec.hs
+    source-dirs:
+    - test/binja
+    ghc-options:
+    - -Wall
+    - -j4
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - containers
+    - blaze-ui-server
+    - hspec
+    - text

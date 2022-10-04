@@ -4,5 +4,7 @@ cradle:
       component: "blaze-ui-server:lib"
     - path: "test/general/"
       component: "blaze-ui-server:test:blaze-server-general-test"
+    - path: "test/binja/"
+      component: "blaze-ui-server:test:blaze-server-binja-test"
     - path: "app/"
       component: "blaze-ui-server:exe:blaze-server"

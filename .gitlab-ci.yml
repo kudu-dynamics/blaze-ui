@@ -173,6 +173,20 @@ test-general:
     - cd /blaze/build/blaze-ui/server
     - ../.ci/scripts/run_test.py ~/.local/bin/blaze-server-general-test
 
+.test-binja:
+  stage: test
+  extends: .haskell-job
+  needs:
+    - build
+  variables:
+    <<: *variables
+    GIT_STRATEGY: none
+    GIT_CLEAN_FLAGS: none
+  script:
+    - cp -T "${BLAZE_BINJA_LICENSE_FILE}" /root/.binaryninja/license.dat
+    - cd /blaze/build/blaze-ui/server
+    - ../.ci/scripts/run_test.py ~/.local/bin/blaze-server-binja-test
+
 push:latest:
   stage: push
   extends: .docker-job

@@ -1,4 +1,4 @@
-.PHONY: build help test copy-tests hlint docs clean
+.PHONY: build help test test-general test-binja copy-tests hlint docs clean
 
 BUILD_TYPE ?= dev
 STACK_OPTIONS ?=
@@ -28,12 +28,20 @@ build:
 run:
 	stack $(stack_options) run blaze-server
 
-test: build
+test: test-general
+
+test-general: build
 	../.ci/scripts/run_test.py $$(stack $(stack_options) path --dist-dir)/build/blaze-server-general-test/blaze-server-general-test
+
+test-binja: build
+	../.ci/scripts/run_test.py $$(stack $(stack_options) path --dist-dir)/build/blaze-server-binja-test/blaze-server-binja-test
 
 copy-tests: build
 	if ! [ -d "$${TEST_BIN_DEST_DIR}" ]; then echo "TEST_BIN_DEST_DIR does not exist or is not a directory" >&2; exit 2; fi
-	cp $$(stack $(stack_options) path --dist-dir)/build/blaze-server-general-test/blaze-server-general-test "$${TEST_BIN_DEST_DIR}"
+	dist_dir=$$(stack $(stack_options) path --dist-dir); \
+	  for test_bin in blaze-server-general-test blaze-server-binja-test; do \
+	    cp "$${dist_dir}/build/$${test_bin}/$${test_bin}" "$${TEST_BIN_DEST_DIR}"; \
+	  done
 
 hlint:
 	hlint src test
