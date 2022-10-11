@@ -159,7 +159,7 @@ build:
     - docker push "${wheel_server_image}:pipeline-${CI_PIPELINE_IID}"
     - echo -e "section_end:`date +%s`:docker-push\r\e[0K"
 
-test:
+test-general:
   stage: test
   extends: .haskell-job
   needs:
@@ -171,7 +171,21 @@ test:
   script:
     - cp -T "${BLAZE_BINJA_LICENSE_FILE}" /root/.binaryninja/license.dat
     - cd /blaze/build/blaze-ui/server
-    - ../.ci/scripts/run_test.py ~/.local/bin/blaze-server-test
+    - ../.ci/scripts/run_test.py ~/.local/bin/blaze-server-general-test
+
+.test-binja:
+  stage: test
+  extends: .haskell-job
+  needs:
+    - build
+  variables:
+    <<: *variables
+    GIT_STRATEGY: none
+    GIT_CLEAN_FLAGS: none
+  script:
+    - cp -T "${BLAZE_BINJA_LICENSE_FILE}" /root/.binaryninja/license.dat
+    - cd /blaze/build/blaze-ui/server
+    - ../.ci/scripts/run_test.py ~/.local/bin/blaze-server-binja-test
 
 push:latest:
   stage: push
@@ -182,7 +196,7 @@ push:latest:
     - when: manual
       allow_failure: true
   needs:
-    - test
+    - test-general
   variables:
     <<: *variables
     GIT_STRATEGY: none
@@ -211,7 +225,7 @@ push:tag:
   rules:
     - if: $CI_PIPELINE_SOURCE == 'push' && $CI_COMMIT_TAG
   needs:
-    - test
+    - test-general
   variables:
     <<: *variables
     GIT_STRATEGY: none
@@ -244,7 +258,7 @@ pages:
       when: manual
       allow_failure: true
   needs:
-    - test
+    - test-general
   variables:
     <<: *variables
   script:
