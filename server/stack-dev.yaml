@@ -1,5 +1,5 @@
-resolver: nightly-2022-04-28
-compiler: ghc-9.2.2
+resolver: lts-20.0
+compiler: ghc-9.2.5
 
 packages:
   - ../../binary-analysis
@@ -8,15 +8,6 @@ packages:
   - .
   
 extra-deps:
-  - git: https://github.com/protolude/protolude
-    commit: 3e249724fd0ead27370c8c297b1ecd38f92cbd5b
-  - direct-sqlite-2.3.26@sha256:04e835402f1508abca383182023e4e2b9b86297b8533afbd4e57d1a5652e0c23,3718
-  - envy-2.1.0.0@sha256:b58b12d9b61a4e07562e7718f28a864178cfc4bb4c24a45c68b5e46cfd9b39be,1772
-  - sbv-9.0
-  - selda-0.5.1.0@sha256:8f4f7afddfb8ba3bcc8677e2a3f0b183ce85eed2c4ed6d7b8b40f057f573bf69,3111
-  - selda-sqlite-0.1.7.1@sha256:d750cb189dfd5049628cd1dd0a5d7abda95bdac4a451e0973fc9fde80e70ed17,1257
-
-allow-newer: true
 
 rebuild-ghc-options: true
 ghc-options:
