@@ -89,6 +89,11 @@ workflow:
     - popd >/dev/null
     - echo -e "section_end:`date +%s`:setup-python\r\e[0K"
 
+# stage: check
+include:
+  project: 'kevino/filter-check'
+  file: '/filtercheck.gitlab-ci.yml'
+
 lint:server:
   stage: check
   extends: .job
@@ -140,14 +145,20 @@ build:
         build_type=dev;
       fi
     - docker build --pull . -f Dockerfile --target main
+      --build-arg "CI_REGISTRY=${CI_REGISTRY}"
+      --build-arg "CI_PROJECT_NAMESPACE=${CI_PROJECT_NAMESPACE}"
       --build-arg "BUILD_TYPE=${build_type}"
       --build-arg STACK_BUILD_OPTIONS="--ghc-options=-fdiagnostics-color=always"
       -t "${blaze_image}:pipeline-${CI_PIPELINE_IID}"
     - docker build --pull . -f Dockerfile --target minimal
+      --build-arg "CI_REGISTRY=${CI_REGISTRY}"
+      --build-arg "CI_PROJECT_NAMESPACE=${CI_PROJECT_NAMESPACE}"
       --build-arg "BUILD_TYPE=${build_type}"
       --build-arg STACK_BUILD_OPTIONS="--ghc-options=-fdiagnostics-color=always"
       -t "${minimal_blaze_image}:pipeline-${CI_PIPELINE_IID}"
     - docker build --pull . -f Dockerfile --target wheel-server
+      --build-arg "CI_REGISTRY=${CI_REGISTRY}"
+      --build-arg "CI_PROJECT_NAMESPACE=${CI_PROJECT_NAMESPACE}"
       --build-arg CI_PIPELINE_ID="${CI_PIPELINE_ID}"
       -t "${wheel_server_image}:pipeline-${CI_PIPELINE_IID}"
     - echo -e "section_end:`date +%s`:docker-build\r\e[0K"
